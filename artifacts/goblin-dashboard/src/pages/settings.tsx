@@ -118,12 +118,12 @@ export default function SettingsPage() {
   const { connect, disconnect } = useSteamConnection();
   const settings = query.data;
 
-  const [pendingTheme, setPendingTheme] = useState<BotTheme | null>(null);
   const [botNameDraft, setBotNameDraft] = useState<string | null>(null);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
-  const savedTheme = settings?.botTheme ?? "goblin";
-  const activeTheme = pendingTheme ?? savedTheme;
+  // Theme is saved instantly when selected (no pending state) so the rest of the
+  // app — sidebar nav, command list, etc. — reacts immediately.
+  const activeTheme: BotTheme = settings?.botTheme ?? "goblin";
   const isCS2 = activeTheme === "cs2";
   const themeDefaultName = defaultBotNameFor(activeTheme);
 
@@ -134,30 +134,32 @@ export default function SettingsPage() {
   const trimmed = inputValue.trim();
   const nameValid = trimmed.length === 0 || trimmed.length <= 32;
 
-  const themeChanged = pendingTheme !== null && pendingTheme !== savedTheme;
   // Empty input means "use the active theme's default"
   const effectiveName = trimmed === "" ? themeDefaultName : trimmed;
   const nameChanged = effectiveName !== savedName;
-  const hasChanges = themeChanged || nameChanged;
+  const hasChanges = nameChanged;
 
   function handleThemeSelect(newTheme: BotTheme) {
+    if (newTheme === activeTheme) return;
     const fromTheme = activeTheme;
-    setPendingTheme(newTheme);
-    // If the displayed name is the previous theme's default, swap to the new theme's default
-    // immediately so the user sees the change without having to save first.
+    // If the displayed bot name was the previous theme's default, swap it to the
+    // new theme's default in the input as well (user can still override).
     const currentlyDisplayed = botNameDraft ?? savedName;
-    if (currentlyDisplayed === defaultBotNameFor(fromTheme)) {
+    const swapDefault = currentlyDisplayed === defaultBotNameFor(fromTheme);
+    if (swapDefault) {
       setBotNameDraft(defaultBotNameFor(newTheme));
     }
+    void mutation.mutateAsync(
+      swapDefault
+        ? { botTheme: newTheme, botName: defaultBotNameFor(newTheme) }
+        : { botTheme: newTheme },
+    );
   }
 
   async function handleSave() {
     if (!hasChanges || !nameValid) return;
-    const payload: Partial<BotSettings> = {};
-    if (themeChanged) payload.botTheme = pendingTheme!;
-    if (nameChanged) payload.botName = effectiveName;
+    const payload: Partial<BotSettings> = { botName: effectiveName };
     await mutation.mutateAsync(payload);
-    setPendingTheme(null);
     setBotNameDraft(null);
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
