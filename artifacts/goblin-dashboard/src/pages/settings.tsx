@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Settings2, Crosshair, Sword, ExternalLink, Save, CheckCircle2,
-  AlertCircle, Link2, User2, ShieldCheck, Unlink
+  Settings2, Crosshair, Sword, Save, CheckCircle2,
+  AlertCircle, User2, ShieldCheck, Unlink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,10 +111,6 @@ function useSteamConnection() {
   return { connect, disconnect };
 }
 
-function isSteamTradeUrl(url: string) {
-  return url === "" || url.includes("steamcommunity.com/tradeoffer/new/");
-}
-
 export default function SettingsPage() {
   const { query, mutation } = useSettings();
   const { connect, disconnect } = useSteamConnection();
@@ -122,56 +118,45 @@ export default function SettingsPage() {
 
   const [pendingTheme, setPendingTheme] = useState<BotTheme | null>(null);
   const [botNameDraft, setBotNameDraft] = useState<string | null>(null);
-  const [tradeUrl, setTradeUrl] = useState("");
-  const [tradeUrlTouched, setTradeUrlTouched] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
-  // Sync trade URL initial value from server
-  useEffect(() => {
-    if (settings && !tradeUrlTouched) setTradeUrl(settings.steamTradeUrl ?? "");
-  }, [settings, tradeUrlTouched]);
-
-  const activeTheme = pendingTheme ?? settings?.botTheme ?? "goblin";
+  const savedTheme = settings?.botTheme ?? "goblin";
+  const activeTheme = pendingTheme ?? savedTheme;
   const isCS2 = activeTheme === "cs2";
   const themeDefaultName = defaultBotNameFor(activeTheme);
 
-  // Bot name input: controlled. When the user hasn't typed anything (draft is null)
-  // we show the saved name in the field. The placeholder always shows the themed default.
+  // Bot name in the input. When the user hasn't typed (draft null), show the saved name.
+  // The placeholder always shows the themed default.
   const savedName = settings?.botName ?? "";
   const inputValue = botNameDraft ?? savedName;
   const trimmed = inputValue.trim();
   const nameValid = trimmed.length === 0 || trimmed.length <= 32;
-  const nameChanged = botNameDraft !== null && trimmed !== savedName;
 
-  const tradeUrlValue = tradeUrlTouched ? tradeUrl : (settings?.steamTradeUrl ?? "");
-  const tradeUrlValid = isSteamTradeUrl(tradeUrlValue);
+  const themeChanged = pendingTheme !== null && pendingTheme !== savedTheme;
+  // Empty input means "use the active theme's default"
+  const effectiveName = trimmed === "" ? themeDefaultName : trimmed;
+  const nameChanged = effectiveName !== savedName;
+  const hasChanges = themeChanged || nameChanged;
 
-  const isDirty =
-    (pendingTheme !== null && pendingTheme !== settings?.botTheme) ||
-    (tradeUrlTouched && tradeUrlValue !== (settings?.steamTradeUrl ?? ""));
-
-  async function handleUpdateBotName() {
-    if (!nameValid || !nameChanged) return;
-    // Empty input → reset to the current theme's default.
-    const newName = trimmed === "" ? themeDefaultName : trimmed;
-    await mutation.mutateAsync({ botName: newName });
-    setBotNameDraft(null);
+  function handleThemeSelect(newTheme: BotTheme) {
+    const fromTheme = activeTheme;
+    setPendingTheme(newTheme);
+    // If the displayed name is the previous theme's default, swap to the new theme's default
+    // immediately so the user sees the change without having to save first.
+    const currentlyDisplayed = botNameDraft ?? savedName;
+    if (currentlyDisplayed === defaultBotNameFor(fromTheme)) {
+      setBotNameDraft(defaultBotNameFor(newTheme));
+    }
   }
 
   async function handleSave() {
+    if (!hasChanges || !nameValid) return;
     const payload: Partial<BotSettings> = {};
-    if (pendingTheme !== null) {
-      payload.botTheme = pendingTheme;
-      // If the user is on the previous theme's default name, swap to the new theme's default.
-      const fromTheme = settings?.botTheme ?? "goblin";
-      if (savedName === defaultBotNameFor(fromTheme)) {
-        payload.botName = defaultBotNameFor(pendingTheme);
-      }
-    }
-    if (tradeUrlTouched) payload.steamTradeUrl = tradeUrlValue || null;
+    if (themeChanged) payload.botTheme = pendingTheme!;
+    if (nameChanged) payload.botName = effectiveName;
     await mutation.mutateAsync(payload);
     setPendingTheme(null);
-    setTradeUrlTouched(false);
+    setBotNameDraft(null);
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
   }
@@ -197,13 +182,39 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {/* Theme Selector */}
+      <section className="space-y-2 max-w-sm">
+        <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
+        <p className="text-xs text-muted-foreground">
+          Controls the bot's language and personality in chat.
+        </p>
+        <Select value={activeTheme} onValueChange={(v) => handleThemeSelect(v as BotTheme)}>
+          <SelectTrigger id="bot-theme" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {THEME_OPTIONS.map((theme) => (
+              <SelectItem key={theme.id} value={theme.id}>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{theme.emoji}</span>
+                  <span>{theme.name}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground/80 leading-snug">
+          {THEME_OPTIONS.find((t) => t.id === activeTheme)?.description}
+        </p>
+      </section>
+
       {/* Bot Name */}
-      <section className="space-y-2">
+      <section className="space-y-2 max-w-sm">
         <Label htmlFor="bot-name" className="text-lg font-semibold text-foreground">Bot Display Name</Label>
         <p className="text-xs text-muted-foreground">
           The name the bot uses in chat. Leave blank to use the default for your theme.
         </p>
-        <div className="flex gap-2 items-start max-w-sm">
+        <div className="flex gap-2 items-start">
           <div className="flex-1 space-y-1">
             <div className="relative">
               <User2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -222,48 +233,27 @@ export default function SettingsPage() {
               </p>
             )}
           </div>
-          {nameChanged && (
-            <Button
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={handleUpdateBotName}
-              disabled={!nameValid || mutation.isPending}
-            >
-              {mutation.isPending ? (
-                <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
-              ) : (
-                <Save className="w-3.5 h-3.5" />
-              )}
-              Update
-            </Button>
-          )}
+          <Button
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={handleSave}
+            disabled={!hasChanges || !nameValid || mutation.isPending}
+          >
+            {mutation.isPending ? (
+              <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
+            ) : savedFeedback ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            {savedFeedback ? "Saved" : "Update"}
+          </Button>
         </div>
-      </section>
-
-      {/* Theme Selector */}
-      <section className="space-y-2 max-w-sm">
-        <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
-        <p className="text-xs text-muted-foreground">
-          Controls the bot's language and personality in chat.
-        </p>
-        <Select value={activeTheme} onValueChange={(v) => setPendingTheme(v as BotTheme)}>
-          <SelectTrigger id="bot-theme" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {THEME_OPTIONS.map((theme) => (
-              <SelectItem key={theme.id} value={theme.id}>
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{theme.emoji}</span>
-                  <span>{theme.name}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground/80 leading-snug">
-          {THEME_OPTIONS.find((t) => t.id === activeTheme)?.description}
-        </p>
+        {mutation.isError && (
+          <p className="flex items-center gap-1 text-xs text-destructive">
+            <AlertCircle className="w-3.5 h-3.5" /> Failed to save — try again
+          </p>
+        )}
       </section>
 
       {/* CS2-specific settings */}
@@ -338,80 +328,22 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* Your Steam Trade URL */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="steam-trade-url" className="text-sm">Your Steam Trade URL</Label>
-              <Hint
-                text="Your own trade URL. The bot posts it in chat after a giveaway ends so winners know where to send the trade request."
-                side="right"
-              />
-            </div>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="steam-trade-url"
-                  placeholder="https://steamcommunity.com/tradeoffer/new/?partner=..."
-                  value={tradeUrlValue}
-                  onChange={(e) => { setTradeUrl(e.target.value); setTradeUrlTouched(true); }}
-                  className={`pl-9 font-mono text-xs ${tradeUrlTouched && !tradeUrlValid ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                />
-              </div>
-              <Button variant="outline" size="icon" asChild title="Find your trade URL on Steam">
-                <a href="https://steamcommunity.com/my/tradeoffers/privacy" target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </Button>
-            </div>
-            {tradeUrlTouched && !tradeUrlValid && (
-              <p className="flex items-center gap-1.5 text-xs text-destructive">
-                <AlertCircle className="w-3.5 h-3.5" />
-                Must be a valid Steam trade offer URL
-              </p>
-            )}
-          </div>
-
-          {/* Trade URL collection info */}
+          {/* How winner skin delivery works */}
           <div className="rounded-lg border border-border bg-card/60 p-4 space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <Sword className="w-4 h-4 text-blue-400" />
-              Winner trade URL collection
+              Winner skin delivery
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              After winning, viewers type{" "}
-              <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!tradeurl https://...</span>{" "}
-              in chat to submit their Steam trade URL. You can also track and manage all pending trades from the{" "}
+              When a viewer wins a skin giveaway, they post their Steam trade URL in chat with{" "}
+              <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!tradeurl https://...</span>.
+              You then send the skin directly from your inventory using their trade URL — no action required from
+              the winner. Track and manage all pending deliveries from the{" "}
               <span className="text-primary">Trade Office</span> in the sidebar.
             </p>
           </div>
         </section>
       )}
-
-      {/* Save (theme + trade URL) */}
-      <div className="flex items-center gap-3">
-        <Button
-          onClick={handleSave}
-          disabled={!isDirty || mutation.isPending || (tradeUrlTouched && !tradeUrlValid)}
-          className="gap-2"
-        >
-          {mutation.isPending ? (
-            <><div className="w-4 h-4 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />Saving...</>
-          ) : savedFeedback ? (
-            <><CheckCircle2 className="w-4 h-4" />Saved!</>
-          ) : (
-            <><Save className="w-4 h-4" />Save Settings</>
-          )}
-        </Button>
-        {isDirty && !mutation.isPending && (
-          <p className="text-xs text-muted-foreground">You have unsaved changes</p>
-        )}
-        {mutation.isError && (
-          <p className="flex items-center gap-1 text-xs text-destructive">
-            <AlertCircle className="w-3.5 h-3.5" /> Failed to save — try again
-          </p>
-        )}
-      </div>
     </div>
   );
 }
