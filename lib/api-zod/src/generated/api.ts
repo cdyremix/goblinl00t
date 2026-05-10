@@ -367,6 +367,21 @@ export const UpdateTradeFulfillmentResponse = zod.object({
 });
 
 /**
+ * @summary Connect Steam account (mock OAuth in test env)
+ */
+export const ConnectSteamResponse = zod.object({
+  steamId64: zod.string().nullable(),
+  steamUsername: zod.string().nullable(),
+});
+
+/**
+ * @summary Disconnect Steam account
+ */
+export const DisconnectSteamResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary Fetch the authenticated user's CS2 Steam inventory
  */
 export const GetSteamInventoryResponse = zod.object({

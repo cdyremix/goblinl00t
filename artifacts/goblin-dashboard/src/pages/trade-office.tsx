@@ -3,12 +3,13 @@ import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Package, ExternalLink, CheckCircle2, Clock, Send, Ban, ChevronDown,
-  AlertCircle, Copy, Check, Edit3, Save, X, RefreshCw
+  AlertCircle, Copy, Check, Edit3, Save, X, Search, Boxes
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Hint } from "@/components/hint";
+import { SteamItemCard, type SteamItem } from "@/components/steam-item-card";
 
 type TradeStatus = "pending" | "trade_locked" | "sent" | "skipped";
 
@@ -22,6 +23,19 @@ interface TradeFulfillment {
   tradeLockUntil: string | null;
   streamerNotes: string | null;
   createdAt: string;
+}
+
+interface SteamInventory {
+  items: SteamItem[];
+  totalCount: number;
+}
+
+interface BotSettings {
+  botTheme: "goblin" | "cs2";
+  botName: string;
+  steamTradeUrl: string | null;
+  steamId64: string | null;
+  steamUsername: string | null;
 }
 
 const STATUS_CONFIG: Record<TradeStatus, { label: string; color: string; icon: React.ElementType }> = {
@@ -68,11 +82,48 @@ function useTrades() {
   return { query, update };
 }
 
+function useSteamInventory(enabled: boolean) {
+  const { getToken } = useAuth();
+  return useQuery<SteamInventory>({
+    queryKey: ["steam-inventory"],
+    enabled,
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/steam/inventory", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error: string };
+        throw new Error(err.error ?? "Failed to fetch inventory");
+      }
+      return res.json() as Promise<SteamInventory>;
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+function useSettings() {
+  const { getToken } = useAuth();
+  return useQuery<BotSettings>({
+    queryKey: ["bot-settings"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/settings", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load settings");
+      return res.json() as Promise<BotSettings>;
+    },
+  });
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
-      onClick={async () => {
+      onClick={async (e) => {
+        e.stopPropagation();
         await navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -121,26 +172,20 @@ function TradeRow({ trade }: { trade: TradeFulfillment }) {
     <div className={`rounded-xl border transition-all duration-200 overflow-hidden ${
       trade.status === "sent" ? "border-border/50 opacity-70" : "border-border bg-card/60"
     }`}>
-      {/* Row header */}
       <div
         className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/20"
         onClick={() => setExpanded((e) => !e)}
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm text-foreground">
-              @{trade.winnerTwitchUsername}
-            </span>
+            <span className="font-semibold text-sm text-foreground">@{trade.winnerTwitchUsername}</span>
             <span className="text-xs text-muted-foreground">won</span>
-            <span className="text-sm text-primary font-medium truncate max-w-[200px]">
-              {trade.prize}
-            </span>
+            <span className="text-sm text-primary font-medium truncate max-w-[260px]">{trade.prize}</span>
             <span className="text-xs text-muted-foreground">{createdDate}</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Trade URL indicator */}
           {trade.steamTradeUrl ? (
             <span className="text-xs text-green-400 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" /> Trade URL
@@ -151,7 +196,6 @@ function TradeRow({ trade }: { trade: TradeFulfillment }) {
             </span>
           )}
 
-          {/* Status badge */}
           <span className={`text-xs px-2 py-0.5 rounded-full border font-medium flex items-center gap-1 ${cfg.color}`}>
             <StatusIcon className="w-3 h-3" />
             {cfg.label}
@@ -161,10 +205,8 @@ function TradeRow({ trade }: { trade: TradeFulfillment }) {
         </div>
       </div>
 
-      {/* Expanded panel */}
       {expanded && (
         <div className="border-t border-border px-4 py-4 space-y-4 bg-muted/5">
-          {/* Steam Trade URL */}
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Winner's Steam Trade URL</span>
@@ -214,7 +256,6 @@ function TradeRow({ trade }: { trade: TradeFulfillment }) {
             )}
           </div>
 
-          {/* Trade lock date */}
           <div className="space-y-1.5">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Trade Lock Until</span>
             <div className="flex gap-2 items-center">
@@ -230,7 +271,6 @@ function TradeRow({ trade }: { trade: TradeFulfillment }) {
             </div>
           </div>
 
-          {/* Notes */}
           <div className="space-y-1.5">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Notes</span>
             <Textarea
@@ -241,12 +281,10 @@ function TradeRow({ trade }: { trade: TradeFulfillment }) {
             />
           </div>
 
-          {/* Save notes/lock */}
           <Button size="sm" variant="outline" onClick={saveEdits} className="gap-1.5">
             <Save className="w-3.5 h-3.5" /> Save Notes & Lock Date
           </Button>
 
-          {/* Status actions */}
           <div className="flex flex-wrap gap-2 pt-1 border-t border-border/50">
             <span className="text-xs text-muted-foreground self-center">Mark as:</span>
             {(["pending", "trade_locked", "sent", "skipped"] as TradeStatus[]).map((s) => {
@@ -275,13 +313,109 @@ function TradeRow({ trade }: { trade: TradeFulfillment }) {
   );
 }
 
+function InventoryDrawer() {
+  const settingsQuery = useSettings();
+  const inventoryQuery = useSteamInventory(!!settingsQuery.data?.steamId64);
+  const [search, setSearch] = useState("");
+  const [filterTradable, setFilterTradable] = useState<"all" | "tradable" | "locked">("all");
+
+  if (!settingsQuery.data?.steamId64) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card/40 p-5 text-center text-sm space-y-2">
+        <Boxes className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+        <p className="text-muted-foreground">Connect your Steam account to see your inventory here for quick winner lookup.</p>
+        <Button variant="outline" size="sm" asChild>
+          <a href="/settings">Go to Settings</a>
+        </Button>
+      </div>
+    );
+  }
+
+  const items = inventoryQuery.data?.items ?? [];
+  const filtered = items
+    .filter((i) => {
+      if (filterTradable === "tradable" && !i.tradable) return false;
+      if (filterTradable === "locked" && i.tradable) return false;
+      if (search && !i.name.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    });
+
+  return (
+    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Boxes className="w-4 h-4 text-blue-400" />
+          <h2 className="text-sm font-semibold text-foreground">Your CS2 Inventory</h2>
+          <Hint text="Quick reference for sending skins to winners. Search and filter to find an item, then send via Steam trade offer." side="right" />
+        </div>
+        <span className="text-xs text-muted-foreground">{items.length} items</span>
+      </div>
+
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search skins..."
+            className="pl-9 h-8 text-xs"
+          />
+        </div>
+        <div className="flex gap-1 rounded-md bg-muted/30 p-0.5">
+          {(["all", "tradable", "locked"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilterTradable(f)}
+              className={`px-2.5 py-1 text-xs rounded transition-colors capitalize ${
+                filterTradable === f
+                  ? "bg-primary/20 text-primary font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {inventoryQuery.isLoading && (
+        <div className="h-24 flex items-center justify-center text-muted-foreground text-xs animate-pulse">
+          Loading inventory…
+        </div>
+      )}
+
+      {inventoryQuery.data && filtered.length === 0 && (
+        <div className="h-24 flex items-center justify-center text-muted-foreground text-xs">
+          No items match your filter.
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2 max-h-64 overflow-y-auto pr-1">
+          {filtered.map((item) => (
+            <SteamItemCard key={item.assetId} item={item} compact />
+          ))}
+        </div>
+      )}
+
+      <a
+        href="https://steamcommunity.com/my/tradeoffers/sent/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 text-xs text-primary hover:underline pt-1"
+      >
+        Open Steam Trade Offers <ExternalLink className="w-3 h-3" />
+      </a>
+    </div>
+  );
+}
+
 export default function TradeOffice() {
   const { query } = useTrades();
   const [filterStatus, setFilterStatus] = useState<TradeStatus | "all">("all");
 
   const trades = query.data ?? [];
   const filtered = filterStatus === "all" ? trades : trades.filter((t) => t.status === filterStatus);
-
   const pendingCount = trades.filter((t) => t.status === "pending").length;
   const lockedCount = trades.filter((t) => t.status === "trade_locked").length;
 
@@ -294,8 +428,7 @@ export default function TradeOffice() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Header */}
+    <div className="space-y-6 max-w-5xl">
       <div>
         <h1 className="font-medieval text-3xl text-foreground flex items-center gap-3">
           <Send className="w-7 h-7 text-primary" />
@@ -307,7 +440,8 @@ export default function TradeOffice() {
         </p>
       </div>
 
-      {/* Summary */}
+      <InventoryDrawer />
+
       {trades.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {(["all", "pending", "trade_locked", "sent"] as const).map((s) => {
@@ -333,7 +467,6 @@ export default function TradeOffice() {
         </div>
       )}
 
-      {/* Alert for pending */}
       {pendingCount > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 px-4 py-3">
           <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
@@ -342,15 +475,12 @@ export default function TradeOffice() {
               {pendingCount} pending trade{pendingCount !== 1 ? "s" : ""} need attention
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {pendingCount > 0 && !trades.some((t) => t.status === "pending" && t.steamTradeUrl)
-                ? "Waiting for winners to submit their Steam trade URL via !tradeurl in chat."
-                : "Check each record below to send the skin or note a trade lock."}
+              Send each winner their skin once they've submitted a trade URL.
             </p>
           </div>
         </div>
       )}
 
-      {/* Trade lock alert */}
       {lockedCount > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-blue-400/30 bg-blue-400/5 px-4 py-3">
           <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
@@ -360,7 +490,6 @@ export default function TradeOffice() {
         </div>
       )}
 
-      {/* Records */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 text-center space-y-3 rounded-xl border border-dashed border-border">
           <Package className="w-10 h-10 text-muted-foreground/40" />

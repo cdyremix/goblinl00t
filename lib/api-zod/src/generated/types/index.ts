@@ -11,6 +11,8 @@ export * from "./botSettings";
 export * from "./botSettingsBotTheme";
 export * from "./botStatus";
 export * from "./commandStat";
+export * from "./connectSteam200";
+export * from "./disconnectSteam200";
 export * from "./getRecentLootParams";
 export * from "./getTopLootersParams";
 export * from "./giveaway";

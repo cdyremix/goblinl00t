@@ -7,7 +7,7 @@ export const usersTable = pgTable("users", {
   twitchUsername: text("twitch_username"),
   twitchAccessToken: text("twitch_access_token"),
   twitchRefreshToken: text("twitch_refresh_token"),
-  subscriptionTier: text("subscription_tier").notNull().default("free"),
+  subscriptionTier: text("subscription_tier").notNull().default("premium"),
   botTheme: text("bot_theme").notNull().default("goblin"),
   botName: text("bot_name").notNull().default("GoblinL00t"),
   steamTradeUrl: text("steam_trade_url"),

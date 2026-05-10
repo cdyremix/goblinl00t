@@ -3,12 +3,14 @@ import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings2, Crosshair, Sword, ExternalLink, Save, CheckCircle2,
-  AlertCircle, Link2, User2, Hash, RefreshCw, Lock, ShieldCheck
+  AlertCircle, Link2, User2, RefreshCw, Lock, ShieldCheck, Unlink, Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Hint } from "@/components/hint";
+import { SteamItemCard, type SteamItem } from "@/components/steam-item-card";
+import { defaultBotNameFor, isThemeDefaultName, GOBLIN_DEFAULT_NAME } from "@/lib/cs2-agents";
 
 type BotTheme = "goblin" | "cs2";
 
@@ -18,19 +20,6 @@ interface BotSettings {
   steamTradeUrl: string | null;
   steamId64: string | null;
   steamUsername: string | null;
-}
-
-interface SteamItem {
-  assetId: string;
-  classId: string;
-  name: string;
-  marketHashName: string;
-  iconUrl: string;
-  tradable: boolean;
-  rarityColor: string;
-  rarityName: string;
-  wear: string | null;
-  type: string;
 }
 
 interface SteamInventory {
@@ -43,7 +32,6 @@ interface ThemeCard {
   name: string;
   tagline: string;
   emoji: string;
-  defaultBotName: string;
   previewLines: string[];
 }
 
@@ -53,11 +41,10 @@ const THEMES: ThemeCard[] = [
     name: "Goblin Hoard",
     tagline: "The original mischievous loot goblin — chaotic, greedy, and very excitable.",
     emoji: "👺",
-    defaultBotName: "GoblinL00t",
     previewLines: [
       "HEHEHE! xXSniper found [RARE] Dragon Scale! (+120 pts) SCREEE!! goblin want to STEAL!!",
-      "🎉 GIVEAWAY TIME!!!! Prize: Mystery Box - Type !enter!! HEHEHE goblin running GIVEAWAY!!",
-      "*goblin checks ledger* ChatUser haz 12 loot itemz worth 340 pts! Keep farming!! 📦",
+      "🎉 GIVEAWAY TIME!!!! Prize: Mystery Box - Type !enter!! HEHEHE!!",
+      "*goblin checks ledger* ChatUser haz 12 loot itemz! Keep farming!! 📦",
     ],
   },
   {
@@ -65,7 +52,6 @@ const THEMES: ThemeCard[] = [
     name: "CS2 Arms Deal",
     tagline: "Counter-Strike 2 mode — drop skins, run skin giveaways, and collect Steam trade links.",
     emoji: "🔫",
-    defaultBotName: "CaseDrop",
     previewLines: [
       "🟣 xXSniper opened a case: [CLASSIFIED] Butterfly Knife | Fade! (+800 pts) INSANE DROP!",
       "🎁 SKIN GIVEAWAY! AK-47 | Asiimov FN — type !enter to be in the draw!",
@@ -107,6 +93,45 @@ function useSettings() {
   return { query, mutation };
 }
 
+function useSteamConnection() {
+  const { getToken } = useAuth();
+  const qc = useQueryClient();
+
+  const connect = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/steam/connect", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to connect Steam");
+      return res.json() as Promise<{ steamId64: string; steamUsername: string }>;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bot-settings"] });
+      void qc.invalidateQueries({ queryKey: ["steam-inventory"] });
+    },
+  });
+
+  const disconnect = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/steam/disconnect", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to disconnect Steam");
+      return res.json();
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bot-settings"] });
+      qc.removeQueries({ queryKey: ["steam-inventory"] });
+    },
+  });
+
+  return { connect, disconnect };
+}
+
 function useSteamInventory(enabled: boolean) {
   const { getToken } = useAuth();
   return useQuery<SteamInventory>({
@@ -132,12 +157,9 @@ function isSteamTradeUrl(url: string) {
   return url === "" || url.includes("steamcommunity.com/tradeoffer/new/");
 }
 
-function isSteamId64(id: string) {
-  return id === "" || /^\d{17}$/.test(id);
-}
-
 export default function SettingsPage() {
   const { query, mutation } = useSettings();
+  const { connect, disconnect } = useSteamConnection();
   const settings = query.data;
 
   const [pendingTheme, setPendingTheme] = useState<BotTheme | null>(null);
@@ -145,47 +167,58 @@ export default function SettingsPage() {
   const [botNameTouched, setBotNameTouched] = useState(false);
   const [tradeUrl, setTradeUrl] = useState("");
   const [tradeUrlTouched, setTradeUrlTouched] = useState(false);
-  const [steamId64, setSteamId64] = useState("");
-  const [steamId64Touched, setSteamId64Touched] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
-  const [showInventory, setShowInventory] = useState(false);
 
   // Sync initial values from server
   useEffect(() => {
     if (settings && !botNameTouched) setBotName(settings.botName);
     if (settings && !tradeUrlTouched) setTradeUrl(settings.steamTradeUrl ?? "");
-    if (settings && !steamId64Touched) setSteamId64(settings.steamId64 ?? "");
-  }, [settings, botNameTouched, tradeUrlTouched, steamId64Touched]);
-
-  const inventoryQuery = useSteamInventory(showInventory && !!(settings?.steamId64));
+  }, [settings, botNameTouched, tradeUrlTouched]);
 
   const activeTheme = pendingTheme ?? settings?.botTheme ?? "goblin";
   const isCS2 = activeTheme === "cs2";
+
+  const inventoryQuery = useSteamInventory(!!settings?.steamId64);
+
   const tradeUrlValue = tradeUrlTouched ? tradeUrl : (settings?.steamTradeUrl ?? "");
-  const steamId64Value = steamId64Touched ? steamId64 : (settings?.steamId64 ?? "");
-  const botNameValue = botNameTouched ? botName : (settings?.botName ?? "GoblinL00t");
+  const botNameValue = botNameTouched ? botName : (settings?.botName ?? GOBLIN_DEFAULT_NAME);
 
   const tradeUrlValid = isSteamTradeUrl(tradeUrlValue);
-  const steamId64Valid = isSteamId64(steamId64Value);
   const botNameValid = botNameValue.trim().length > 0 && botNameValue.trim().length <= 32;
 
   const isDirty =
     (pendingTheme !== null && pendingTheme !== settings?.botTheme) ||
     (botNameTouched && botNameValue !== settings?.botName) ||
-    (tradeUrlTouched && tradeUrlValue !== (settings?.steamTradeUrl ?? "")) ||
-    (steamId64Touched && steamId64Value !== (settings?.steamId64 ?? ""));
+    (tradeUrlTouched && tradeUrlValue !== (settings?.steamTradeUrl ?? ""));
+
+  function handleThemeChange(newTheme: BotTheme) {
+    const fromTheme = pendingTheme ?? settings?.botTheme ?? "goblin";
+    setPendingTheme(newTheme);
+    // Only auto-swap the bot name if the user has NOT customized it:
+    //   - They haven't typed in the field this session (botNameTouched is false), AND
+    //   - The saved server value is recognized as a default for the previous theme.
+    const savedName = settings?.botName ?? "";
+    const isUntouchedDefault = !botNameTouched && isThemeDefaultName(savedName, fromTheme);
+    if (isUntouchedDefault) {
+      setBotName(defaultBotNameFor(newTheme));
+      setBotNameTouched(true);
+    }
+  }
+
+  function rerollDefaultName() {
+    setBotName(defaultBotNameFor(activeTheme));
+    setBotNameTouched(true);
+  }
 
   async function handleSave() {
     const payload: Partial<BotSettings> = {};
     if (pendingTheme !== null) payload.botTheme = pendingTheme;
     if (botNameTouched) payload.botName = botNameValue.trim();
     if (tradeUrlTouched) payload.steamTradeUrl = tradeUrlValue || null;
-    if (steamId64Touched) payload.steamId64 = steamId64Value || null;
     await mutation.mutateAsync(payload);
     setPendingTheme(null);
     setBotNameTouched(false);
     setTradeUrlTouched(false);
-    setSteamId64Touched(false);
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
   }
@@ -216,7 +249,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-foreground">Bot Display Name</h2>
           <Hint
-            text="The name the bot uses when referring to itself in chat messages. Not the Twitch account name — that's set via the TWITCH_BOT_USERNAME env var."
+            text="The name the bot uses when referring to itself in chat messages. Switching themes auto-fills the default name for that theme — pick CS2 to randomize a CS2 agent name."
             side="right"
           />
         </div>
@@ -227,7 +260,7 @@ export default function SettingsPage() {
               <Input
                 value={botNameValue}
                 onChange={(e) => { setBotName(e.target.value); setBotNameTouched(true); }}
-                placeholder="GoblinL00t"
+                placeholder={defaultBotNameFor(activeTheme)}
                 maxLength={32}
                 className={`pl-9 ${botNameTouched && !botNameValid ? "border-destructive" : ""}`}
               />
@@ -238,23 +271,21 @@ export default function SettingsPage() {
               </p>
             )}
           </div>
-          {THEMES.find((t) => t.id === activeTheme) && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 text-xs"
-              onClick={() => {
-                const def = THEMES.find((t) => t.id === activeTheme)!.defaultBotName;
-                setBotName(def);
-                setBotNameTouched(true);
-              }}
-            >
-              Use default
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 text-xs gap-1.5"
+            onClick={rerollDefaultName}
+            title={isCS2 ? "Re-roll a random CS2 agent name" : "Reset to GoblinL00t"}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {isCS2 ? "Random agent" : "Reset default"}
+          </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Default for this theme: <span className="font-mono text-foreground/60">{THEMES.find((t) => t.id === activeTheme)?.defaultBotName}</span>
+          {isCS2
+            ? "CS2 mode uses a random Counter-Strike agent name as the default — click 'Random agent' to re-roll."
+            : "Goblin mode uses the classic GoblinL00t name."}
         </p>
       </section>
 
@@ -274,7 +305,7 @@ export default function SettingsPage() {
             return (
               <button
                 key={theme.id}
-                onClick={() => setPendingTheme(theme.id)}
+                onClick={() => handleThemeChange(theme.id)}
                 className={`text-left rounded-xl border p-5 transition-all duration-200 space-y-3 ${
                   selected
                     ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(255,180,0,0.12)]"
@@ -317,12 +348,76 @@ export default function SettingsPage() {
             <h2 className="text-base font-semibold text-foreground">CS2 Settings</h2>
           </div>
 
-          {/* Your Steam Trade URL (for posting in announcements) */}
+          {/* Steam connection */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Steam Account</Label>
+              <Hint
+                text="Connect your Steam account to load your CS2 inventory and use it for giveaways. In test mode this is a mock connection — production would redirect to Steam OpenID."
+                side="right"
+              />
+            </div>
+
+            {settings?.steamId64 ? (
+              <div className="flex items-center gap-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-blue-900 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-semibold text-foreground">{settings.steamUsername ?? "Steam User"}</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono truncate">SteamID64: {settings.steamId64}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5 text-xs"
+                  onClick={() => disconnect.mutate()}
+                  disabled={disconnect.isPending}
+                >
+                  <Unlink className="w-3.5 h-3.5" />
+                  Disconnect
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-card/40 px-4 py-5 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">Connect your Steam account to load your CS2 inventory</p>
+                <Button
+                  onClick={() => connect.mutate()}
+                  disabled={connect.isPending}
+                  className="gap-2 bg-[#171a21] hover:bg-[#1b2838] text-white border border-[#66c0f4]/40"
+                >
+                  {connect.isPending ? (
+                    <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Connecting…</>
+                  ) : (
+                    <>
+                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
+                        <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.957.4 1.409 1.5 1.009 2.456-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/>
+                      </svg>
+                      Connect Steam
+                    </>
+                  )}
+                </Button>
+                {connect.isError && (
+                  <p className="text-xs text-destructive flex items-center justify-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5" /> {connect.error?.message}
+                  </p>
+                )}
+                <p className="text-[10px] text-muted-foreground/70">
+                  Test mode — uses a sample inventory for demo purposes
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Your Steam Trade URL */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label htmlFor="steam-trade-url" className="text-sm">Your Steam Trade URL</Label>
               <Hint
-                text="Your own trade URL. The bot posts it in chat after giveaway ends so winners know where to send the trade request."
+                text="Your own trade URL. The bot posts it in chat after a giveaway ends so winners know where to send the trade request."
                 side="right"
               />
             </div>
@@ -351,57 +446,23 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* Steam ID 64 for inventory */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="steam-id64" className="text-sm">Steam ID 64</Label>
-              <Hint
-                text="Your 17-digit Steam ID, used to load your CS2 inventory. Find it at steamid.io — enter your profile URL and copy the SteamID64."
-                side="right"
-              />
-            </div>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="steam-id64"
-                  placeholder="76561198000000000"
-                  value={steamId64Value}
-                  onChange={(e) => { setSteamId64(e.target.value); setSteamId64Touched(true); }}
-                  className={`pl-9 font-mono text-sm ${steamId64Touched && !steamId64Valid ? "border-destructive" : ""}`}
-                  maxLength={17}
-                />
-              </div>
-              <Button variant="outline" size="sm" asChild className="shrink-0 text-xs">
-                <a href="https://steamid.io" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
-                  <ExternalLink className="w-3.5 h-3.5" /> Find my ID
-                </a>
-              </Button>
-            </div>
-            {steamId64Touched && !steamId64Valid && (
-              <p className="flex items-center gap-1.5 text-xs text-destructive">
-                <AlertCircle className="w-3.5 h-3.5" /> Must be exactly 17 digits
-              </p>
-            )}
-          </div>
-
           {/* CS2 Inventory */}
-          {(settings?.steamId64 || steamId64Value) && (
+          {settings?.steamId64 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-foreground">CS2 Inventory</h3>
-                  <Hint text="Your Steam inventory must be set to public. If it's private, Steam won't return your skins." side="right" />
+                  <Hint text="Your loaded CS2 inventory. Use these items for skin giveaways — winners receive the item via Steam trade." side="right" />
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   className="gap-1.5 text-xs"
-                  onClick={() => setShowInventory(true)}
+                  onClick={() => inventoryQuery.refetch()}
                   disabled={inventoryQuery.isFetching}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${inventoryQuery.isFetching ? "animate-spin" : ""}`} />
-                  {showInventory ? "Refresh" : "Load Inventory"}
+                  Refresh
                 </Button>
               </div>
 
@@ -412,58 +473,28 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {inventoryQuery.isFetching && (
+              {inventoryQuery.isFetching && !inventoryQuery.data && (
                 <div className="h-32 flex items-center justify-center text-muted-foreground text-sm animate-pulse">
                   Loading inventory from Steam...
                 </div>
               )}
 
-              {inventoryQuery.data && !inventoryQuery.isFetching && (
+              {inventoryQuery.data && (
                 <>
                   <p className="text-xs text-muted-foreground">
                     {inventoryQuery.data.totalCount} total items · {inventoryQuery.data.items.filter((i) => !i.tradable).length} trade locked
                   </p>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-1">
                     {inventoryQuery.data.items.slice(0, 60).map((item) => (
-                      <div
-                        key={item.assetId}
-                        className="relative rounded-lg border border-border bg-card/80 p-1.5 flex flex-col items-center gap-1 group hover:border-primary/40 transition-colors"
-                        title={`${item.name}${item.wear ? ` (${item.wear})` : ""} · ${item.rarityName}${!item.tradable ? " · TRADE LOCKED" : ""}`}
-                      >
-                        {!item.tradable && (
-                          <div className="absolute top-1 right-1 z-10">
-                            <Lock className="w-3 h-3 text-blue-400" />
-                          </div>
-                        )}
-                        <div
-                          className="w-full aspect-square rounded overflow-hidden"
-                          style={{ borderBottom: `2px solid ${item.rarityColor}` }}
-                        >
-                          <img
-                            src={item.iconUrl}
-                            alt={item.name}
-                            className="w-full h-full object-contain"
-                            loading="lazy"
-                          />
-                        </div>
-                        <p className="text-[10px] text-center text-foreground/80 leading-tight line-clamp-2 w-full">
-                          {item.name}
-                        </p>
-                        {item.wear && (
-                          <p className="text-[9px] text-muted-foreground">{item.wear.replace("Factory New", "FN").replace("Minimal Wear", "MW").replace("Field-Tested", "FT").replace("Well-Worn", "WW").replace("Battle-Scarred", "BS")}</p>
-                        )}
-                      </div>
+                      <SteamItemCard key={item.assetId} item={item} />
                     ))}
                   </div>
-                  {inventoryQuery.data.items.length > 60 && (
-                    <p className="text-xs text-muted-foreground text-center">Showing first 60 of {inventoryQuery.data.items.length} items</p>
-                  )}
                 </>
               )}
             </div>
           )}
 
-          {/* CS2 commands info */}
+          {/* Trade URL collection info */}
           <div className="rounded-lg border border-border bg-card/60 p-4 space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <Sword className="w-4 h-4 text-blue-400" />
@@ -483,7 +514,7 @@ export default function SettingsPage() {
       <div className="flex items-center gap-3">
         <Button
           onClick={handleSave}
-          disabled={!isDirty || mutation.isPending || (tradeUrlTouched && !tradeUrlValid) || (steamId64Touched && !steamId64Valid) || !botNameValid}
+          disabled={!isDirty || mutation.isPending || (tradeUrlTouched && !tradeUrlValid) || !botNameValid}
           className="gap-2"
         >
           {mutation.isPending ? (
@@ -506,3 +537,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

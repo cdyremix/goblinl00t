@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { useUser, useClerk } from "@clerk/react";
+import { useUser, useClerk, useAuth } from "@clerk/react";
+import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, Gift, BarChart3, Terminal, Home, User, LogOut, Settings2, Send } from "lucide-react";
 import { Hint } from "@/components/hint";
 import { Button } from "@/components/ui/button";
@@ -8,8 +9,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { getToken, isSignedIn } = useAuth();
 
-  const links = [
+  const settingsQuery = useQuery<{ botTheme: "goblin" | "cs2" }>({
+    queryKey: ["bot-settings"],
+    enabled: !!isSignedIn,
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/settings", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+
+  const isCS2 = settingsQuery.data?.botTheme === "cs2";
+
+  const allLinks = [
     {
       href: "/dashboard",
       label: "Operations",
@@ -51,8 +66,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       label: "Trade Office",
       icon: Send,
       hint: "Manage CS2 skin deliveries to giveaway winners. Track trade URLs, mark items as sent or trade-locked, and add notes for each pending trade.",
+      cs2Only: true,
     },
   ];
+
+  const links = allLinks.filter((l) => !("cs2Only" in l) || isCS2);
 
   return (
     <div className="min-h-screen w-full flex bg-background text-foreground selection:bg-primary/30 dark">

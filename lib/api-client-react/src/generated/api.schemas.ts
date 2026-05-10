@@ -255,3 +255,14 @@ export type GetRecentLootParams = {
 export type GetTopLootersParams = {
   limit?: number;
 };
+
+export type ConnectSteam200 = {
+  /** @nullable */
+  steamId64: string | null;
+  /** @nullable */
+  steamUsername: string | null;
+};
+
+export type DisconnectSteam200 = {
+  success: boolean;
+};

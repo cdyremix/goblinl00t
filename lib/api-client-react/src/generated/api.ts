@@ -21,6 +21,8 @@ import type {
   BotSettings,
   BotStatus,
   CommandStat,
+  ConnectSteam200,
+  DisconnectSteam200,
   GetRecentLootParams,
   GetTopLootersParams,
   Giveaway,
@@ -1533,6 +1535,168 @@ export const useUpdateTradeFulfillment = <
   TContext
 > => {
   return useMutation(getUpdateTradeFulfillmentMutationOptions(options));
+};
+
+/**
+ * @summary Connect Steam account (mock OAuth in test env)
+ */
+export const getConnectSteamUrl = () => {
+  return `/api/steam/connect`;
+};
+
+export const connectSteam = async (
+  options?: RequestInit,
+): Promise<ConnectSteam200> => {
+  return customFetch<ConnectSteam200>(getConnectSteamUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getConnectSteamMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof connectSteam>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof connectSteam>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["connectSteam"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof connectSteam>>,
+    void
+  > = () => {
+    return connectSteam(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConnectSteamMutationResult = NonNullable<
+  Awaited<ReturnType<typeof connectSteam>>
+>;
+
+export type ConnectSteamMutationError = ErrorType<void>;
+
+/**
+ * @summary Connect Steam account (mock OAuth in test env)
+ */
+export const useConnectSteam = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof connectSteam>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof connectSteam>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getConnectSteamMutationOptions(options));
+};
+
+/**
+ * @summary Disconnect Steam account
+ */
+export const getDisconnectSteamUrl = () => {
+  return `/api/steam/disconnect`;
+};
+
+export const disconnectSteam = async (
+  options?: RequestInit,
+): Promise<DisconnectSteam200> => {
+  return customFetch<DisconnectSteam200>(getDisconnectSteamUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDisconnectSteamMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof disconnectSteam>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof disconnectSteam>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["disconnectSteam"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof disconnectSteam>>,
+    void
+  > = () => {
+    return disconnectSteam(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DisconnectSteamMutationResult = NonNullable<
+  Awaited<ReturnType<typeof disconnectSteam>>
+>;
+
+export type DisconnectSteamMutationError = ErrorType<void>;
+
+/**
+ * @summary Disconnect Steam account
+ */
+export const useDisconnectSteam = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof disconnectSteam>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof disconnectSteam>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getDisconnectSteamMutationOptions(options));
 };
 
 /**

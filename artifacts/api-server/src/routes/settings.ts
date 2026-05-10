@@ -18,7 +18,7 @@ async function getOrCreateUser(clerkUserId: string) {
   if (existing) return existing;
   const [created] = await db
     .insert(usersTable)
-    .values({ clerkUserId, subscriptionTier: "free" })
+    .values({ clerkUserId, subscriptionTier: "premium" })
     .returning();
   return created!;
 }

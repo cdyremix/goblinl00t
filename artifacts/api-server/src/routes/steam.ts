@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, usersTable, tradeFulfillmentsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import { MOCK_CS2_INVENTORY, MOCK_STEAM_ID64, MOCK_STEAM_USERNAME } from "../bot/cs2-mock-data";
 
 const router = Router();
 
@@ -44,16 +45,52 @@ function getTypeName(tags?: SteamDescription["tags"]): string {
   return typeTag?.localized_tag_name ?? "";
 }
 
+// Mock OAuth flow — sets a test Steam profile on the user.
+// In production, this would redirect to Steam OpenID and return with a verified Steam ID.
+router.post("/steam/connect", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set({ steamId64: MOCK_STEAM_ID64, steamUsername: MOCK_STEAM_USERNAME })
+    .where(eq(usersTable.clerkUserId, userId))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "User not found" }); return; }
+
+  res.json({ steamId64: updated.steamId64, steamUsername: updated.steamUsername });
+});
+
+router.post("/steam/disconnect", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  await db
+    .update(usersTable)
+    .set({ steamId64: null, steamUsername: null })
+    .where(eq(usersTable.clerkUserId, userId));
+
+  res.json({ success: true });
+});
+
 router.get("/steam/inventory", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkUserId, userId)).limit(1);
   if (!user?.steamId64) {
-    res.status(400).json({ error: "No Steam ID configured. Add your Steam ID 64 in settings." });
+    res.status(400).json({ error: "Steam account not connected. Click 'Connect Steam' in settings." });
     return;
   }
 
+  // Test/dev mode: return mock CS2 inventory
+  if (user.steamId64 === MOCK_STEAM_ID64) {
+    res.json({ items: MOCK_CS2_INVENTORY, totalCount: MOCK_CS2_INVENTORY.length });
+    return;
+  }
+
+  // Real Steam community inventory fetch
   try {
     const url = `https://steamcommunity.com/inventory/${user.steamId64}/730/2?l=english&count=200`;
     const response = await fetch(url, {
@@ -112,7 +149,6 @@ router.get("/steam/inventory", async (req, res) => {
   }
 });
 
-// Winners submit their Steam trade URL via bot command or this endpoint
 router.post("/steam/submit-trade-url", async (req, res) => {
   const body = req.body as { twitchUsername: string; tradeUrl: string };
   if (!body.twitchUsername || !body.tradeUrl) {
@@ -124,7 +160,6 @@ router.post("/steam/submit-trade-url", async (req, res) => {
     return;
   }
 
-  // Find the most recent pending fulfillment for this winner
   const [fulfillment] = await db
     .select()
     .from(tradeFulfillmentsTable)

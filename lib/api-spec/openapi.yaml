@@ -354,6 +354,46 @@ paths:
         "404":
           description: Not found
 
+  /steam/connect:
+    post:
+      operationId: connectSteam
+      tags: [steam]
+      summary: Connect Steam account (mock OAuth in test env)
+      responses:
+        "200":
+          description: Steam account connected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  steamId64:
+                    type: ["string", "null"]
+                  steamUsername:
+                    type: ["string", "null"]
+                required: [steamId64, steamUsername]
+        "401":
+          description: Unauthorized
+
+  /steam/disconnect:
+    post:
+      operationId: disconnectSteam
+      tags: [steam]
+      summary: Disconnect Steam account
+      responses:
+        "200":
+          description: Steam account disconnected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+        "401":
+          description: Unauthorized
+
   /steam/inventory:
     get:
       operationId: getSteamInventory
