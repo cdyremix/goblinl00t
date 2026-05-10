@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@layer theme, base, clerk, components, utilities;
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -54,6 +55,7 @@
   --font-sans: var(--app-font-sans);
   --font-serif: var(--app-font-serif);
   --font-mono: var(--app-font-mono);
+  --font-medieval: var(--app-font-medieval);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -103,6 +105,7 @@
   --app-font-sans: 'Bricolage Grotesque', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: 'Space Mono', monospace;
+  --app-font-medieval: 'Cinzel', serif;
   --radius: .25rem;
 }
 
@@ -146,4 +149,14 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  .font-medieval {
+    font-family: var(--app-font-medieval);
+  }
+}
+
+/* Clerk placeholder fix on dark bg */
+.cl-formFieldInput::placeholder {
+  color: hsl(45 10% 45%);
+  opacity: 1;
 }

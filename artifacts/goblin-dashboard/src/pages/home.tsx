@@ -1,5 +1,8 @@
 import { Link } from "wouter";
-import { Shield, Gift, Sword, Package, Zap, Star, ChevronRight, Terminal } from "lucide-react";
+import { Gift, Sword, Package, Zap, Star, ChevronRight, Terminal } from "lucide-react";
+import { useAuth } from "@clerk/react";
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const COMMANDS = [
   { cmd: "!loot", desc: "Roll for random goblin loot — common to legendary rarity drops", rarity: "legendary" },
@@ -29,21 +32,35 @@ const CMD_LABEL: Record<string, string> = {
 };
 
 export function Home() {
+  const { isLoaded, isSignedIn } = useAuth();
+
   return (
     <div className="min-h-screen bg-background text-foreground dark selection:bg-primary/30 overflow-x-hidden">
       {/* Nav */}
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield className="w-6 h-6 text-primary" />
-            <span className="text-xl font-bold tracking-tight text-primary font-mono">Goblin L00t</span>
+            <img src={`${basePath}/goblin-logo.png`} alt="Goblin L00t" className="w-8 h-8 object-contain" />
+            <span className="font-medieval text-xl font-bold tracking-tight text-primary">Goblin L00t</span>
           </div>
-          <div className="flex items-center gap-4">
-            <a href="https://twitch.tv" target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Twitch</a>
-            <Link href="/dashboard" className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-bold hover:brightness-110 transition-all" data-testid="link-dashboard">
-              Dashboard
-              <ChevronRight className="w-4 h-4" />
-            </Link>
+          <div className="flex items-center gap-3">
+            <a href="https://twitch.tv/goblinl00t" target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block">Twitch</a>
+            {isLoaded && isSignedIn ? (
+              <Link href="/dashboard" className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-bold hover:brightness-110 transition-all" data-testid="link-dashboard">
+                Dashboard
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <>
+                <Link href="/sign-in" className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium px-3 py-2 rounded-md hover:bg-muted/30">
+                  Sign In
+                </Link>
+                <Link href="/sign-up" className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-bold hover:brightness-110 transition-all" data-testid="link-dashboard">
+                  Get Started
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -62,7 +79,7 @@ export function Home() {
             Live in Twitch Chat
           </div>
 
-          <h1 className="text-6xl md:text-8xl font-bold tracking-tight leading-none mb-6">
+          <h1 className="font-medieval text-6xl md:text-8xl font-bold tracking-tight leading-none mb-6">
             <span className="text-foreground">Goblin</span>
             <span className="text-primary"> L00t</span>
           </h1>
@@ -72,11 +89,18 @@ export function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/dashboard" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_30px_rgba(255,180,0,0.3)]" data-testid="link-get-started">
-              Open Dashboard
-              <ChevronRight className="w-5 h-5" />
-            </Link>
-            <a href="https://twitch.tv" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-card border border-border hover:border-primary/50 text-foreground px-8 py-3.5 rounded-lg text-base font-bold transition-all" data-testid="link-twitch">
+            {isLoaded && isSignedIn ? (
+              <Link href="/dashboard" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_30px_rgba(255,180,0,0.3)]" data-testid="link-get-started">
+                Open Dashboard
+                <ChevronRight className="w-5 h-5" />
+              </Link>
+            ) : (
+              <Link href="/sign-up" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_30px_rgba(255,180,0,0.3)]" data-testid="link-get-started">
+                Start for Free
+                <ChevronRight className="w-5 h-5" />
+              </Link>
+            )}
+            <a href="https://twitch.tv/goblinl00t" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-card border border-border hover:border-primary/50 text-foreground px-8 py-3.5 rounded-lg text-base font-bold transition-all" data-testid="link-twitch">
               Watch on Twitch
             </a>
           </div>

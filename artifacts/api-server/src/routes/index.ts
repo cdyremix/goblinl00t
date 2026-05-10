@@ -5,6 +5,8 @@ import giveawayRouter from "./giveaway";
 import lootRouter from "./loot";
 import statsRouter from "./stats";
 import commandsRouter from "./commands";
+import usersRouter from "./users";
+import authRouter from "./auth";
 
 const router: IRouter = Router();
 
@@ -14,5 +16,7 @@ router.use(giveawayRouter);
 router.use(lootRouter);
 router.use(statsRouter);
 router.use(commandsRouter);
+router.use(usersRouter);
+router.use(authRouter);
 
 export default router;

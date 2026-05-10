@@ -6,13 +6,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 
 export function Dashboard() {
-  const { data: botStatus, isLoading: botLoading } = useGetBotStatus({
-    query: { refetchInterval: 10000 }
-  });
-  
-  const { data: currentGiveaway, isLoading: giveawayLoading } = useGetCurrentGiveaway({
-    query: { refetchInterval: 10000 }
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: botStatus, isLoading: botLoading } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: currentGiveaway, isLoading: giveawayLoading } = useGetCurrentGiveaway({ query: { refetchInterval: 10000 } as any });
   
   const { data: stats, isLoading: statsLoading } = useGetStatsOverview();
   const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 10 });
