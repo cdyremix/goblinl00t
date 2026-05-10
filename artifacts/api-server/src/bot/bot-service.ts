@@ -1,5 +1,5 @@
 import tmi from "tmi.js";
-import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable } from "@workspace/db";
+import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { rollLoot, getRarityEmoji } from "./loot-tables";
@@ -24,6 +24,7 @@ const COMMAND_ENABLED: Record<string, boolean> = {
   "!feedgoblin": true,
   "!enter": true,
   "!giveaway": true,
+  "!tradeurl": true,
 };
 
 const COMMAND_COOLDOWN_SECONDS: Record<string, number> = {
@@ -35,6 +36,7 @@ const COMMAND_COOLDOWN_SECONDS: Record<string, number> = {
   "!feedgoblin": 10,
   "!enter": 5,
   "!giveaway": 5,
+  "!tradeurl": 10,
 };
 
 let client: tmi.Client | null = null;
@@ -179,6 +181,37 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       void client?.say(channel, pickRandom(phrases.feedResponses));
     }
 
+    if (command === "!tradeurl") {
+      const tradeUrl = parts[1] ?? null;
+      if (!tradeUrl || !tradeUrl.includes("steamcommunity.com/tradeoffer/new/")) {
+        void client?.say(
+          channel,
+          `${username}: Please provide your Steam trade URL — !tradeurl https://steamcommunity.com/tradeoffer/new/?partner=...`
+        );
+        return;
+      }
+      const [pending] = await db
+        .select()
+        .from(tradeFulfillmentsTable)
+        .where(
+          and(
+            eq(tradeFulfillmentsTable.winnerTwitchUsername, username),
+            eq(tradeFulfillmentsTable.status, "pending")
+          )
+        )
+        .limit(1);
+
+      if (!pending) {
+        void client?.say(channel, `${username}: No pending giveaway win found for your account! Contact the streamer if you think this is wrong.`);
+        return;
+      }
+      await db
+        .update(tradeFulfillmentsTable)
+        .set({ steamTradeUrl: tradeUrl })
+        .where(eq(tradeFulfillmentsTable.id, pending.id));
+      void client?.say(channel, `✅ ${username}: Trade URL saved! The streamer will send your skin soon 🎁`);
+    }
+
     if (command === "!giveaway") {
       const [active] = await db
         .select()
@@ -256,6 +289,10 @@ export function toggleCommandEnabled(name: string): boolean {
 
 export { setActiveTheme, getActiveTheme };
 export type { BotTheme };
+
+let _activeBotName = "GoblinL00t";
+export function setActiveBotName(name: string): void { _activeBotName = name; }
+export function getActiveBotName(): string { return _activeBotName; }
 
 function getCommandDescription(cmd: string): string {
   const descriptions: Record<string, string> = {

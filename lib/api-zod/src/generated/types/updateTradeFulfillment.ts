@@ -5,15 +5,14 @@
  * Goblin L00t API - Twitch bot + giveaway dashboard
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateBotSettingsBotTheme } from "./updateBotSettingsBotTheme";
+import type { UpdateTradeFulfillmentStatus } from "./updateTradeFulfillmentStatus";
 
-export interface UpdateBotSettings {
-  botTheme?: UpdateBotSettingsBotTheme;
-  botName?: string;
+export interface UpdateTradeFulfillment {
+  status?: UpdateTradeFulfillmentStatus;
   /** @nullable */
   steamTradeUrl?: string | null;
   /** @nullable */
-  steamId64?: string | null;
+  tradeLockUntil?: string | null;
   /** @nullable */
-  steamUsername?: string | null;
+  streamerNotes?: string | null;
 }

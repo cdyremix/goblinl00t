@@ -323,11 +323,79 @@ export const ListCommandsResponseItem = zod.object({
 export const ListCommandsResponse = zod.array(ListCommandsResponseItem);
 
 /**
+ * @summary List all giveaway winner trade records
+ */
+export const ListTradeFulfillmentsResponseItem = zod.object({
+  id: zod.number(),
+  giveawayId: zod.number(),
+  winnerTwitchUsername: zod.string(),
+  prize: zod.string(),
+  steamTradeUrl: zod.string().nullable(),
+  status: zod.enum(["pending", "trade_locked", "sent", "skipped"]),
+  tradeLockUntil: zod.string().nullable(),
+  streamerNotes: zod.string().nullable(),
+  createdAt: zod.string(),
+});
+export const ListTradeFulfillmentsResponse = zod.array(
+  ListTradeFulfillmentsResponseItem,
+);
+
+/**
+ * @summary Update a trade fulfillment record
+ */
+export const UpdateTradeFulfillmentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateTradeFulfillmentBody = zod.object({
+  status: zod.enum(["pending", "trade_locked", "sent", "skipped"]).optional(),
+  steamTradeUrl: zod.string().nullish(),
+  tradeLockUntil: zod.string().nullish(),
+  streamerNotes: zod.string().nullish(),
+});
+
+export const UpdateTradeFulfillmentResponse = zod.object({
+  id: zod.number(),
+  giveawayId: zod.number(),
+  winnerTwitchUsername: zod.string(),
+  prize: zod.string(),
+  steamTradeUrl: zod.string().nullable(),
+  status: zod.enum(["pending", "trade_locked", "sent", "skipped"]),
+  tradeLockUntil: zod.string().nullable(),
+  streamerNotes: zod.string().nullable(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Fetch the authenticated user's CS2 Steam inventory
+ */
+export const GetSteamInventoryResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      assetId: zod.string(),
+      classId: zod.string(),
+      name: zod.string(),
+      marketHashName: zod.string(),
+      iconUrl: zod.string(),
+      tradable: zod.boolean(),
+      rarityColor: zod.string(),
+      rarityName: zod.string(),
+      wear: zod.string().nullable(),
+      type: zod.string(),
+    }),
+  ),
+  totalCount: zod.number(),
+});
+
+/**
  * @summary Get current user bot settings
  */
 export const GetBotSettingsResponse = zod.object({
   botTheme: zod.enum(["goblin", "cs2"]),
+  botName: zod.string(),
   steamTradeUrl: zod.string().nullable(),
+  steamId64: zod.string().nullable(),
+  steamUsername: zod.string().nullable(),
 });
 
 /**
@@ -335,12 +403,18 @@ export const GetBotSettingsResponse = zod.object({
  */
 export const UpdateBotSettingsBody = zod.object({
   botTheme: zod.enum(["goblin", "cs2"]).optional(),
+  botName: zod.string().optional(),
   steamTradeUrl: zod.string().nullish(),
+  steamId64: zod.string().nullish(),
+  steamUsername: zod.string().nullish(),
 });
 
 export const UpdateBotSettingsResponse = zod.object({
   botTheme: zod.enum(["goblin", "cs2"]),
+  botName: zod.string(),
   steamTradeUrl: zod.string().nullable(),
+  steamId64: zod.string().nullable(),
+  steamUsername: zod.string().nullable(),
 });
 
 /**

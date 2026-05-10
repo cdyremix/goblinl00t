@@ -142,8 +142,13 @@ export const BotSettingsBotTheme = {
 
 export interface BotSettings {
   botTheme: BotSettingsBotTheme;
+  botName: string;
   /** @nullable */
   steamTradeUrl: string | null;
+  /** @nullable */
+  steamId64: string | null;
+  /** @nullable */
+  steamUsername: string | null;
 }
 
 export type UpdateBotSettingsBotTheme =
@@ -156,8 +161,77 @@ export const UpdateBotSettingsBotTheme = {
 
 export interface UpdateBotSettings {
   botTheme?: UpdateBotSettingsBotTheme;
+  botName?: string;
   /** @nullable */
   steamTradeUrl?: string | null;
+  /** @nullable */
+  steamId64?: string | null;
+  /** @nullable */
+  steamUsername?: string | null;
+}
+
+export type TradeFulfillmentStatus =
+  (typeof TradeFulfillmentStatus)[keyof typeof TradeFulfillmentStatus];
+
+export const TradeFulfillmentStatus = {
+  pending: "pending",
+  trade_locked: "trade_locked",
+  sent: "sent",
+  skipped: "skipped",
+} as const;
+
+export interface TradeFulfillment {
+  id: number;
+  giveawayId: number;
+  winnerTwitchUsername: string;
+  prize: string;
+  /** @nullable */
+  steamTradeUrl: string | null;
+  status: TradeFulfillmentStatus;
+  /** @nullable */
+  tradeLockUntil: string | null;
+  /** @nullable */
+  streamerNotes: string | null;
+  createdAt: string;
+}
+
+export type UpdateTradeFulfillmentStatus =
+  (typeof UpdateTradeFulfillmentStatus)[keyof typeof UpdateTradeFulfillmentStatus];
+
+export const UpdateTradeFulfillmentStatus = {
+  pending: "pending",
+  trade_locked: "trade_locked",
+  sent: "sent",
+  skipped: "skipped",
+} as const;
+
+export interface UpdateTradeFulfillment {
+  status?: UpdateTradeFulfillmentStatus;
+  /** @nullable */
+  steamTradeUrl?: string | null;
+  /** @nullable */
+  tradeLockUntil?: string | null;
+  /** @nullable */
+  streamerNotes?: string | null;
+}
+
+export interface SteamInventoryItem {
+  assetId: string;
+  classId: string;
+  name: string;
+  marketHashName: string;
+  iconUrl: string;
+  tradable: boolean;
+  rarityColor: string;
+  rarityName: string;
+  /** @nullable */
+  wear: string | null;
+  type: string;
+}
+
+export interface SteamInventory {
+  items: SteamInventoryItem[];
+  totalCount: number;
 }
 
 export type ListGiveawaysParams = {

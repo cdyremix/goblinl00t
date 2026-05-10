@@ -32,7 +32,10 @@ import type {
   ListGiveawaysParams,
   LootDrop,
   StatsOverview,
+  SteamInventory,
+  TradeFulfillment,
   UpdateBotSettings,
+  UpdateTradeFulfillment,
   UserStat,
 } from "./api.schemas";
 
@@ -1361,6 +1364,244 @@ export function useListCommands<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListCommandsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all giveaway winner trade records
+ */
+export const getListTradeFulfillmentsUrl = () => {
+  return `/api/trade-fulfillments`;
+};
+
+export const listTradeFulfillments = async (
+  options?: RequestInit,
+): Promise<TradeFulfillment[]> => {
+  return customFetch<TradeFulfillment[]>(getListTradeFulfillmentsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTradeFulfillmentsQueryKey = () => {
+  return [`/api/trade-fulfillments`] as const;
+};
+
+export const getListTradeFulfillmentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTradeFulfillments>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTradeFulfillments>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTradeFulfillmentsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listTradeFulfillments>>
+  > = ({ signal }) => listTradeFulfillments({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTradeFulfillments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTradeFulfillmentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTradeFulfillments>>
+>;
+export type ListTradeFulfillmentsQueryError = ErrorType<void>;
+
+/**
+ * @summary List all giveaway winner trade records
+ */
+
+export function useListTradeFulfillments<
+  TData = Awaited<ReturnType<typeof listTradeFulfillments>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTradeFulfillments>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTradeFulfillmentsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a trade fulfillment record
+ */
+export const getUpdateTradeFulfillmentUrl = (id: number) => {
+  return `/api/trade-fulfillments/${id}`;
+};
+
+export const updateTradeFulfillment = async (
+  id: number,
+  updateTradeFulfillment: UpdateTradeFulfillment,
+  options?: RequestInit,
+): Promise<TradeFulfillment> => {
+  return customFetch<TradeFulfillment>(getUpdateTradeFulfillmentUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateTradeFulfillment),
+  });
+};
+
+export const getUpdateTradeFulfillmentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTradeFulfillment>>,
+    TError,
+    { id: number; data: BodyType<UpdateTradeFulfillment> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateTradeFulfillment>>,
+  TError,
+  { id: number; data: BodyType<UpdateTradeFulfillment> },
+  TContext
+> => {
+  const mutationKey = ["updateTradeFulfillment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateTradeFulfillment>>,
+    { id: number; data: BodyType<UpdateTradeFulfillment> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateTradeFulfillment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateTradeFulfillmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateTradeFulfillment>>
+>;
+export type UpdateTradeFulfillmentMutationBody =
+  BodyType<UpdateTradeFulfillment>;
+export type UpdateTradeFulfillmentMutationError = ErrorType<void>;
+
+/**
+ * @summary Update a trade fulfillment record
+ */
+export const useUpdateTradeFulfillment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTradeFulfillment>>,
+    TError,
+    { id: number; data: BodyType<UpdateTradeFulfillment> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateTradeFulfillment>>,
+  TError,
+  { id: number; data: BodyType<UpdateTradeFulfillment> },
+  TContext
+> => {
+  return useMutation(getUpdateTradeFulfillmentMutationOptions(options));
+};
+
+/**
+ * @summary Fetch the authenticated user's CS2 Steam inventory
+ */
+export const getGetSteamInventoryUrl = () => {
+  return `/api/steam/inventory`;
+};
+
+export const getSteamInventory = async (
+  options?: RequestInit,
+): Promise<SteamInventory> => {
+  return customFetch<SteamInventory>(getGetSteamInventoryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSteamInventoryQueryKey = () => {
+  return [`/api/steam/inventory`] as const;
+};
+
+export const getGetSteamInventoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSteamInventory>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSteamInventory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSteamInventoryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSteamInventory>>
+  > = ({ signal }) => getSteamInventory({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSteamInventory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSteamInventoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSteamInventory>>
+>;
+export type GetSteamInventoryQueryError = ErrorType<void>;
+
+/**
+ * @summary Fetch the authenticated user's CS2 Steam inventory
+ */
+
+export function useGetSteamInventory<
+  TData = Awaited<ReturnType<typeof getSteamInventory>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSteamInventory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSteamInventoryQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

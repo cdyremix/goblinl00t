@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, giveawaysTable, giveawayEntriesTable } from "@workspace/db";
+import { db, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import {
   CreateGiveawayBody,
@@ -217,6 +217,14 @@ router.post("/giveaway/:id/end", async (req, res) => {
     winner: winner.username,
     entryCount: entries.length,
   });
+
+  // Auto-create a trade fulfillment record for the winner
+  void db.insert(tradeFulfillmentsTable).values({
+    giveawayId: giveaway.id,
+    winnerTwitchUsername: winner.username,
+    prize: giveaway.prize,
+    status: "pending",
+  }).onConflictDoNothing();
 
   res.json({
     giveaway: serializeGiveaway(giveaway, entries.length),

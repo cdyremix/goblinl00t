@@ -8,6 +8,8 @@ import commandsRouter from "./commands";
 import usersRouter from "./users";
 import authRouter from "./auth";
 import settingsRouter from "./settings";
+import steamRouter from "./steam";
+import tradeFulfillmentsRouter from "./trade-fulfillments";
 
 const router: IRouter = Router();
 
@@ -20,5 +22,7 @@ router.use(commandsRouter);
 router.use(usersRouter);
 router.use(authRouter);
 router.use(settingsRouter);
+router.use(steamRouter);
+router.use(tradeFulfillmentsRouter);
 
 export default router;

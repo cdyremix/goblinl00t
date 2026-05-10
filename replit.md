@@ -52,10 +52,12 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 - **Giveaway Detail** (`/giveaway/:id`): Start, end (pick winner), reroll. Shows winner banner and full entry list.
 - **Ledger** (`/stats`): Top looters leaderboard with rarity bars, command usage chart.
 - **Spells** (`/commands`): Toggle individual chat commands on/off with live cooldown display.
+- **Forge** (`/settings`): Bot display name, theme picker (goblin/cs2), Steam trade URL, Steam ID 64 with CS2 inventory grid.
+- **Trade Office** (`/trade-office`): Manage CS2 skin delivery to giveaway winners — track trade URLs, mark trade-locked items, add notes, update status (pending → sent).
 
 ## Bot Commands
 
-`!loot`, `!enter`, `!goblin`, `!steal`, `!hoard`, `!inventory`, `!feedgoblin`, `!giveaway`
+`!loot`, `!enter`, `!goblin`, `!steal`, `!hoard`, `!inventory`, `!feedgoblin`, `!giveaway`, `!tradeurl`
 
 ## Twitch Integration
 

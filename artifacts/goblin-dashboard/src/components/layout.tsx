@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk } from "@clerk/react";
-import { LayoutDashboard, Gift, BarChart3, Terminal, Home, User, LogOut, Settings2 } from "lucide-react";
+import { LayoutDashboard, Gift, BarChart3, Terminal, Home, User, LogOut, Settings2, Send } from "lucide-react";
 import { Hint } from "@/components/hint";
 import { Button } from "@/components/ui/button";
 
@@ -45,6 +45,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       label: "Forge",
       icon: Settings2,
       hint: "Bot theme and game-specific settings. Switch between Goblin mode and CS2 Arms Deal mode, and configure your Steam trade link for skin giveaways.",
+    },
+    {
+      href: "/trade-office",
+      label: "Trade Office",
+      icon: Send,
+      hint: "Manage CS2 skin deliveries to giveaway winners. Track trade URLs, mark items as sent or trade-locked, and add notes for each pending trade.",
     },
   ];
 

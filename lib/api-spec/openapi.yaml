@@ -22,6 +22,10 @@ tags:
     description: Bot command configuration
   - name: settings
     description: Bot theme and user settings
+  - name: trade
+    description: Giveaway winner trade fulfillment
+  - name: steam
+    description: Steam inventory integration
 
 paths:
   /healthz:
@@ -303,6 +307,71 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/BotCommand"
+
+  /trade-fulfillments:
+    get:
+      operationId: listTradeFulfillments
+      tags: [trade]
+      summary: List all giveaway winner trade records
+      responses:
+        "200":
+          description: Trade fulfillment records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TradeFulfillment"
+        "401":
+          description: Unauthorized
+
+  /trade-fulfillments/{id}:
+    put:
+      operationId: updateTradeFulfillment
+      tags: [trade]
+      summary: Update a trade fulfillment record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTradeFulfillment"
+      responses:
+        "200":
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradeFulfillment"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /steam/inventory:
+    get:
+      operationId: getSteamInventory
+      tags: [steam]
+      summary: Fetch the authenticated user's CS2 Steam inventory
+      responses:
+        "200":
+          description: Steam inventory items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SteamInventory"
+        "400":
+          description: Steam ID not configured or inventory is private
+        "401":
+          description: Unauthorized
+        "502":
+          description: Steam API error
 
   /settings:
     get:
@@ -608,11 +677,20 @@ components:
         botTheme:
           type: string
           enum: [goblin, cs2]
+        botName:
+          type: string
         steamTradeUrl:
+          type: ["string", "null"]
+        steamId64:
+          type: ["string", "null"]
+        steamUsername:
           type: ["string", "null"]
       required:
         - botTheme
+        - botName
         - steamTradeUrl
+        - steamId64
+        - steamUsername
 
     UpdateBotSettings:
       type: object
@@ -620,5 +698,105 @@ components:
         botTheme:
           type: string
           enum: [goblin, cs2]
+        botName:
+          type: string
         steamTradeUrl:
           type: ["string", "null"]
+        steamId64:
+          type: ["string", "null"]
+        steamUsername:
+          type: ["string", "null"]
+
+    TradeFulfillment:
+      type: object
+      properties:
+        id:
+          type: integer
+        giveawayId:
+          type: integer
+        winnerTwitchUsername:
+          type: string
+        prize:
+          type: string
+        steamTradeUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, trade_locked, sent, skipped]
+        tradeLockUntil:
+          type: ["string", "null"]
+        streamerNotes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - giveawayId
+        - winnerTwitchUsername
+        - prize
+        - steamTradeUrl
+        - status
+        - tradeLockUntil
+        - streamerNotes
+        - createdAt
+
+    UpdateTradeFulfillment:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, trade_locked, sent, skipped]
+        steamTradeUrl:
+          type: ["string", "null"]
+        tradeLockUntil:
+          type: ["string", "null"]
+        streamerNotes:
+          type: ["string", "null"]
+
+    SteamInventoryItem:
+      type: object
+      properties:
+        assetId:
+          type: string
+        classId:
+          type: string
+        name:
+          type: string
+        marketHashName:
+          type: string
+        iconUrl:
+          type: string
+        tradable:
+          type: boolean
+        rarityColor:
+          type: string
+        rarityName:
+          type: string
+        wear:
+          type: ["string", "null"]
+        type:
+          type: string
+      required:
+        - assetId
+        - classId
+        - name
+        - marketHashName
+        - iconUrl
+        - tradable
+        - rarityColor
+        - rarityName
+        - wear
+        - type
+
+    SteamInventory:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SteamInventoryItem"
+        totalCount:
+          type: integer
+      required:
+        - items
+        - totalCount

@@ -9,6 +9,11 @@ import type { BotSettingsBotTheme } from "./botSettingsBotTheme";
 
 export interface BotSettings {
   botTheme: BotSettingsBotTheme;
+  botName: string;
   /** @nullable */
   steamTradeUrl: string | null;
+  /** @nullable */
+  steamId64: string | null;
+  /** @nullable */
+  steamUsername: string | null;
 }
