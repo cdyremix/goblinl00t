@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, Gift, BarChart3, Terminal, Home, User, LogOut, Settings2, Send } from "lucide-react";
+import { LayoutDashboard, Gift, BarChart3, Home, User, LogOut, Settings2, Send } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -26,7 +26,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
     { href: "/giveaway", label: "Loot Hoard", icon: Gift },
     { href: "/stats", label: "Ledger", icon: BarChart3 },
-    { href: "/commands", label: "Spells", icon: Terminal },
     { href: "/account", label: "The Scroll", icon: User },
     { href: "/settings", label: "Forge", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true },

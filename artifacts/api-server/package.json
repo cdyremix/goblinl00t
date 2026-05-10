@@ -21,7 +21,8 @@
     "http-proxy-middleware": "^4.0.0",
     "pino": "^9",
     "pino-http": "^10",
-    "tmi.js": "^1.8.5"
+    "tmi.js": "^1.8.5",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

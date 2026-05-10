@@ -3,8 +3,10 @@ import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings2, Crosshair, Sword, Save, CheckCircle2,
-  AlertCircle, User2, ShieldCheck, Unlink
+  AlertCircle, User2, ShieldCheck, Unlink, Terminal, Plus, Trash2, Clock
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -182,37 +184,17 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Theme Selector */}
-      <section className="space-y-2 max-w-sm">
-        <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
-        <p className="text-xs text-muted-foreground">
-          Controls the bot's language and personality in chat.
-        </p>
-        <Select value={activeTheme} onValueChange={(v) => handleThemeSelect(v as BotTheme)}>
-          <SelectTrigger id="bot-theme" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {THEME_OPTIONS.map((theme) => (
-              <SelectItem key={theme.id} value={theme.id}>
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{theme.emoji}</span>
-                  <span>{theme.name}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground/80 leading-snug">
-          {THEME_OPTIONS.find((t) => t.id === activeTheme)?.description}
-        </p>
-      </section>
-
       {/* Bot Name */}
       <section className="space-y-2 max-w-sm">
-        <Label htmlFor="bot-name" className="text-lg font-semibold text-foreground">Bot Display Name</Label>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="bot-name" className="text-lg font-semibold text-foreground">Bot Display Name</Label>
+          <Hint
+            text="The name the bot uses when referring to itself in chat. Leave blank to use the default name for your selected theme."
+            side="right"
+          />
+        </div>
         <p className="text-xs text-muted-foreground">
-          The name the bot uses in chat. Leave blank to use the default for your theme.
+          Leave blank to use the default for your theme.
         </p>
         <div className="flex gap-2 items-start">
           <div className="flex-1 space-y-1">
@@ -256,6 +238,41 @@ export default function SettingsPage() {
         )}
       </section>
 
+      {/* Theme Selector */}
+      <section className="space-y-2 max-w-sm">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
+          <Hint
+            text="Controls the bot's language and personality in chat. Switch to CS2 mode for Counter-Strike flavored messages and skin giveaway support. Only commands relevant to the active theme will be available below."
+            side="right"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Controls the bot's language and personality in chat.
+        </p>
+        <Select value={activeTheme} onValueChange={(v) => handleThemeSelect(v as BotTheme)}>
+          <SelectTrigger id="bot-theme" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {THEME_OPTIONS.map((theme) => (
+              <SelectItem key={theme.id} value={theme.id}>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{theme.emoji}</span>
+                  <span>{theme.name}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground/80 leading-snug">
+          {THEME_OPTIONS.find((t) => t.id === activeTheme)?.description}
+        </p>
+      </section>
+
+      {/* Commands */}
+      <CommandsSection activeTheme={activeTheme} />
+
       {/* CS2-specific settings */}
       {isCS2 && (
         <section className="space-y-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
@@ -267,7 +284,7 @@ export default function SettingsPage() {
           {/* Steam connection */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Label className="text-sm">Steam Account</Label>
+              <Label className="text-sm font-semibold">Steam Account</Label>
               <Hint
                 text="Connect your Steam account to load your CS2 inventory in the Trade Office. In test mode this is a mock connection — production would redirect to Steam OpenID."
                 side="right"
@@ -344,6 +361,334 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Commands section (built-in toggles + custom command CRUD)
+// =====================================================================
+
+type CommandTheme = "goblin" | "cs2" | "both";
+
+interface BotCommand {
+  id?: number;
+  name: string;
+  description: string;
+  responseText?: string;
+  enabled: boolean;
+  cooldownSeconds: number;
+  theme: CommandTheme;
+  isCustom: boolean;
+}
+
+function useCommands() {
+  const { getToken } = useAuth();
+  const qc = useQueryClient();
+
+  const query = useQuery<BotCommand[]>({
+    queryKey: ["commands"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/commands", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Failed to load commands");
+      return res.json();
+    },
+  });
+
+  const toggle = useMutation({
+    mutationFn: async (name: string) => {
+      const token = await getToken();
+      const res = await fetch(`/api/commands/${encodeURIComponent(name.replace(/^!/, ""))}/toggle`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Toggle failed");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["commands"] }),
+  });
+
+  const createCustom = useMutation<
+    BotCommand,
+    Error,
+    { name: string; responseText: string; cooldownSeconds: number; theme: CommandTheme }
+  >({
+    mutationFn: async (input) => {
+      const token = await getToken();
+      const res = await fetch("/api/custom-commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to create command");
+      }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["commands"] }),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: number) => {
+      const token = await getToken();
+      const res = await fetch(`/api/custom-commands/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["commands"] }),
+  });
+
+  return { query, toggle, createCustom, remove };
+}
+
+function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
+  const { query, toggle, createCustom, remove } = useCommands();
+  const [showForm, setShowForm] = useState(false);
+
+  const visible = (query.data ?? []).filter(
+    (c) => c.theme === "both" || c.theme === activeTheme,
+  );
+  const builtIns = visible.filter((c) => !c.isCustom);
+  const customs = visible.filter((c) => c.isCustom);
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Label className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <Terminal className="w-4 h-4 text-primary" />
+          Chat Commands
+        </Label>
+        <Hint
+          text="Toggle which commands the bot responds to in chat. Only commands relevant to your selected theme are shown. You can also add your own custom commands."
+          side="right"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Showing commands available in <span className="text-foreground font-medium">{activeTheme === "cs2" ? "CS2 Arms Deal" : "Goblin Hoard"}</span> mode.
+      </p>
+
+      {/* Built-in commands */}
+      <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
+        {query.isLoading ? (
+          <div className="p-6 text-sm text-muted-foreground animate-pulse">Loading commands…</div>
+        ) : builtIns.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground text-center">No built-in commands for this theme.</div>
+        ) : (
+          builtIns.map((cmd) => (
+            <div key={cmd.name} className={`flex items-center justify-between px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
+              <div className="flex-1 min-w-0 pr-3">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+                    <Clock className="w-2.5 h-2.5" />
+                    {cmd.cooldownSeconds}s
+                  </span>
+                  {cmd.theme !== "both" && (
+                    <span className="text-[10px] uppercase tracking-wide text-primary/70 font-semibold">
+                      {cmd.theme === "cs2" ? "CS2" : "Goblin"}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground leading-snug">{cmd.description}</p>
+              </div>
+              <Switch
+                checked={cmd.enabled}
+                onCheckedChange={() => toggle.mutate(cmd.name)}
+                disabled={toggle.isPending}
+                aria-label={`Toggle ${cmd.name}`}
+              />
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Custom commands */}
+      <div className="space-y-2 pt-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Custom Commands</h3>
+          {!showForm && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowForm(true)}>
+              <Plus className="w-3.5 h-3.5" /> New command
+            </Button>
+          )}
+        </div>
+
+        {showForm && (
+          <NewCustomCommandForm
+            defaultTheme={activeTheme}
+            onCancel={() => setShowForm(false)}
+            onSubmit={async (data) => {
+              await createCustom.mutateAsync(data);
+              setShowForm(false);
+            }}
+            error={createCustom.isError ? createCustom.error?.message : undefined}
+            pending={createCustom.isPending}
+          />
+        )}
+
+        {customs.length === 0 && !showForm ? (
+          <p className="text-xs text-muted-foreground italic">No custom commands yet for this theme.</p>
+        ) : (
+          <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
+            {customs.map((cmd) => (
+              <div key={cmd.id} className={`flex items-start justify-between gap-3 px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+                      <Clock className="w-2.5 h-2.5" />
+                      {cmd.cooldownSeconds}s
+                    </span>
+                    {cmd.theme !== "both" && (
+                      <span className="text-[10px] uppercase tracking-wide text-primary/70 font-semibold">
+                        {cmd.theme === "cs2" ? "CS2" : "Goblin"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-snug whitespace-pre-wrap break-words">
+                    {cmd.responseText}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                  <Switch
+                    checked={cmd.enabled}
+                    onCheckedChange={() => toggle.mutate(cmd.name)}
+                    disabled={toggle.isPending}
+                    aria-label={`Toggle ${cmd.name}`}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => cmd.id && remove.mutate(cmd.id)}
+                    disabled={remove.isPending}
+                    aria-label={`Delete ${cmd.name}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function NewCustomCommandForm({
+  defaultTheme,
+  onSubmit,
+  onCancel,
+  error,
+  pending,
+}: {
+  defaultTheme: BotTheme;
+  onSubmit: (data: { name: string; responseText: string; cooldownSeconds: number; theme: CommandTheme }) => Promise<void>;
+  onCancel: () => void;
+  error: string | undefined;
+  pending: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [responseText, setResponseText] = useState("");
+  const [cooldown, setCooldown] = useState(10);
+  const [theme, setTheme] = useState<CommandTheme>(defaultTheme);
+
+  const trimmedName = name.trim().toLowerCase();
+  const nameOk = /^!?[a-z0-9_]{2,32}$/.test(trimmedName);
+  const responseOk = responseText.trim().length > 0 && responseText.length <= 400;
+  const cooldownOk = Number.isInteger(cooldown) && cooldown >= 0 && cooldown <= 3600;
+  const valid = nameOk && responseOk && cooldownOk;
+
+  return (
+    <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="cmd-name" className="text-xs">Command name</Label>
+          <Input
+            id="cmd-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="!discord"
+            maxLength={32}
+            className="font-mono"
+          />
+          {!nameOk && name.length > 0 && (
+            <p className="text-[11px] text-destructive">Letters, numbers, underscores only (2–32 chars)</p>
+          )}
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="cmd-cooldown" className="text-xs">Cooldown (seconds)</Label>
+          <Input
+            id="cmd-cooldown"
+            type="number"
+            min={0}
+            max={3600}
+            value={cooldown}
+            onChange={(e) => setCooldown(Number(e.target.value))}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="cmd-response" className="text-xs">Response message</Label>
+        <Textarea
+          id="cmd-response"
+          value={responseText}
+          onChange={(e) => setResponseText(e.target.value)}
+          placeholder="Hey {user}, join us at discord.gg/goblin!"
+          maxLength={400}
+          rows={2}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Use <code className="font-mono">{"{user}"}</code> to mention the chatter who triggered the command.
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="cmd-theme" className="text-xs">Available in</Label>
+        <Select value={theme} onValueChange={(v) => setTheme(v as CommandTheme)}>
+          <SelectTrigger id="cmd-theme">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="both">Both themes</SelectItem>
+            <SelectItem value="goblin">Goblin Hoard only</SelectItem>
+            <SelectItem value="cs2">CS2 Arms Deal only</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle className="w-3 h-3" /> {error}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          disabled={!valid || pending}
+          onClick={() =>
+            onSubmit({
+              name: trimmedName,
+              responseText: responseText.trim(),
+              cooldownSeconds: cooldown,
+              theme,
+            })
+          }
+        >
+          {pending ? "Creating…" : "Create command"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} disabled={pending}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

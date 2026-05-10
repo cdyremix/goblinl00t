@@ -1,10 +1,63 @@
 import tmi from "tmi.js";
-import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable } from "@workspace/db";
+import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable, customCommandsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { rollLoot, getRarityEmoji } from "./loot-tables";
 import { pickRandom, formatMessage } from "./goblin-phrases";
 import { getThemePhrases, setActiveTheme, getActiveTheme, type BotTheme } from "./bot-themes";
+
+export type CommandTheme = "goblin" | "cs2" | "both";
+
+interface BuiltInCommand {
+  description: string;
+  cooldownSeconds: number;
+  theme: CommandTheme;
+}
+
+const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
+  "!loot":       { description: "Roll for random loot with rarity tiers",   cooldownSeconds: 30, theme: "both"   },
+  "!enter":      { description: "Enter the active giveaway",                cooldownSeconds: 5,  theme: "both"   },
+  "!giveaway":   { description: "Check if a giveaway is running",           cooldownSeconds: 5,  theme: "both"   },
+  "!inventory":  { description: "Check your loot inventory",                cooldownSeconds: 15, theme: "both"   },
+  "!goblin":     { description: "Summon the goblin for a random response",  cooldownSeconds: 10, theme: "goblin" },
+  "!steal":      { description: "Attempt to steal from another viewer",     cooldownSeconds: 20, theme: "goblin" },
+  "!hoard":      { description: "Check your goblin hoard",                  cooldownSeconds: 15, theme: "goblin" },
+  "!feedgoblin": { description: "Feed the goblin a snack",                  cooldownSeconds: 10, theme: "goblin" },
+  "!tradeurl":   { description: "Submit your Steam trade URL after winning a skin", cooldownSeconds: 10, theme: "cs2" },
+};
+
+interface CustomCommandCacheEntry {
+  id: number;
+  userId: number;
+  responseText: string;
+  cooldownSeconds: number;
+  enabled: boolean;
+  theme: CommandTheme;
+}
+const CUSTOM_COMMANDS = new Map<string, CustomCommandCacheEntry>();
+
+export async function reloadCustomCommands(): Promise<void> {
+  try {
+    const rows = await db.select().from(customCommandsTable);
+    // Build the next snapshot fully before mutating the live cache so that
+    // in-flight chat messages don't see a transiently-empty map.
+    const next = new Map<string, CustomCommandCacheEntry>();
+    for (const row of rows) {
+      next.set(row.name.toLowerCase(), {
+        id: row.id,
+        userId: row.userId,
+        responseText: row.responseText,
+        cooldownSeconds: row.cooldownSeconds,
+        enabled: row.enabled,
+        theme: row.theme as CommandTheme,
+      });
+    }
+    CUSTOM_COMMANDS.clear();
+    for (const [k, v] of next) CUSTOM_COMMANDS.set(k, v);
+  } catch (err) {
+    logger.error({ err }, "Failed to load custom commands");
+  }
+}
 
 export interface BotState {
   connected: boolean;
@@ -15,29 +68,13 @@ export interface BotState {
 }
 
 const COMMAND_COOLDOWNS = new Map<string, Map<string, number>>();
-const COMMAND_ENABLED: Record<string, boolean> = {
-  "!loot": true,
-  "!goblin": true,
-  "!steal": true,
-  "!hoard": true,
-  "!inventory": true,
-  "!feedgoblin": true,
-  "!enter": true,
-  "!giveaway": true,
-  "!tradeurl": true,
-};
+const COMMAND_ENABLED: Record<string, boolean> = Object.fromEntries(
+  Object.keys(BUILT_IN_COMMANDS).map((k) => [k, true])
+);
 
-const COMMAND_COOLDOWN_SECONDS: Record<string, number> = {
-  "!loot": 30,
-  "!goblin": 10,
-  "!steal": 20,
-  "!hoard": 15,
-  "!inventory": 15,
-  "!feedgoblin": 10,
-  "!enter": 5,
-  "!giveaway": 5,
-  "!tradeurl": 10,
-};
+const COMMAND_COOLDOWN_SECONDS: Record<string, number> = Object.fromEntries(
+  Object.entries(BUILT_IN_COMMANDS).map(([k, v]) => [k, v.cooldownSeconds])
+);
 
 let client: tmi.Client | null = null;
 let botState: BotState = {
@@ -79,6 +116,23 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
   const command = parts[0]?.toLowerCase();
 
   if (!command || !command.startsWith("!")) return;
+
+  // Custom commands
+  const custom = CUSTOM_COMMANDS.get(command);
+  if (custom) {
+    if (!custom.enabled) return;
+    if (isOnCooldown(channel, username, command)) return;
+    setCooldown(channel, username, command);
+    void logCommand(command, username, channel);
+    botState.lastMessageAt = new Date();
+    const reply = custom.responseText.replace(/\{user\}/gi, `@${username}`);
+    if (client) {
+      try { await client.say(channel, reply); } catch (err) { logger.error({ err }, "Failed to send custom reply"); }
+    }
+    return;
+  }
+
+  if (!(command in COMMAND_ENABLED)) return;
   if (!COMMAND_ENABLED[command]) return;
   if (isOnCooldown(channel, username, command)) return;
 
@@ -273,18 +327,45 @@ export function getBotState(): BotState {
 }
 
 export function getCommandConfig() {
-  return Object.keys(COMMAND_ENABLED).map((name) => ({
+  const builtIns = Object.entries(BUILT_IN_COMMANDS).map(([name, meta]) => ({
     name,
-    description: getCommandDescription(name),
+    description: meta.description,
     enabled: COMMAND_ENABLED[name] ?? true,
     cooldownSeconds: COMMAND_COOLDOWN_SECONDS[name] ?? 10,
+    theme: meta.theme,
+    isCustom: false as const,
   }));
+  const customs = Array.from(CUSTOM_COMMANDS.entries()).map(([name, c]) => ({
+    id: c.id,
+    name,
+    description: "Custom command",
+    responseText: c.responseText,
+    enabled: c.enabled,
+    cooldownSeconds: c.cooldownSeconds,
+    theme: c.theme,
+    isCustom: true as const,
+  }));
+  return [...builtIns, ...customs];
 }
 
 export function toggleCommandEnabled(name: string): boolean {
+  const lower = name.toLowerCase();
+  const custom = CUSTOM_COMMANDS.get(lower);
+  if (custom) {
+    custom.enabled = !custom.enabled;
+    return custom.enabled;
+  }
   if (!(name in COMMAND_ENABLED)) throw new Error(`Unknown command: ${name}`);
   COMMAND_ENABLED[name] = !COMMAND_ENABLED[name];
   return COMMAND_ENABLED[name]!;
+}
+
+export function isBuiltInCommand(name: string): boolean {
+  return name in BUILT_IN_COMMANDS;
+}
+
+export function getCustomCommandCache() {
+  return CUSTOM_COMMANDS;
 }
 
 export { setActiveTheme, getActiveTheme };
@@ -294,24 +375,12 @@ let _activeBotName = "GoblinL00t";
 export function setActiveBotName(name: string): void { _activeBotName = name; }
 export function getActiveBotName(): string { return _activeBotName; }
 
-function getCommandDescription(cmd: string): string {
-  const descriptions: Record<string, string> = {
-    "!loot": "Roll for random loot with rarity tiers",
-    "!goblin": "Summon the bot for a random response",
-    "!steal": "Attempt to steal from another user",
-    "!hoard": "Check your loot inventory",
-    "!inventory": "Check your loot inventory (alias)",
-    "!feedgoblin": "Feed the goblin a snack",
-    "!enter": "Enter the active giveaway",
-    "!giveaway": "Check if a giveaway is running",
-  };
-  return descriptions[cmd] ?? "Bot command";
-}
-
 export async function startBot(): Promise<void> {
   const oauthToken = process.env["TWITCH_OAUTH_TOKEN"];
   const channel = process.env["TWITCH_CHANNEL"] ?? "goblinl00t";
   const username = process.env["TWITCH_BOT_USERNAME"] ?? "GoblinL00tBot";
+
+  await reloadCustomCommands();
 
   if (!oauthToken) {
     logger.warn("TWITCH_OAUTH_TOKEN not set — bot running in offline mode (dashboard only)");

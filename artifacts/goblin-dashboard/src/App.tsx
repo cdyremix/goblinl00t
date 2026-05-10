@@ -14,7 +14,6 @@ import { Dashboard } from "@/pages/dashboard";
 import { Giveaways } from "@/pages/giveaways";
 import { GiveawayDetail } from "@/pages/giveaway-detail";
 import { Stats } from "@/pages/stats";
-import { Commands } from "@/pages/commands";
 import { Account } from "@/pages/account";
 import SettingsPage from "@/pages/settings";
 import TradeOffice from "@/pages/trade-office";
@@ -192,7 +191,7 @@ function AppRouter() {
         <ProtectedRoute><Layout><Stats /></Layout></ProtectedRoute>
       </Route>
       <Route path="/commands">
-        <ProtectedRoute><Layout><Commands /></Layout></ProtectedRoute>
+        <Redirect to="/settings" />
       </Route>
       <Route path="/account">
         <ProtectedRoute><Layout><Account /></Layout></ProtectedRoute>
