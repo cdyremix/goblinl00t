@@ -29,3 +29,11 @@ externalPort = 80
 [[ports]]
 localPort = 19458
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+TWITCH_BOT_USERNAME = "goblinl00t"
+TWITCH_CHANNEL = "goblinl00t"
+TWITCH_CLIENT_ID = "i0285vachql6tepl4ibxzjrcj8tk0l"
+TWITCH_REDIRECT_URI = "https://goblinl00t.com/api/auth/twitch/callback"
