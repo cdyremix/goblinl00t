@@ -2,8 +2,6 @@ import { Link, useLocation } from "wouter";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, Gift, BarChart3, Terminal, Home, User, LogOut, Settings2, Send } from "lucide-react";
-import { Hint } from "@/components/hint";
-import { Button } from "@/components/ui/button";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -25,49 +23,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isCS2 = settingsQuery.data?.botTheme === "cs2";
 
   const allLinks = [
-    {
-      href: "/dashboard",
-      label: "Operations",
-      icon: LayoutDashboard,
-      hint: "The goblin's war room — bot status, active giveaway, and a live feed of loot drops happening in your stream right now.",
-    },
-    {
-      href: "/giveaway",
-      label: "Loot Hoard",
-      icon: Gift,
-      hint: "Create and manage giveaways. Forge a new one, start it when you're ready, and the goblin will announce it in chat — viewers type the keyword to enter.",
-    },
-    {
-      href: "/stats",
-      label: "Ledger",
-      icon: BarChart3,
-      hint: "The goblin's accounting books — top looters ranked by points, command usage charts, and overall stream activity numbers.",
-    },
-    {
-      href: "/commands",
-      label: "Spells",
-      icon: Terminal,
-      hint: "Toggle which chat commands the goblin responds to. Disable spells you don't want active without restarting anything.",
-    },
-    {
-      href: "/account",
-      label: "The Scroll",
-      icon: User,
-      hint: "Your account, subscription rank, and Twitch channel binding. Upgrade your rank to unlock more of the goblin's power.",
-    },
-    {
-      href: "/settings",
-      label: "Forge",
-      icon: Settings2,
-      hint: "Bot theme and game-specific settings. Switch between Goblin mode and CS2 Arms Deal mode, and configure your Steam trade link for skin giveaways.",
-    },
-    {
-      href: "/trade-office",
-      label: "Trade Office",
-      icon: Send,
-      hint: "Manage CS2 skin deliveries to giveaway winners. Track trade URLs, mark items as sent or trade-locked, and add notes for each pending trade.",
-      cs2Only: true,
-    },
+    { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
+    { href: "/giveaway", label: "Loot Hoard", icon: Gift },
+    { href: "/stats", label: "Ledger", icon: BarChart3 },
+    { href: "/commands", label: "Spells", icon: Terminal },
+    { href: "/account", label: "The Scroll", icon: User },
+    { href: "/settings", label: "Forge", icon: Settings2 },
+    { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true },
   ];
 
   const links = allLinks.filter((l) => !("cs2Only" in l) || isCS2);
@@ -89,21 +51,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             const Icon = link.icon;
 
             return (
-              <div key={link.href} className="flex items-center gap-1">
-                <Link
-                  href={link.href}
-                  className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 ${
-                    isActive
-                      ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(255,180,0,0.1)]"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent"
-                  }`}
-                  data-testid={`nav-${link.label.toLowerCase().replace(" ", "-")}`}
-                >
-                  <Icon className="w-5 h-5 shrink-0" />
-                  <span className="font-medium text-sm">{link.label}</span>
-                </Link>
-                <Hint text={link.hint} side="right" />
-              </div>
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 ${
+                  isActive
+                    ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(255,180,0,0.1)]"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent"
+                }`}
+                data-testid={`nav-${link.label.toLowerCase().replace(" ", "-")}`}
+              >
+                <Icon className="w-5 h-5 shrink-0" />
+                <span className="font-medium text-sm">{link.label}</span>
+              </Link>
             );
           })}
         </nav>

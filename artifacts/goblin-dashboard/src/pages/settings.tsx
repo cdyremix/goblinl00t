@@ -8,6 +8,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Hint } from "@/components/hint";
 import { defaultBotNameFor } from "@/lib/cs2-agents";
 
@@ -21,36 +24,18 @@ interface BotSettings {
   steamUsername: string | null;
 }
 
-interface ThemeCard {
-  id: BotTheme;
-  name: string;
-  tagline: string;
-  emoji: string;
-  previewLines: string[];
-}
-
-const THEMES: ThemeCard[] = [
+const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
   {
     id: "goblin",
     name: "Goblin Hoard",
-    tagline: "The original mischievous loot goblin — chaotic, greedy, and very excitable.",
     emoji: "👺",
-    previewLines: [
-      "HEHEHE! xXSniper found [RARE] Dragon Scale! (+120 pts) SCREEE!! goblin want to STEAL!!",
-      "🎉 GIVEAWAY TIME!!!! Prize: Mystery Box - Type !enter!! HEHEHE!!",
-      "*goblin checks ledger* ChatUser haz 12 loot itemz! Keep farming!! 📦",
-    ],
+    description: "The original mischievous loot goblin — chaotic, greedy, and very excitable.",
   },
   {
     id: "cs2",
     name: "CS2 Arms Deal",
-    tagline: "Counter-Strike 2 mode — drop skins, run skin giveaways, and collect Steam trade links.",
     emoji: "🔫",
-    previewLines: [
-      "🟣 xXSniper opened a case: [CLASSIFIED] Butterfly Knife | Fade! (+800 pts) INSANE DROP!",
-      "🎁 SKIN GIVEAWAY! AK-47 | Asiimov FN — type !enter to be in the draw!",
-      "📦 xXSniper's inventory: 8 skins | 1,240 pts. Still no knife tho PepeHands",
-    ],
+    description: "Counter-Strike 2 mode — drop skins, run skin giveaways, and collect Steam trade links.",
   },
 ];
 
@@ -136,7 +121,7 @@ export default function SettingsPage() {
   const settings = query.data;
 
   const [pendingTheme, setPendingTheme] = useState<BotTheme | null>(null);
-  const [botNameDraft, setBotNameDraft] = useState("");
+  const [botNameDraft, setBotNameDraft] = useState<string | null>(null);
   const [tradeUrl, setTradeUrl] = useState("");
   const [tradeUrlTouched, setTradeUrlTouched] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -150,15 +135,13 @@ export default function SettingsPage() {
   const isCS2 = activeTheme === "cs2";
   const themeDefaultName = defaultBotNameFor(activeTheme);
 
-  // The "displayed" bot name: if the saved value matches the active theme's default,
-  // we treat the field as empty (the placeholder shows the themed default in grey).
-  // Otherwise the field shows the user's custom name.
+  // Bot name input: controlled. When the user hasn't typed anything (draft is null)
+  // we show the saved name in the field. The placeholder always shows the themed default.
   const savedName = settings?.botName ?? "";
-  const isUsingThemeDefault = savedName === themeDefaultName;
-  const inputValue = botNameDraft || (isUsingThemeDefault ? "" : savedName);
-  const trimmedDraft = botNameDraft.trim();
-  const draftIsDifferent = trimmedDraft !== "" && trimmedDraft !== savedName;
-  const draftIsValid = trimmedDraft.length > 0 && trimmedDraft.length <= 32;
+  const inputValue = botNameDraft ?? savedName;
+  const trimmed = inputValue.trim();
+  const nameValid = trimmed.length === 0 || trimmed.length <= 32;
+  const nameChanged = botNameDraft !== null && trimmed !== savedName;
 
   const tradeUrlValue = tradeUrlTouched ? tradeUrl : (settings?.steamTradeUrl ?? "");
   const tradeUrlValid = isSteamTradeUrl(tradeUrlValue);
@@ -167,26 +150,21 @@ export default function SettingsPage() {
     (pendingTheme !== null && pendingTheme !== settings?.botTheme) ||
     (tradeUrlTouched && tradeUrlValue !== (settings?.steamTradeUrl ?? ""));
 
-  function handleThemeChange(newTheme: BotTheme) {
-    setPendingTheme(newTheme);
-    // Clear any unsaved bot name draft so the placeholder reflects the new theme.
-    setBotNameDraft("");
-  }
-
   async function handleUpdateBotName() {
-    if (!draftIsValid || !draftIsDifferent) return;
-    await mutation.mutateAsync({ botName: trimmedDraft });
-    setBotNameDraft("");
+    if (!nameValid || !nameChanged) return;
+    // Empty input → reset to the current theme's default.
+    const newName = trimmed === "" ? themeDefaultName : trimmed;
+    await mutation.mutateAsync({ botName: newName });
+    setBotNameDraft(null);
   }
 
   async function handleSave() {
     const payload: Partial<BotSettings> = {};
     if (pendingTheme !== null) {
       payload.botTheme = pendingTheme;
-      // When switching themes, if the user is currently on a theme default,
-      // also update the saved bot name to the new theme's default so the
-      // placeholder/value stays consistent.
-      if (isUsingThemeDefault || savedName === defaultBotNameFor(settings?.botTheme ?? "goblin")) {
+      // If the user is on the previous theme's default name, swap to the new theme's default.
+      const fromTheme = settings?.botTheme ?? "goblin";
+      if (savedName === defaultBotNameFor(fromTheme)) {
         payload.botName = defaultBotNameFor(pendingTheme);
       }
     }
@@ -220,40 +198,36 @@ export default function SettingsPage() {
       </div>
 
       {/* Bot Name */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-foreground">Bot Display Name</h2>
-          <Hint
-            text="The name the bot uses when referring to itself in chat. Leave empty to use the default name for your selected theme."
-            side="right"
-          />
-        </div>
+      <section className="space-y-2">
+        <Label htmlFor="bot-name" className="text-lg font-semibold text-foreground">Bot Display Name</Label>
+        <p className="text-xs text-muted-foreground">
+          The name the bot uses in chat. Leave blank to use the default for your theme.
+        </p>
         <div className="flex gap-2 items-start max-w-sm">
           <div className="flex-1 space-y-1">
             <div className="relative">
               <User2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
+                id="bot-name"
                 value={inputValue}
                 onChange={(e) => setBotNameDraft(e.target.value)}
                 placeholder={themeDefaultName}
                 maxLength={32}
-                className={`pl-9 placeholder:text-muted-foreground/50 ${
-                  trimmedDraft.length > 0 && !draftIsValid ? "border-destructive" : ""
-                }`}
+                className={`pl-9 placeholder:text-muted-foreground/50 ${!nameValid ? "border-destructive" : ""}`}
               />
             </div>
-            {trimmedDraft.length > 0 && !draftIsValid && (
+            {!nameValid && (
               <p className="text-xs text-destructive flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Must be 1–32 characters
+                <AlertCircle className="w-3 h-3" /> Must be 32 characters or fewer
               </p>
             )}
           </div>
-          {draftIsDifferent && (
+          {nameChanged && (
             <Button
               size="sm"
               className="shrink-0 gap-1.5"
               onClick={handleUpdateBotName}
-              disabled={!draftIsValid || mutation.isPending}
+              disabled={!nameValid || mutation.isPending}
             >
               {mutation.isPending ? (
                 <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
@@ -264,62 +238,32 @@ export default function SettingsPage() {
             </Button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          {isUsingThemeDefault || !savedName
-            ? `Using the default name for your ${isCS2 ? "CS2" : "Goblin"} theme — type a new name to customize.`
-            : `Currently using a custom name. Clear the field and click Update to revert to the default.`}
-        </p>
       </section>
 
-      {/* Theme Picker */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-foreground">Bot Theme</h2>
-          <Hint
-            text="The theme controls the bot's language and personality in chat. Switch to CS2 mode for Counter-Strike flavored messages and skin giveaway support."
-            side="right"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {THEMES.map((theme) => {
-            const selected = activeTheme === theme.id;
-            return (
-              <button
-                key={theme.id}
-                onClick={() => handleThemeChange(theme.id)}
-                className={`text-left rounded-xl border p-5 transition-all duration-200 space-y-3 ${
-                  selected
-                    ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(255,180,0,0.12)]"
-                    : "border-border bg-card/60 hover:border-primary/40 hover:bg-card"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{theme.emoji}</span>
-                      <span className={`font-semibold text-base ${selected ? "text-primary" : "text-foreground"}`}>
-                        {theme.name}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 leading-snug">{theme.tagline}</p>
-                  </div>
-                  {selected && <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />}
+      {/* Theme Selector */}
+      <section className="space-y-2 max-w-sm">
+        <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
+        <p className="text-xs text-muted-foreground">
+          Controls the bot's language and personality in chat.
+        </p>
+        <Select value={activeTheme} onValueChange={(v) => setPendingTheme(v as BotTheme)}>
+          <SelectTrigger id="bot-theme" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {THEME_OPTIONS.map((theme) => (
+              <SelectItem key={theme.id} value={theme.id}>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{theme.emoji}</span>
+                  <span>{theme.name}</span>
                 </div>
-
-                <div className="space-y-1.5 pt-1 border-t border-border/50">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Chat preview</p>
-                  {theme.previewLines.map((line, i) => (
-                    <div key={i} className="flex gap-1.5 items-start">
-                      <span className="text-muted-foreground/50 text-xs shrink-0 mt-0.5">›</span>
-                      <p className="text-xs text-muted-foreground leading-snug font-mono">{line}</p>
-                    </div>
-                  ))}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground/80 leading-snug">
+          {THEME_OPTIONS.find((t) => t.id === activeTheme)?.description}
+        </p>
       </section>
 
       {/* CS2-specific settings */}
