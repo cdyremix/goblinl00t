@@ -3,14 +3,13 @@ import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings2, Crosshair, Sword, ExternalLink, Save, CheckCircle2,
-  AlertCircle, Link2, User2, RefreshCw, Lock, ShieldCheck, Unlink, Sparkles
+  AlertCircle, Link2, User2, ShieldCheck, Unlink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Hint } from "@/components/hint";
-import { SteamItemCard, type SteamItem } from "@/components/steam-item-card";
-import { defaultBotNameFor, isThemeDefaultName, GOBLIN_DEFAULT_NAME } from "@/lib/cs2-agents";
+import { defaultBotNameFor } from "@/lib/cs2-agents";
 
 type BotTheme = "goblin" | "cs2";
 
@@ -20,11 +19,6 @@ interface BotSettings {
   steamTradeUrl: string | null;
   steamId64: string | null;
   steamUsername: string | null;
-}
-
-interface SteamInventory {
-  items: SteamItem[];
-  totalCount: number;
 }
 
 interface ThemeCard {
@@ -132,27 +126,6 @@ function useSteamConnection() {
   return { connect, disconnect };
 }
 
-function useSteamInventory(enabled: boolean) {
-  const { getToken } = useAuth();
-  return useQuery<SteamInventory>({
-    queryKey: ["steam-inventory"],
-    enabled,
-    queryFn: async () => {
-      const token = await getToken();
-      const res = await fetch("/api/steam/inventory", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const err = await res.json() as { error: string };
-        throw new Error(err.error ?? "Failed to fetch inventory");
-      }
-      return res.json() as Promise<SteamInventory>;
-    },
-    retry: false,
-    staleTime: 60_000,
-  });
-}
-
 function isSteamTradeUrl(url: string) {
   return url === "" || url.includes("steamcommunity.com/tradeoffer/new/");
 }
@@ -163,61 +136,63 @@ export default function SettingsPage() {
   const settings = query.data;
 
   const [pendingTheme, setPendingTheme] = useState<BotTheme | null>(null);
-  const [botName, setBotName] = useState("");
-  const [botNameTouched, setBotNameTouched] = useState(false);
+  const [botNameDraft, setBotNameDraft] = useState("");
   const [tradeUrl, setTradeUrl] = useState("");
   const [tradeUrlTouched, setTradeUrlTouched] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
-  // Sync initial values from server
+  // Sync trade URL initial value from server
   useEffect(() => {
-    if (settings && !botNameTouched) setBotName(settings.botName);
     if (settings && !tradeUrlTouched) setTradeUrl(settings.steamTradeUrl ?? "");
-  }, [settings, botNameTouched, tradeUrlTouched]);
+  }, [settings, tradeUrlTouched]);
 
   const activeTheme = pendingTheme ?? settings?.botTheme ?? "goblin";
   const isCS2 = activeTheme === "cs2";
+  const themeDefaultName = defaultBotNameFor(activeTheme);
 
-  const inventoryQuery = useSteamInventory(!!settings?.steamId64);
+  // The "displayed" bot name: if the saved value matches the active theme's default,
+  // we treat the field as empty (the placeholder shows the themed default in grey).
+  // Otherwise the field shows the user's custom name.
+  const savedName = settings?.botName ?? "";
+  const isUsingThemeDefault = savedName === themeDefaultName;
+  const inputValue = botNameDraft || (isUsingThemeDefault ? "" : savedName);
+  const trimmedDraft = botNameDraft.trim();
+  const draftIsDifferent = trimmedDraft !== "" && trimmedDraft !== savedName;
+  const draftIsValid = trimmedDraft.length > 0 && trimmedDraft.length <= 32;
 
   const tradeUrlValue = tradeUrlTouched ? tradeUrl : (settings?.steamTradeUrl ?? "");
-  const botNameValue = botNameTouched ? botName : (settings?.botName ?? GOBLIN_DEFAULT_NAME);
-
   const tradeUrlValid = isSteamTradeUrl(tradeUrlValue);
-  const botNameValid = botNameValue.trim().length > 0 && botNameValue.trim().length <= 32;
 
   const isDirty =
     (pendingTheme !== null && pendingTheme !== settings?.botTheme) ||
-    (botNameTouched && botNameValue !== settings?.botName) ||
     (tradeUrlTouched && tradeUrlValue !== (settings?.steamTradeUrl ?? ""));
 
   function handleThemeChange(newTheme: BotTheme) {
-    const fromTheme = pendingTheme ?? settings?.botTheme ?? "goblin";
     setPendingTheme(newTheme);
-    // Only auto-swap the bot name if the user has NOT customized it:
-    //   - They haven't typed in the field this session (botNameTouched is false), AND
-    //   - The saved server value is recognized as a default for the previous theme.
-    const savedName = settings?.botName ?? "";
-    const isUntouchedDefault = !botNameTouched && isThemeDefaultName(savedName, fromTheme);
-    if (isUntouchedDefault) {
-      setBotName(defaultBotNameFor(newTheme));
-      setBotNameTouched(true);
-    }
+    // Clear any unsaved bot name draft so the placeholder reflects the new theme.
+    setBotNameDraft("");
   }
 
-  function rerollDefaultName() {
-    setBotName(defaultBotNameFor(activeTheme));
-    setBotNameTouched(true);
+  async function handleUpdateBotName() {
+    if (!draftIsValid || !draftIsDifferent) return;
+    await mutation.mutateAsync({ botName: trimmedDraft });
+    setBotNameDraft("");
   }
 
   async function handleSave() {
     const payload: Partial<BotSettings> = {};
-    if (pendingTheme !== null) payload.botTheme = pendingTheme;
-    if (botNameTouched) payload.botName = botNameValue.trim();
+    if (pendingTheme !== null) {
+      payload.botTheme = pendingTheme;
+      // When switching themes, if the user is currently on a theme default,
+      // also update the saved bot name to the new theme's default so the
+      // placeholder/value stays consistent.
+      if (isUsingThemeDefault || savedName === defaultBotNameFor(settings?.botTheme ?? "goblin")) {
+        payload.botName = defaultBotNameFor(pendingTheme);
+      }
+    }
     if (tradeUrlTouched) payload.steamTradeUrl = tradeUrlValue || null;
     await mutation.mutateAsync(payload);
     setPendingTheme(null);
-    setBotNameTouched(false);
     setTradeUrlTouched(false);
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
@@ -249,7 +224,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-foreground">Bot Display Name</h2>
           <Hint
-            text="The name the bot uses when referring to itself in chat messages. Switching themes auto-fills the default name for that theme — pick CS2 to randomize a CS2 agent name."
+            text="The name the bot uses when referring to itself in chat. Leave empty to use the default name for your selected theme."
             side="right"
           />
         </div>
@@ -258,34 +233,41 @@ export default function SettingsPage() {
             <div className="relative">
               <User2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                value={botNameValue}
-                onChange={(e) => { setBotName(e.target.value); setBotNameTouched(true); }}
-                placeholder={defaultBotNameFor(activeTheme)}
+                value={inputValue}
+                onChange={(e) => setBotNameDraft(e.target.value)}
+                placeholder={themeDefaultName}
                 maxLength={32}
-                className={`pl-9 ${botNameTouched && !botNameValid ? "border-destructive" : ""}`}
+                className={`pl-9 placeholder:text-muted-foreground/50 ${
+                  trimmedDraft.length > 0 && !draftIsValid ? "border-destructive" : ""
+                }`}
               />
             </div>
-            {botNameTouched && !botNameValid && (
+            {trimmedDraft.length > 0 && !draftIsValid && (
               <p className="text-xs text-destructive flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" /> Must be 1–32 characters
               </p>
             )}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 text-xs gap-1.5"
-            onClick={rerollDefaultName}
-            title={isCS2 ? "Re-roll a random CS2 agent name" : "Reset to GoblinL00t"}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            {isCS2 ? "Random agent" : "Reset default"}
-          </Button>
+          {draftIsDifferent && (
+            <Button
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={handleUpdateBotName}
+              disabled={!draftIsValid || mutation.isPending}
+            >
+              {mutation.isPending ? (
+                <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              Update
+            </Button>
+          )}
         </div>
         <p className="text-xs text-muted-foreground">
-          {isCS2
-            ? "CS2 mode uses a random Counter-Strike agent name as the default — click 'Random agent' to re-roll."
-            : "Goblin mode uses the classic GoblinL00t name."}
+          {isUsingThemeDefault || !savedName
+            ? `Using the default name for your ${isCS2 ? "CS2" : "Goblin"} theme — type a new name to customize.`
+            : `Currently using a custom name. Clear the field and click Update to revert to the default.`}
         </p>
       </section>
 
@@ -353,7 +335,7 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               <Label className="text-sm">Steam Account</Label>
               <Hint
-                text="Connect your Steam account to load your CS2 inventory and use it for giveaways. In test mode this is a mock connection — production would redirect to Steam OpenID."
+                text="Connect your Steam account to load your CS2 inventory in the Trade Office. In test mode this is a mock connection — production would redirect to Steam OpenID."
                 side="right"
               />
             </div>
@@ -383,7 +365,7 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-card/40 px-4 py-5 text-center space-y-3">
-                <p className="text-sm text-muted-foreground">Connect your Steam account to load your CS2 inventory</p>
+                <p className="text-sm text-muted-foreground">Connect your Steam account to load your CS2 inventory in the Trade Office</p>
                 <Button
                   onClick={() => connect.mutate()}
                   disabled={connect.isPending}
@@ -446,54 +428,6 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* CS2 Inventory */}
-          {settings?.steamId64 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-foreground">CS2 Inventory</h3>
-                  <Hint text="Your loaded CS2 inventory. Use these items for skin giveaways — winners receive the item via Steam trade." side="right" />
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs"
-                  onClick={() => inventoryQuery.refetch()}
-                  disabled={inventoryQuery.isFetching}
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${inventoryQuery.isFetching ? "animate-spin" : ""}`} />
-                  Refresh
-                </Button>
-              </div>
-
-              {inventoryQuery.isError && (
-                <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-                  <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                  <p className="text-xs text-destructive">{inventoryQuery.error?.message}</p>
-                </div>
-              )}
-
-              {inventoryQuery.isFetching && !inventoryQuery.data && (
-                <div className="h-32 flex items-center justify-center text-muted-foreground text-sm animate-pulse">
-                  Loading inventory from Steam...
-                </div>
-              )}
-
-              {inventoryQuery.data && (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    {inventoryQuery.data.totalCount} total items · {inventoryQuery.data.items.filter((i) => !i.tradable).length} trade locked
-                  </p>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-1">
-                    {inventoryQuery.data.items.slice(0, 60).map((item) => (
-                      <SteamItemCard key={item.assetId} item={item} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
           {/* Trade URL collection info */}
           <div className="rounded-lg border border-border bg-card/60 p-4 space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -510,11 +444,11 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* Save */}
+      {/* Save (theme + trade URL) */}
       <div className="flex items-center gap-3">
         <Button
           onClick={handleSave}
-          disabled={!isDirty || mutation.isPending || (tradeUrlTouched && !tradeUrlValid) || !botNameValid}
+          disabled={!isDirty || mutation.isPending || (tradeUrlTouched && !tradeUrlValid)}
           className="gap-2"
         >
           {mutation.isPending ? (
@@ -537,4 +471,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
