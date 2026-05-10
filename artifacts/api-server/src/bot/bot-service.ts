@@ -3,15 +3,8 @@ import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTa
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { rollLoot, getRarityEmoji } from "./loot-tables";
-import {
-  pickRandom,
-  formatMessage,
-  LOOT_RESPONSES,
-  ENTER_RESPONSES,
-  STEAL_RESPONSES,
-  GIVEAWAY_START,
-  GIVEAWAY_END,
-} from "./goblin-phrases";
+import { pickRandom, formatMessage } from "./goblin-phrases";
+import { getThemePhrases, setActiveTheme, getActiveTheme, type BotTheme } from "./bot-themes";
 
 export interface BotState {
   connected: boolean;
@@ -91,11 +84,13 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
   void logCommand(command, username, channel);
   botState.lastMessageAt = new Date();
 
+  const phrases = getThemePhrases();
+
   try {
     if (command === "!loot") {
       const loot = rollLoot();
       const emoji = getRarityEmoji(loot.rarity);
-      const flavor = pickRandom(LOOT_RESPONSES[loot.rarity]);
+      const flavor = pickRandom(phrases.lootResponses[loot.rarity]);
       await db.insert(lootDropsTable).values({
         username,
         item: loot.item,
@@ -117,7 +112,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .limit(1);
 
       if (!active) {
-        void client?.say(channel, `HEHEHE! No giveaway running right now ${username}! Wait for goblin to start one! 🤷`);
+        void client?.say(channel, phrases.enterNoGiveaway(username));
         return;
       }
 
@@ -136,7 +131,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .limit(1);
 
       if (existing) {
-        void client?.say(channel, `HEHEHE ${username} you iz already in da drawing! No sneaking extra entries!!`);
+        void client?.say(channel, phrases.enterAlreadyIn(username));
         return;
       }
 
@@ -146,27 +141,21 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         tickets: 1,
       });
 
-      const phrase = formatMessage(pickRandom(ENTER_RESPONSES), { user: username });
+      const phrase = formatMessage(pickRandom(phrases.enterResponses), { user: username });
       void client?.say(channel, phrase);
     }
 
     if (command === "!goblin") {
-      const responses = [
-        "HEHEHE! *goblin dances* I AM DA MOST POWERFUL GOBLIN IN DIS STREAM!! >:D",
-        "SCREEEEE!! What you want?! Goblin busy counting hoard!! 💎",
-        "*suspicious goblin eyes* Why you summon goblin?? Goblin watching... ALWAYS watching... 👀",
-        "Oh it's YOU. *goblin grumbles* fine fine, goblin here. what you want. 😤",
-      ];
-      void client?.say(channel, pickRandom(responses));
+      void client?.say(channel, pickRandom(phrases.goblinResponses));
     }
 
     if (command === "!steal") {
       const target = parts[1]?.replace("@", "") ?? null;
       if (!target) {
-        void client?.say(channel, `HEHEHE!! You gotta say WHO to steal from!! !steal @username`);
+        void client?.say(channel, phrases.stealNoTarget);
         return;
       }
-      const phrase = formatMessage(pickRandom(STEAL_RESPONSES), { target });
+      const phrase = formatMessage(pickRandom(phrases.stealResponses), { target });
       void client?.say(channel, phrase);
     }
 
@@ -180,18 +169,14 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const totalPts = entries.reduce((sum, e) => sum + e.points, 0);
 
       if (count === 0) {
-        void client?.say(channel, `HEHEHE!! ${username} haz NOTHING!! Go use !loot to fill your hoard!!`);
+        void client?.say(channel, phrases.hoardEmpty(username));
       } else {
-        void client?.say(
-          channel,
-          `*goblin checks ledger* ${username} haz ${count} loot item${count !== 1 ? "z" : ""} worth ${totalPts} pts total! Keep farming!! 📦`
-        );
+        void client?.say(channel, phrases.hoardFull(username, count, totalPts));
       }
     }
 
     if (command === "!feedgoblin") {
-      const snacks = ["🍖 Goblin eatz the offering!", "🍕 YUMMY!! Goblin happy now!", "🍪 Oooh cookiez!! Goblin blessed!!"];
-      void client?.say(channel, pickRandom(snacks));
+      void client?.say(channel, pickRandom(phrases.feedResponses));
     }
 
     if (command === "!giveaway") {
@@ -209,10 +194,10 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
         void client?.say(
           channel,
-          `🎁 GIVEAWAY IN PROGRESS!! Prize: ${active.prize} | ${entries.length} entries so far! Type ${active.keyword} to enter!! HEHEHE!`
+          `🎁 GIVEAWAY IN PROGRESS!! Prize: ${active.prize} | ${entries.length} entries so far! Type ${active.keyword} to enter!!`
         );
       } else {
-        void client?.say(channel, `HEHEHE no giveaway right now! Ask da streamer to start one! 🤷`);
+        void client?.say(channel, phrases.giveawayNone);
       }
     }
   } catch (err) {
@@ -226,7 +211,8 @@ export async function announceGiveawayStart(giveaway: {
   channel: string;
 }): Promise<void> {
   if (!client || !botState.connected) return;
-  const phrase = formatMessage(pickRandom(GIVEAWAY_START), {
+  const phrases = getThemePhrases();
+  const phrase = formatMessage(pickRandom(phrases.giveawayStart), {
     prize: giveaway.prize,
     keyword: giveaway.keyword,
   });
@@ -240,7 +226,8 @@ export async function announceGiveawayEnd(giveaway: {
   entryCount: number;
 }): Promise<void> {
   if (!client || !botState.connected) return;
-  const phrase = formatMessage(pickRandom(GIVEAWAY_END), {
+  const phrases = getThemePhrases();
+  const phrase = formatMessage(pickRandom(phrases.giveawayEnd), {
     prize: giveaway.prize,
     winner: giveaway.winner,
     count: giveaway.entryCount,
@@ -267,10 +254,13 @@ export function toggleCommandEnabled(name: string): boolean {
   return COMMAND_ENABLED[name]!;
 }
 
+export { setActiveTheme, getActiveTheme };
+export type { BotTheme };
+
 function getCommandDescription(cmd: string): string {
   const descriptions: Record<string, string> = {
-    "!loot": "Roll for random goblin loot with rarity tiers",
-    "!goblin": "Summon the goblin for a random response",
+    "!loot": "Roll for random loot with rarity tiers",
+    "!goblin": "Summon the bot for a random response",
     "!steal": "Attempt to steal from another user",
     "!hoard": "Check your loot inventory",
     "!inventory": "Check your loot inventory (alias)",
@@ -311,12 +301,12 @@ export async function startBot(): Promise<void> {
 
     client.on("connected", () => {
       botState = { connected: true, channel, username, startedAt: new Date(), lastMessageAt: null };
-      logger.info({ channel, username }, "Goblin bot connected to Twitch!");
+      logger.info({ channel, username }, "Bot connected to Twitch!");
     });
 
     client.on("disconnected", (reason) => {
       botState = { ...botState, connected: false };
-      logger.warn({ reason }, "Goblin bot disconnected");
+      logger.warn({ reason }, "Bot disconnected");
     });
 
     await client.connect();

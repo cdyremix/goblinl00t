@@ -323,6 +323,27 @@ export const ListCommandsResponseItem = zod.object({
 export const ListCommandsResponse = zod.array(ListCommandsResponseItem);
 
 /**
+ * @summary Get current user bot settings
+ */
+export const GetBotSettingsResponse = zod.object({
+  botTheme: zod.enum(["goblin", "cs2"]),
+  steamTradeUrl: zod.string().nullable(),
+});
+
+/**
+ * @summary Update bot settings
+ */
+export const UpdateBotSettingsBody = zod.object({
+  botTheme: zod.enum(["goblin", "cs2"]).optional(),
+  steamTradeUrl: zod.string().nullish(),
+});
+
+export const UpdateBotSettingsResponse = zod.object({
+  botTheme: zod.enum(["goblin", "cs2"]),
+  steamTradeUrl: zod.string().nullable(),
+});
+
+/**
  * @summary Enable or disable a bot command
  */
 export const ToggleCommandParams = zod.object({

@@ -16,6 +16,7 @@ import { GiveawayDetail } from "@/pages/giveaway-detail";
 import { Stats } from "@/pages/stats";
 import { Commands } from "@/pages/commands";
 import { Account } from "@/pages/account";
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -194,6 +195,9 @@ function AppRouter() {
       </Route>
       <Route path="/account">
         <ProtectedRoute><Layout><Account /></Layout></ProtectedRoute>
+      </Route>
+      <Route path="/settings">
+        <ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -7,6 +7,7 @@ import statsRouter from "./stats";
 import commandsRouter from "./commands";
 import usersRouter from "./users";
 import authRouter from "./auth";
+import settingsRouter from "./settings";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(statsRouter);
 router.use(commandsRouter);
 router.use(usersRouter);
 router.use(authRouter);
+router.use(settingsRouter);
 
 export default router;

@@ -132,6 +132,34 @@ export interface BotCommand {
   cooldownSeconds: number;
 }
 
+export type BotSettingsBotTheme =
+  (typeof BotSettingsBotTheme)[keyof typeof BotSettingsBotTheme];
+
+export const BotSettingsBotTheme = {
+  goblin: "goblin",
+  cs2: "cs2",
+} as const;
+
+export interface BotSettings {
+  botTheme: BotSettingsBotTheme;
+  /** @nullable */
+  steamTradeUrl: string | null;
+}
+
+export type UpdateBotSettingsBotTheme =
+  (typeof UpdateBotSettingsBotTheme)[keyof typeof UpdateBotSettingsBotTheme];
+
+export const UpdateBotSettingsBotTheme = {
+  goblin: "goblin",
+  cs2: "cs2",
+} as const;
+
+export interface UpdateBotSettings {
+  botTheme?: UpdateBotSettingsBotTheme;
+  /** @nullable */
+  steamTradeUrl?: string | null;
+}
+
 export type ListGiveawaysParams = {
   status?: ListGiveawaysStatus;
   limit?: number;

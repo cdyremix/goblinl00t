@@ -7,6 +7,8 @@
  */
 
 export * from "./botCommand";
+export * from "./botSettings";
+export * from "./botSettingsBotTheme";
 export * from "./botStatus";
 export * from "./commandStat";
 export * from "./getRecentLootParams";
@@ -23,4 +25,6 @@ export * from "./listGiveawaysStatus";
 export * from "./lootDrop";
 export * from "./lootDropRarity";
 export * from "./statsOverview";
+export * from "./updateBotSettings";
+export * from "./updateBotSettingsBotTheme";
 export * from "./userStat";

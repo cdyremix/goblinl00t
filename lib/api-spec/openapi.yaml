@@ -20,6 +20,8 @@ tags:
     description: Statistics and analytics
   - name: commands
     description: Bot command configuration
+  - name: settings
+    description: Bot theme and user settings
 
 paths:
   /healthz:
@@ -302,6 +304,42 @@ paths:
                 items:
                   $ref: "#/components/schemas/BotCommand"
 
+  /settings:
+    get:
+      operationId: getBotSettings
+      tags: [settings]
+      summary: Get current user bot settings
+      responses:
+        "200":
+          description: Bot settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotSettings"
+        "401":
+          description: Unauthorized
+    put:
+      operationId: updateBotSettings
+      tags: [settings]
+      summary: Update bot settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBotSettings"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotSettings"
+        "400":
+          description: Invalid input
+        "401":
+          description: Unauthorized
+
   /commands/{name}/toggle:
     post:
       operationId: toggleCommand
@@ -563,3 +601,24 @@ components:
         - description
         - enabled
         - cooldownSeconds
+
+    BotSettings:
+      type: object
+      properties:
+        botTheme:
+          type: string
+          enum: [goblin, cs2]
+        steamTradeUrl:
+          type: ["string", "null"]
+      required:
+        - botTheme
+        - steamTradeUrl
+
+    UpdateBotSettings:
+      type: object
+      properties:
+        botTheme:
+          type: string
+          enum: [goblin, cs2]
+        steamTradeUrl:
+          type: ["string", "null"]
