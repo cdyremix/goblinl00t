@@ -67,7 +67,7 @@ export function TierSelectModal({ open, onPicked }: Props) {
   return (
     <Dialog open={open} onOpenChange={() => { /* not dismissible */ }}>
       <DialogContent
-        className="!top-[2vh] !translate-y-0 max-w-4xl w-[95vw] max-h-[96vh] overflow-y-auto flex flex-col [&>button]:hidden"
+        className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto flex flex-col [&>button]:hidden"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >

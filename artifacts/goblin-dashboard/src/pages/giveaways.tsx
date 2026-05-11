@@ -61,6 +61,9 @@ export function Giveaways() {
   const [filter, setFilter] = useState<string>("all");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickedIcon, setPickedIcon] = useState<string | null>(null);
+  // Collapsed by default — the Spotlight card already surfaces the active
+  // giveaway flow up top, so the create form sits as a tucked-away "+ New".
+  const [createFormOpen, setCreateFormOpen] = useState(false);
 
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
@@ -170,14 +173,25 @@ export function Giveaways() {
         {/* Create Form */}
         <div className="lg:col-span-1">
           <Card className="border-border/50 sticky top-8">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-primary" />
-                Forge New Giveaway
-              </CardTitle>
-              <CardDescription>Setup the loot. You start it manually later.</CardDescription>
-            </CardHeader>
-            <CardContent>
+            <Collapsible open={createFormOpen} onOpenChange={setCreateFormOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between gap-3 px-6 py-5 text-left hover:bg-muted/20 transition-colors rounded-t-lg"
+                  data-testid="button-toggle-create-form"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+                      <Plus className="w-5 h-5 text-primary shrink-0" />
+                      Forge New Giveaway
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">Setup the loot. You start it manually later.</p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${createFormOpen ? "rotate-180" : ""}`} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                   <FormField
@@ -546,12 +560,14 @@ export function Giveaways() {
                     </span>
                   </div>
 
-                  <Button type="submit" disabled={createMutation.isPending} className="w-full font-bold">
-                    {createMutation.isPending ? "Forging..." : "Add to Horde"}
+                  <Button type="submit" disabled={createMutation.isPending} className="w-full font-bold" data-testid="button-create-giveaway">
+                    {createMutation.isPending ? "Forging..." : "Create Giveaway"}
                   </Button>
                 </form>
               </Form>
-            </CardContent>
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
           </Card>
         </div>
 
