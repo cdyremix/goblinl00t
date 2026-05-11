@@ -203,7 +203,7 @@ export function Home() {
         <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <ProofStat value="2 min" label="Average setup time" />
           <ProofStat value="14" label="Built-in chat commands" />
-          <ProofStat value="2" label="Themes (more on the way)" />
+          <ProofStat value="2" label="Themes" />
           <ProofStat value="Free" label="Tier — no card required" />
         </div>
       </section>
@@ -226,7 +226,7 @@ export function Home() {
               n={2}
               icon={<Wand2 className="w-5 h-5 text-purple-400" />}
               title="Pick a theme"
-              desc="Goblin Hoard for chaos, CS2 Arms Deal for skin giveaways. Every command and prize re-themes instantly."
+              desc="Match the bot to your stream — every command response, prize label, and loot drop re-skins to fit the theme you choose."
             />
             <StepCard
               n={3}
