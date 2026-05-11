@@ -4,20 +4,32 @@ import { useAuth } from "@clerk/react";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const COMMANDS = [
-  { cmd: "!loot", desc: "Roll for random goblin loot — common to legendary rarity drops", rarity: "legendary" },
-  { cmd: "!enter", desc: "Enter the active giveaway — goblin writes your name in the book", rarity: "epic" },
-  { cmd: "!giveaway", desc: "Check if a giveaway is running and how many entries so far", rarity: "rare" },
-  { cmd: "!hoard", desc: "Check your total coin balance accumulated from selling loot", rarity: "uncommon" },
-  { cmd: "!inventory", desc: "List the items in your goblin pouch (5-slot cap)", rarity: "uncommon" },
-  { cmd: "!sell", desc: "Sell an inventory slot for coins — !sell <slot> or !sell all", rarity: "uncommon" },
-  { cmd: "!use", desc: "Activate a buff item from your inventory — !use <slot>", rarity: "rare" },
-  { cmd: "!coins", desc: "Check your coin balance (alias for !points)", rarity: "common" },
-  { cmd: "!goblin", desc: "Summon the goblin for a chaotic response", rarity: "uncommon" },
-  { cmd: "!steal", desc: "Attempt a theft from another viewer — the goblin decides the outcome", rarity: "rare" },
-  { cmd: "!feedgoblin", desc: "Offer a snack to keep the goblin happy and running smoothly", rarity: "common" },
-  { cmd: "!tradeurl", desc: "Submit your Steam trade URL after winning a CS2 skin giveaway", rarity: "common" },
+type CmdGroup = "general" | "goblin" | "cs2";
+
+const COMMANDS: { cmd: string; desc: string; rarity: string; group: CmdGroup }[] = [
+  // General — work in every theme
+  { cmd: "!loot", desc: "Roll for a random inventory drop — common to legendary rarity", rarity: "legendary", group: "general" },
+  { cmd: "!enter", desc: "Enter the active giveaway", rarity: "epic", group: "general" },
+  { cmd: "!giveaway", desc: "Check if a giveaway is running and how many entries so far", rarity: "rare", group: "general" },
+  { cmd: "!inventory", desc: "List the items in your pouch (5-slot cap)", rarity: "uncommon", group: "general" },
+  { cmd: "!sell", desc: "Sell an inventory slot for coins — !sell <slot> or !sell all", rarity: "uncommon", group: "general" },
+  { cmd: "!use", desc: "Activate a buff item from your inventory — !use <slot>", rarity: "rare", group: "general" },
+  { cmd: "!redeem", desc: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", rarity: "rare", group: "general" },
+  { cmd: "!coins", desc: "Check your coin balance (alias for !points)", rarity: "common", group: "general" },
+  // Goblin Hoard theme
+  { cmd: "!hoard", desc: "Check your goblin coin balance", rarity: "uncommon", group: "goblin" },
+  { cmd: "!goblin", desc: "Summon the goblin for a chaotic response", rarity: "uncommon", group: "goblin" },
+  { cmd: "!steal", desc: "Attempt a theft from another viewer — the goblin decides the outcome", rarity: "rare", group: "goblin" },
+  { cmd: "!feedgoblin", desc: "Offer a snack to keep the goblin happy and running smoothly", rarity: "common", group: "goblin" },
+  // CS2 Arms Deal theme
+  { cmd: "!tradeurl", desc: "Submit your Steam trade URL after winning a CS2 skin giveaway", rarity: "common", group: "cs2" },
 ];
+
+const GROUP_META: Record<CmdGroup, { label: string; tag: string; tagClass: string }> = {
+  general: { label: "General Commands", tag: "always available", tagClass: "text-muted-foreground" },
+  goblin:  { label: "Goblin Hoard Commands", tag: "Goblin theme", tagClass: "text-amber-400" },
+  cs2:     { label: "CS2 Arms Deal Commands", tag: "CS2 theme", tagClass: "text-blue-400" },
+};
 
 const RARITY_STYLES: Record<string, string> = {
   legendary: "border-amber-500/40 bg-amber-500/5 text-amber-400",
@@ -161,21 +173,35 @@ export function Home() {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-foreground mb-3">Chat Commands</h2>
-            <p className="text-muted-foreground">Everything your viewers can type in chat to interact with the goblin.</p>
+            <p className="text-muted-foreground">
+              Everything viewers can type in chat. <span className="text-foreground font-medium">General</span> commands work in every theme; theme-specific commands only respond when their theme is active.
+            </p>
           </div>
-          <div className="space-y-3">
-            {COMMANDS.map((cmd) => (
-              <div
-                key={cmd.cmd}
-                className={`flex items-center gap-4 px-5 py-4 rounded-lg border transition-all hover:scale-[1.01] ${RARITY_STYLES[cmd.rarity]}`}
-                data-testid={`command-${cmd.cmd.replace("!", "")}`}
-              >
-                <code className="font-mono font-bold text-base shrink-0 w-32">{cmd.cmd}</code>
-                <div className="h-4 w-px bg-border" />
-                <p className="text-sm flex-1">{cmd.desc}</p>
-                <span className="text-xs font-mono font-bold tracking-wider shrink-0 opacity-60">{CMD_LABEL[cmd.rarity]}</span>
-              </div>
-            ))}
+          <div className="space-y-10">
+            {(["general", "goblin", "cs2"] as CmdGroup[]).map((group) => {
+              const items = COMMANDS.filter((c) => c.group === group);
+              const meta = GROUP_META[group];
+              return (
+                <div key={group} className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-xl font-bold text-foreground">{meta.label}</h3>
+                    <span className={`text-[10px] uppercase tracking-wider font-mono font-semibold ${meta.tagClass}`}>{meta.tag}</span>
+                  </div>
+                  {items.map((cmd) => (
+                    <div
+                      key={cmd.cmd}
+                      className={`flex items-center gap-4 px-5 py-4 rounded-lg border transition-all hover:scale-[1.01] ${RARITY_STYLES[cmd.rarity]}`}
+                      data-testid={`command-${cmd.cmd.replace("!", "")}`}
+                    >
+                      <code className="font-mono font-bold text-base shrink-0 w-32">{cmd.cmd}</code>
+                      <div className="h-4 w-px bg-border" />
+                      <p className="text-sm flex-1">{cmd.desc}</p>
+                      <span className="text-xs font-mono font-bold tracking-wider shrink-0 opacity-60">{CMD_LABEL[cmd.rarity]}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

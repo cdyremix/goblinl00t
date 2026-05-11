@@ -729,9 +729,12 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
     (c) => c.theme === "both" || c.theme === activeTheme,
   );
   const builtIns = visible.filter((c) => !c.isCustom);
+  const generalBuiltIns = builtIns.filter((c) => c.theme === "both");
+  const themedBuiltIns = builtIns.filter((c) => c.theme === activeTheme);
   const customs = visible.filter((c) => c.isCustom);
   const totalCount = visible.length;
   const enabledCount = visible.filter((c) => c.enabled).length;
+  const themeLabel = activeTheme === "cs2" ? "CS2 Arms Deal" : "Goblin Hoard";
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} asChild>
@@ -762,43 +765,88 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
 
         <CollapsibleContent className="space-y-3 data-[state=closed]:hidden">
       <p className="text-xs text-muted-foreground">
-        Showing commands available in <span className="text-foreground font-medium">{activeTheme === "cs2" ? "CS2 Arms Deal" : "Goblin Hoard"}</span> mode.
+        Showing commands available in <span className="text-foreground font-medium">{themeLabel}</span> mode. General commands work in every theme.
       </p>
 
-      {/* Built-in commands */}
-      <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
-        {query.isLoading ? (
-          <div className="p-6 text-sm text-muted-foreground animate-pulse">Loading commands…</div>
-        ) : builtIns.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground text-center">No built-in commands for this theme.</div>
-        ) : (
-          builtIns.map((cmd) => (
-            <div key={cmd.name} className={`flex items-center justify-between px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
-              <div className="flex-1 min-w-0 pr-3">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-                    <Clock className="w-2.5 h-2.5" />
-                    {cmd.cooldownSeconds}s
-                  </span>
-                  {cmd.theme !== "both" && (
-                    <span className="text-[10px] uppercase tracking-wide text-primary/70 font-semibold">
-                      {cmd.theme === "cs2" ? "CS2" : "Goblin"}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground leading-snug">{cmd.description}</p>
-              </div>
-              <Switch
-                checked={cmd.enabled}
-                onCheckedChange={() => toggle.mutate(cmd.name)}
-                disabled={toggle.isPending}
-                aria-label={`Toggle ${cmd.name}`}
-              />
+      {query.isLoading ? (
+        <div className="rounded-xl border border-border bg-card/40 p-6 text-sm text-muted-foreground animate-pulse">
+          Loading commands…
+        </div>
+      ) : (
+        <>
+          {/* General commands (theme-agnostic) */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">General Commands</h3>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-mono">always available</span>
+              <Hint text="These commands work regardless of which theme is active — coin balance, inventory, giveaway entry, redemption, etc." side="right" />
             </div>
-          ))
-        )}
-      </div>
+            <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
+              {generalBuiltIns.length === 0 ? (
+                <div className="p-6 text-sm text-muted-foreground text-center">No general commands.</div>
+              ) : (
+                generalBuiltIns.map((cmd) => (
+                  <div key={cmd.name} className={`flex items-center justify-between px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
+                    <div className="flex-1 min-w-0 pr-3">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+                          <Clock className="w-2.5 h-2.5" />
+                          {cmd.cooldownSeconds}s
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-snug">{cmd.description}</p>
+                    </div>
+                    <Switch
+                      checked={cmd.enabled}
+                      onCheckedChange={() => toggle.mutate(cmd.name)}
+                      disabled={toggle.isPending}
+                      aria-label={`Toggle ${cmd.name}`}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Theme-specific commands */}
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">{themeLabel} Commands</h3>
+              <span className="text-[10px] uppercase tracking-wide text-primary/70 font-semibold">{activeTheme === "cs2" ? "CS2" : "Goblin"}</span>
+              <Hint text={`Theme-specific flavor commands. These only appear and respond while the ${themeLabel} theme is active.`} side="right" />
+            </div>
+            <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
+              {themedBuiltIns.length === 0 ? (
+                <div className="p-6 text-sm text-muted-foreground text-center italic">
+                  No {themeLabel}-specific commands.
+                </div>
+              ) : (
+                themedBuiltIns.map((cmd) => (
+                  <div key={cmd.name} className={`flex items-center justify-between px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
+                    <div className="flex-1 min-w-0 pr-3">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+                          <Clock className="w-2.5 h-2.5" />
+                          {cmd.cooldownSeconds}s
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-snug">{cmd.description}</p>
+                    </div>
+                    <Switch
+                      checked={cmd.enabled}
+                      onCheckedChange={() => toggle.mutate(cmd.name)}
+                      disabled={toggle.isPending}
+                      aria-label={`Toggle ${cmd.name}`}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Custom commands */}
       <div className="space-y-2 pt-2">
