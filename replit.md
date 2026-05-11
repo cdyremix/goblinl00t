@@ -39,6 +39,7 @@ pnpm workspaces, Node 24, TS 5.9. API: Express 5 + pino. DB: Postgres + Drizzle 
 
 - `streamStartedAt` — **deprecated** (manual Start/End Stream removed). Read by `routes/stats.ts` (`range=stream`) and `routes/loot.ts` (`since=stream`); falls back to last 12h.
 - `eliminationFlavorEnabled` (bool, default true) — RPG flavor banner in wheel modal (cosmetic, never reaches chat). Toggled in modal's ⚙️ popover.
+- `tierSelected` (bool, default false) — flips true the first time the streamer picks a rank in the post-signup `<TierSelectModal>` (mounted in `components/layout.tsx`). Both `PUT /users/me/subscription` and `PUT /users/me/tier-acknowledge` set it. Free is a valid choice. Modal is non-dismissible and re-opens on every dashboard load while false.
 - `commandResponses` (jsonb) — per-channel `{"!cmd": "template"}`. Cached by `bot/command-responses.ts`; **all writes must call `invalidateCommandResponses(channel)`**. Tokens via `renderTemplate` (`{user}`, `{balance}`, `{commands}`, `{theme}`).
 - `discordWebhookUrl` — fired on giveaway end (see Security).
 - Channel runtime settings (`lootDropsEnabled`, `coinRedemptionEnabled`, `coinCap`, `goblinEventsEnabled`, `wheelMode`, `wheelSpeed`) — cached by `bot/channel-settings.ts`; settings PUT MUST call `invalidateChannelSettings(twitchUsername)`.
@@ -56,7 +57,8 @@ pnpm workspaces, Node 24, TS 5.9. API: Express 5 + pino. DB: Postgres + Drizzle 
 - **Trade Office** (`/trade-office`) — manage CS2 skin delivery (trade URLs, locked items, status pending → sent).
 - **Chat Users** (`/users`) — every viewer who's earned/redeemed coins or held inventory; Adjust Coins dialog.
 - **Help & Guide** (`/help`) — static reference + chat command table.
-- **Pricing / Terms / Privacy** (`/pricing`, `/terms`, `/privacy`) — public; no API calls.
+- **Terms / Privacy** (`/terms`, `/privacy`) — public; no API calls.
+- **Pricing** lives on the public homepage as a `#pricing` anchor section (NOT a separate route). `/pricing` is a `<Redirect>` to `/#pricing` for back-compat. Tier copy is sourced from `lib/plans.tsx` so the homepage section, the post-signup `<TierSelectModal>`, and `/account` Rank tab stay in sync — edit in one place.
 
 ## Bot Commands
 

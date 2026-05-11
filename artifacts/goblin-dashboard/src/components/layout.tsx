@@ -4,10 +4,11 @@ import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
-  Plug, X, MessageCircle, CreditCard,
+  Plug, X, MessageCircle,
 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { OnboardingTour } from "@/components/onboarding-tour";
+import { TierSelectModal } from "@/components/tier-select-modal";
 import {
   Collapsible,
   CollapsibleContent,
@@ -55,7 +56,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     },
   });
 
-  const profileQuery = useQuery<{ user: { avatarPreset: string | null; twitchUsername: string | null } }>({
+  const profileQuery = useQuery<{ user: { avatarPreset: string | null; twitchUsername: string | null; tierSelected: boolean } }>({
     queryKey: ["users", "me"],
     enabled: !!isSignedIn,
     queryFn: async () => {
@@ -233,18 +234,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <BookOpen className="w-4 h-4 shrink-0" />
             <span className="font-medium">Help &amp; Guide</span>
           </Link>
-          <Link
-            href="/pricing"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-              location.startsWith("/pricing")
-                ? "bg-primary/10 text-primary border border-primary/20"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
-            }`}
-            data-testid="link-pricing"
-          >
-            <CreditCard className="w-4 h-4 shrink-0" />
-            <span className="font-medium">Pricing</span>
-          </Link>
           <a
             href="https://discord.gg/"
             target="_blank"
@@ -263,6 +252,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <OnboardingTour />
+      {/* Post-signup tier picker — opens once per account whenever the
+          streamer has not yet flipped `tierSelected`. Modal is non-dismissible
+          so every new account picks a starting rank before using the rest of
+          the dashboard. */}
+      <TierSelectModal
+        open={!!isSignedIn && profileQuery.data?.user.tierSelected === false}
+        onPicked={() => profileQuery.refetch()}
+      />
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative">

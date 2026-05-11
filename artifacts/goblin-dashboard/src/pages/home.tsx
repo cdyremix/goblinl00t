@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import {
   Gift, Sword, Package, Zap, Star, ChevronRight, Terminal,
   Sparkles, Trophy, MessageSquare, ShieldCheck, Plug, Wand2,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "@clerk/react";
+import { PLANS } from "@/lib/plans";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -93,6 +95,7 @@ export function Home() {
             <a href="#how" className="hover:text-foreground transition-colors">How it works</a>
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
             <a href="#commands" className="hover:text-foreground transition-colors">Commands</a>
+            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
             {isLoaded && isSignedIn ? (
@@ -327,6 +330,96 @@ export function Home() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      {/* Pricing — mirrors "The Scroll" tier verbiage from /account so the
+          public landing page and the in-dashboard rank picker stay in sync. */}
+      <section id="pricing" className="py-20 px-6 bg-card/30 border-y border-border/50">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3 font-medieval">Pick your rank</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              The free tier is fully usable forever. Paid ranks unlock the things that
+              cost us money to operate — CS2 trading, Discord webhooks, the full Ledger,
+              and multi-channel support.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {PLANS.map((plan) => (
+              <div
+                key={plan.id}
+                className={`relative rounded-xl border bg-card/60 p-6 flex flex-col ${
+                  plan.highlight
+                    ? "border-purple-500/50 shadow-[0_0_30px_rgba(168,85,247,0.15)]"
+                    : plan.color
+                }`}
+                data-testid={`pricing-tier-${plan.id}`}
+              >
+                {plan.badge && (
+                  <div
+                    className={`absolute top-0 right-0 text-[10px] font-bold px-3 py-1 ${
+                      plan.highlight ? "bg-purple-600 text-white" : "bg-amber-500 text-black"
+                    }`}
+                  >
+                    {plan.badge}
+                  </div>
+                )}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-background border border-border flex items-center justify-center">
+                    {plan.icon}
+                  </div>
+                  <div>
+                    <h3 className="font-medieval font-bold text-lg text-foreground">{plan.name}</h3>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-bold font-mono text-primary">{plan.price}</span>
+                      <span className="text-xs text-muted-foreground">/{plan.period}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm text-muted-foreground mb-4">{plan.blurb}</p>
+
+                <ul className="space-y-1.5 mb-6 flex-1">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-sm text-foreground">
+                      <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {isLoaded && isSignedIn ? (
+                  <Link
+                    href="/account?tab=rank"
+                    className={`mt-auto w-full text-sm font-bold py-2.5 rounded-md text-center ${
+                      plan.highlight
+                        ? "bg-primary text-primary-foreground hover:brightness-110"
+                        : "bg-muted text-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    {plan.id === "free" ? "Manage your rank" : `Upgrade to ${plan.name}`}
+                  </Link>
+                ) : (
+                  <Link
+                    href="/sign-up"
+                    className={`mt-auto w-full text-sm font-bold py-2.5 rounded-md text-center ${
+                      plan.highlight
+                        ? "bg-primary text-primary-foreground hover:brightness-110"
+                        : "bg-muted text-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    {plan.id === "free" ? "Start free" : `Get ${plan.name}`}
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            Paid ranks are billing-soon — Stripe is wiring up. Pick today and you'll be grandfathered when it goes live.
+          </p>
         </div>
       </section>
 

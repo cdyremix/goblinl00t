@@ -8,6 +8,11 @@ export const usersTable = pgTable("users", {
   twitchAccessToken: text("twitch_access_token"),
   twitchRefreshToken: text("twitch_refresh_token"),
   subscriptionTier: text("subscription_tier").notNull().default("premium"),
+  // True once the streamer has explicitly chosen (or acknowledged) a rank in
+  // the post-signup tier picker. Drives the "pick your rank" modal in the
+  // dashboard layout — modal opens whenever this is false for a signed-in
+  // streamer. Free is a valid choice; the flag flips on ANY tier pick.
+  tierSelected: boolean("tier_selected").notNull().default(false),
   botTheme: text("bot_theme").notNull().default("goblin"),
   botName: text("bot_name").notNull().default("Goblin L00t"),
   steamTradeUrl: text("steam_trade_url"),

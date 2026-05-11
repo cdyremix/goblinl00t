@@ -35,7 +35,23 @@ router.put("/users/me/subscription", async (req, res) => {
   await getOrCreateUser(userId);
   const [updated] = await db
     .update(usersTable)
-    .set({ subscriptionTier: tier })
+    .set({ subscriptionTier: tier, tierSelected: true })
+    .where(eq(usersTable.clerkUserId, userId))
+    .returning();
+  res.json({ user: updated });
+});
+
+// Lightweight acknowledgment endpoint — flips `tierSelected` without
+// changing the active tier. Used when the post-signup picker is dismissed
+// after the user is already on the right plan, so the modal doesn't
+// re-open on the next page load.
+router.put("/users/me/tier-acknowledge", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  await getOrCreateUser(userId);
+  const [updated] = await db
+    .update(usersTable)
+    .set({ tierSelected: true })
     .where(eq(usersTable.clerkUserId, userId))
     .returning();
   res.json({ user: updated });

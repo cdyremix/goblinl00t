@@ -19,7 +19,6 @@ import SettingsPage from "@/pages/settings";
 import TradeOffice from "@/pages/trade-office";
 import HelpGuide from "@/pages/help";
 import ChatUsers from "@/pages/chat-users";
-import Pricing from "@/pages/pricing";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
@@ -216,8 +215,10 @@ function AppRouter() {
       </Route>
       {/* Public marketing/legal routes — accessible without sign-in so the
           footer links and SEO landing actually work for first-time visitors. */}
+      {/* Pricing lives on the public homepage now (#pricing anchor) — the
+          standalone /pricing route was removed. Old links redirect home. */}
       <Route path="/pricing">
-        <Layout><Pricing /></Layout>
+        <Redirect to="/#pricing" />
       </Route>
       <Route path="/terms">
         <Layout><Terms /></Layout>

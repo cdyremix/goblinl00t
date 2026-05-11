@@ -377,7 +377,15 @@ export function EliminationWheel({
           + flavor banner + footer pushed the dialog past the viewport top
           (Radix centers via translate-y-[-50%] from top:50%, which only
           looks centered when content fits). */}
-      <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] relative overflow-hidden flex flex-col">
+      {/* Anchor near the top of the viewport instead of using Radix's default
+          translate-based centering. With ~6 viewer cards + flavor banner +
+          footer the wheel often grows past 90vh, and `top-[50%] translate-y-[-50%]`
+          would push the top half above the viewport — the streamer reported
+          only the bottom of the modal was visible. `top-[2vh] translate-y-0`
+          + `max-h-[96vh]` + an inner scroll keeps the whole modal on-screen
+          regardless of content height. The `!` modifiers force the override
+          even though tailwind-merge already dedupes most of them. */}
+      <DialogContent className="!top-[2vh] !translate-y-0 max-w-5xl w-[95vw] max-h-[96vh] relative overflow-hidden flex flex-col">
         {/* Winner celebration overlay — rendered INSIDE the wheel's
             DialogContent (not as a nested Dialog) so we keep a single
             focus trap and a clean modal a11y tree. Confetti respects

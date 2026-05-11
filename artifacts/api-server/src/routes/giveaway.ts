@@ -671,14 +671,16 @@ router.post("/giveaway/:id/reroll", async (req, res) => {
  */
 router.post("/giveaway/:id/restart", async (req, res) => {
   const { id } = RestartGiveawayParams.parse({ id: Number(req.params["id"]) });
-  const ctx = await requireStreamerChannel(req, res);
-  if (!ctx) return;
-
+  // Ownership: same pattern as /start, /end, /reroll. In non-prod, an unlinked
+  // caller can operate on the legacy seed channel ("goblinl00t") so the
+  // dashboard isn't a 403 wall during onboarding/dev. Production still
+  // requires a linked Twitch account to mutate giveaways.
+  const callerChannel = await getCallerChannel(req);
   const [target] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
   if (!target) { res.status(404).json({ error: "Giveaway not found" }); return; }
-  // Cross-channel access is a 404 (don't leak existence) — same pattern as
-  // the other ownership-guarded mutations.
-  if (target.channel.toLowerCase() !== ctx.channel) {
+  const isOwner = !!callerChannel && target.channel.toLowerCase() === callerChannel;
+  const isUnlinkedSeed = process.env["NODE_ENV"] !== "production" && !callerChannel && target.channel.toLowerCase() === "goblinl00t";
+  if (!isOwner && !isUnlinkedSeed) {
     res.status(404).json({ error: "Giveaway not found" });
     return;
   }

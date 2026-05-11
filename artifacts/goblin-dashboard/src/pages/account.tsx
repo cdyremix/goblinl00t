@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { PLANS } from "@/lib/plans";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
 type ClerkEmail = ClerkUser["emailAddresses"][number];
@@ -27,75 +28,12 @@ interface UserProfile {
   twitchUserId: string | null;
   twitchUsername: string | null;
   subscriptionTier: string;
+  tierSelected: boolean;
   avatarPreset: string | null;
   createdAt: string;
 }
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-const PLANS = [
-  {
-    id: "free",
-    name: "Cave Dweller",
-    price: "$0",
-    period: "forever",
-    icon: <Shield className="w-6 h-6 text-muted-foreground" />,
-    color: "border-border/50",
-    highlight: false,
-    features: [
-      "1 Twitch channel",
-      "!loot and !goblin commands",
-      "Basic loot leaderboard",
-      "Community support",
-    ],
-    locked: [
-      "Giveaway system",
-      "!steal, !hoard, !feedgoblin",
-      "Multiple channels",
-    ],
-  },
-  {
-    id: "premium",
-    name: "Horde Master",
-    price: "$9.99",
-    period: "per month",
-    icon: <Sword className="w-6 h-6 text-purple-400" />,
-    color: "border-purple-500/40",
-    highlight: true,
-    badge: "Most Popular",
-    features: [
-      "3 Twitch channels",
-      "All 8 chat commands",
-      "Full giveaway system",
-      "Full leaderboard & stats",
-      "Email support",
-    ],
-    locked: [
-      "Custom bot name",
-      "Unlimited channels",
-    ],
-  },
-  {
-    id: "pro",
-    name: "Goblin King",
-    price: "$24.99",
-    period: "per month",
-    icon: <Crown className="w-6 h-6 text-amber-400" />,
-    color: "border-amber-500/40",
-    highlight: false,
-    badge: "Full Power",
-    features: [
-      "Unlimited channels",
-      "All 8 chat commands",
-      "Full giveaway system",
-      "Full leaderboard & stats",
-      "Custom goblin bot name",
-      "Priority support",
-      "Early access to new features",
-    ],
-    locked: [],
-  },
-];
 
 export function Account() {
   const { user: clerkUser, isLoaded } = useUser();
