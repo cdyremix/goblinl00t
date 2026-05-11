@@ -29,7 +29,7 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 - `lib/api-client-react/src/generated/` — generated React Query hooks (do not edit)
 - `artifacts/api-server/src/` — Express API + bot service
   - `src/bot/bot-service.ts` — tmi.js Twitch bot (offline mode if no token)
-  - `src/bot/loot-tables.ts` — rarity tiers and item pools (LOOT_TABLE export)
+  - `src/bot/loot-tables.ts` — rarity tiers + item pools (LOOT_TABLE). Each item has a `theme: "goblin" | "cs2"` field; `rollLootDrop` filters the pool by active theme (passed via `opts.theme`) with a fallback to any-theme pool if a tier is empty. **All call sites must thread the active theme**: `bot-service.ts` (`!loot`) and `routes/giveaway.ts` (`bot_item` award) use `getActiveTheme()`; `routes/loot-hoard.ts` (manual Quick Prize) reads `user.botTheme`. Forgetting the `theme` option silently defaults to "goblin" — CS2 streamers will get goblin items.
   - `src/bot/inventory.ts` — 5-slot inventory service: rollLootDrop (luck buff bumps rarity), addInventoryItem (per-user advisory lock), sellInventoryItem (coins-buff 2× multiplier in same txn), useInventoryItem, consumeBuffCharge, hasActiveBuff
   - `src/bot/goblin-events.ts` — 5–15 min jitter scheduler, picks random recent chatter, fires drop (loot_drops insert) or steal (point_redemptions kind='goblin_steal', capped to balance); gated by usersTable.goblinEventsEnabled
   - `src/routes/` — giveaway, loot, stats, commands, bot, inventory, settings routes
@@ -61,7 +61,13 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 
 ## Bot Commands
 
-`!loot`, `!enter`, `!goblin`, `!steal`, `!hoard`, `!inventory`, `!sell <slot|all>`, `!use <slot>`, `!coins` (alias for `!points`), `!feedgoblin`, `!giveaway`, `!tradeurl`
+`!loot`, `!enter`, `!inventory`, `!sell <slot|all>`, `!use <slot>`, `!coins` (alias for `!points`), `!giveaway`, `!redeem`, `!tradeurl`
+
+Theme-flavored (goblin / cs2 aliases share handlers + theme phrases):
+- `!goblin` / `!skin` — random themed taunt
+- `!steal` / `!scam` — try to mug another viewer
+- `!hoard` / `!stash` — show your coin balance
+- `!feedgoblin` / `!case` — feed/open-case flavor response
 
 ## Twitch Integration
 
@@ -89,6 +95,7 @@ Without them, the API and dashboard work fully; the bot just won't connect to Tw
 - New chat-driven inventory paths normalize username via `tags.username` (lowercase). Historical `loot_drops` / `point_redemptions` rows may be mixed-case, so balance lookups can split across casings until backfilled — known limitation, not a regression.
 - `Random Goblin Events` (settings toggle, default ON) picks from an in-memory `RECENT_CHATTERS` map per channel, so it activates only after viewers have spoken since the bot started. Steals are silently skipped when balance ≤ 0; events are logged in `goblin_events`.
 - Per-channel runtime settings (`lootDropsEnabled`, `coinRedemptionEnabled`, `coinCap`, `goblinEventsEnabled`, `wheelMode`, `wheelSpeed`) live on `usersTable` and are cached in-memory by `bot/channel-settings.ts`. The settings PUT handler MUST call `invalidateChannelSettings(twitchUsername)` after writing — the bot reads the cache on every chat command.
+- `usersTable.steamTradeUrl` is auto-populated when the streamer connects Steam (`routes/steam.ts`); the manual settings input has been removed because the bot delivers prizes to **winners'** trade URLs (collected via `!tradeurl` → `tradeFulfillmentsTable.steamTradeUrl`), not the streamer's own.
 - `coinCap` is a **display clip**, not a hard write block: new earnings still write to `loot_drops`, but `getPointsBalance()` clamps the returned `balance` so `!coins`, the leaderboard, and redemption checks all honor the ceiling. `getPointsBalance()` now returns `{earned, redeemed, balance, cap}`; existing callers destructure only `{balance}` so adding `cap` is backwards-compatible.
 - `!loot` and the manual `/loot-hoard/drop` route both pass `allowBuffs: false` to `rollLootDrop()` when `lootDropsEnabled` is OFF (or for streamer manual drops, since buffs would be confusing as a "Quick Prize"). Quick Prize items honor an optional rarity hint and re-pick from the matching tier of `LOOT_TABLE`.
 - `!redeem` (chat) and `POST /giveaway/:id/redeem` (dashboard) both gate on `coinRedemptionEnabled` before reaching `redeemEntriesForUser()`. Disable both paths from a single toggle.

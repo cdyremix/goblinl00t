@@ -40,6 +40,11 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
   "!steal":      { description: "Attempt to steal from another viewer",     cooldownSeconds: 20, theme: "goblin" },
   "!hoard":      { description: "Check your goblin coin balance",           cooldownSeconds: 15, theme: "goblin" },
   "!feedgoblin": { description: "Feed the goblin a snack",                  cooldownSeconds: 10, theme: "goblin" },
+  // CS2 flavor commands — mirror the goblin set with CS2 personality.
+  "!skin":       { description: "Summon the bot for a CS2-flavored take",   cooldownSeconds: 10, theme: "cs2" },
+  "!scam":       { description: "Try to scam a sus trade off another viewer", cooldownSeconds: 20, theme: "cs2" },
+  "!stash":      { description: "Check your skin stash coin balance",       cooldownSeconds: 15, theme: "cs2" },
+  "!case":       { description: "Open a case to feed the bot — RNG decides if it's nutritious", cooldownSeconds: 10, theme: "cs2" },
   "!tradeurl":   { description: "Submit your Steam trade URL after winning a skin", cooldownSeconds: 10, theme: "cs2" },
   "!redeem":     { description: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", cooldownSeconds: 5, theme: "both" },
   "!points":     { description: "Check your coin balance",                  cooldownSeconds: 10, theme: "both" },
@@ -171,6 +176,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const loot = rollLootDrop({
         luckBuffActive: luckActive,
         allowBuffs: settings.lootDropsEnabled,
+        theme: getActiveTheme(),
       });
       // Charge consumption is atomic with the insert — a "full" result will
       // not burn the buff (see addInventoryItem).
@@ -352,11 +358,11 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       void client?.say(channel, `${phrase}${suffix}`);
     }
 
-    if (command === "!goblin") {
+    if (command === "!goblin" || command === "!skin") {
       void client?.say(channel, pickRandom(phrases.goblinResponses));
     }
 
-    if (command === "!steal") {
+    if (command === "!steal" || command === "!scam") {
       const target = parts[1]?.replace("@", "") ?? null;
       if (!target) {
         void client?.say(channel, phrases.stealNoTarget);
@@ -366,7 +372,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       void client?.say(channel, phrase);
     }
 
-    if (command === "!hoard") {
+    if (command === "!hoard" || command === "!stash") {
       const { balance, earned } = await getPointsBalance(username);
       if (earned === 0) {
         void client?.say(channel, phrases.hoardEmpty(username));
@@ -375,7 +381,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       }
     }
 
-    if (command === "!feedgoblin") {
+    if (command === "!feedgoblin" || command === "!case") {
       void client?.say(channel, pickRandom(phrases.feedResponses));
     }
 

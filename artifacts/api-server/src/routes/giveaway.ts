@@ -12,6 +12,7 @@ import {
   ListGiveawaysQueryParams,
 } from "@workspace/api-zod";
 import { announceGiveawayStart, announceGiveawayEnd } from "../bot/bot-service";
+import { getActiveTheme } from "../bot/bot-themes";
 
 const router: IRouter = Router();
 
@@ -245,7 +246,7 @@ router.post("/giveaway/:id/end", async (req, res) => {
       points: amount,
     });
   } else if (prizeKind === "bot_item") {
-    const loot = rollLootDrop({ luckBuffActive: true });
+    const loot = rollLootDrop({ luckBuffActive: true, theme: getActiveTheme() });
     const result = await addInventoryItem(giveaway.channel, winner.username, loot);
     if (!result.ok) {
       // Inventory full — fall back to coin compensation so the prize is never silently dropped.

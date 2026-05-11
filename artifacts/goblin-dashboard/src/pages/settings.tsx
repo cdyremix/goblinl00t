@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -128,7 +129,6 @@ export default function SettingsPage() {
 
   const [pendingTheme, setPendingTheme] = useState<BotTheme | null>(null);
   const [botNameDraft, setBotNameDraft] = useState<string | null>(null);
-  const [tradeUrlDraft, setTradeUrlDraft] = useState<string | null>(null);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
   const savedTheme: BotTheme = settings?.botTheme ?? "goblin";
@@ -148,15 +148,8 @@ export default function SettingsPage() {
 
   const themeChanged = pendingTheme !== null && pendingTheme !== savedTheme;
 
-  const savedTradeUrl = settings?.steamTradeUrl ?? "";
-  const tradeUrlValue = tradeUrlDraft ?? savedTradeUrl;
-  const tradeUrlTrimmed = tradeUrlValue.trim();
-  const tradeUrlValid =
-    tradeUrlTrimmed === "" || tradeUrlTrimmed.includes("steamcommunity.com/tradeoffer/new/");
-  const tradeUrlChanged = tradeUrlTrimmed !== savedTradeUrl;
-
-  const hasChanges = nameChanged || themeChanged || tradeUrlChanged;
-  const allValid = nameValid && tradeUrlValid;
+  const hasChanges = nameChanged || themeChanged;
+  const allValid = nameValid;
 
   function handleThemeSelect(newTheme: BotTheme) {
     setPendingTheme(newTheme);
@@ -173,11 +166,9 @@ export default function SettingsPage() {
     const payload: Partial<BotSettings> = {};
     if (themeChanged) payload.botTheme = pendingTheme!;
     if (nameChanged) payload.botName = effectiveName;
-    if (tradeUrlChanged) payload.steamTradeUrl = tradeUrlTrimmed === "" ? null : tradeUrlTrimmed;
     await mutation.mutateAsync(payload);
     setPendingTheme(null);
     setBotNameDraft(null);
-    setTradeUrlDraft(null);
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
   }
@@ -464,33 +455,6 @@ export default function SettingsPage() {
             <h2 className="text-base font-semibold text-foreground">CS2 Settings</h2>
           </div>
 
-          {/* Default Steam Trade URL */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="trade-url" className="text-sm font-semibold">Default Trade URL</Label>
-              <Hint
-                text="Your own Steam trade URL — used as a fallback if a winner doesn't post one with !tradeurl. You can find this in Steam → Inventory → Trade Offers → 'Who can send me Trade Offers?'"
-                side="right"
-              />
-            </div>
-            <div className="flex gap-2 items-start">
-              <div className="flex-1 space-y-1">
-                <Input
-                  id="trade-url"
-                  value={tradeUrlValue}
-                  onChange={(e) => setTradeUrlDraft(e.target.value)}
-                  placeholder="https://steamcommunity.com/tradeoffer/new/?partner=..."
-                  className={!tradeUrlValid ? "border-destructive" : ""}
-                />
-                {!tradeUrlValid && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> Must be a valid Steam trade URL
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* Steam connection */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -566,7 +530,14 @@ export default function SettingsPage() {
               <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!tradeurl https://...</span>.
               You then send the skin directly from your inventory using their trade URL — no action required from
               the winner. Track and manage all pending deliveries from the{" "}
-              <span className="text-primary">Trade Office</span> in the sidebar.
+              <Link
+                href="/trade-office"
+                className="text-primary font-semibold underline-offset-2 hover:underline"
+                data-testid="link-trade-office"
+              >
+                Trade Office
+              </Link>{" "}
+              in the sidebar.
             </p>
           </div>
         </section>

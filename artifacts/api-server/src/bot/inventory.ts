@@ -1,7 +1,7 @@
 import { db, userInventoryTable, lootDropsTable, INVENTORY_CAP } from "@workspace/db";
 import type { UserInventoryItem } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
-import type { Rarity } from "./loot-tables";
+import type { Rarity, LootTheme } from "./loot-tables";
 import { LOOT_TABLE, getRarityEmoji } from "./loot-tables";
 import { logger } from "../lib/logger";
 
@@ -37,7 +37,7 @@ export interface RolledLoot {
 
 const RARITY_ORDER: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 
-function baseRoll(): { item: string; rarity: Rarity; points: number } {
+function baseRoll(theme: LootTheme): { item: string; rarity: Rarity; points: number } {
   const r = Math.random() * 100;
   let rarity: Rarity;
   if (r < 1) rarity = "legendary";
@@ -45,8 +45,10 @@ function baseRoll(): { item: string; rarity: Rarity; points: number } {
   else if (r < 20) rarity = "rare";
   else if (r < 50) rarity = "uncommon";
   else rarity = "common";
-  const pool = LOOT_TABLE.filter((i: { rarity: Rarity }) => i.rarity === rarity);
-  return pool[Math.floor(Math.random() * pool.length)]!;
+  const pool = LOOT_TABLE.filter((i) => i.rarity === rarity && i.theme === theme);
+  // Defensive fallback: if a theme is missing items at this rarity, pick from any theme.
+  const finalPool = pool.length > 0 ? pool : LOOT_TABLE.filter((i) => i.rarity === rarity);
+  return finalPool[Math.floor(Math.random() * finalPool.length)]!;
 }
 
 function upgradeRarity(r: Rarity): Rarity {
@@ -58,6 +60,8 @@ export interface RollOptions {
   luckBuffActive: boolean;
   /** When false (settings: lootDropsEnabled), suppress buff/special-item rolls. */
   allowBuffs?: boolean;
+  /** Theme for the item pool. Defaults to "goblin". */
+  theme?: LootTheme;
 }
 
 /**
@@ -68,6 +72,7 @@ export interface RollOptions {
  */
 export function rollLootDrop(opts: RollOptions): RolledLoot {
   const allowBuffs = opts.allowBuffs !== false;
+  const theme: LootTheme = opts.theme ?? "goblin";
   if (allowBuffs && Math.random() < BUFF_DROP_CHANCE) {
     const buff = BUFF_TABLE[Math.floor(Math.random() * BUFF_TABLE.length)]!;
     return {
@@ -81,12 +86,13 @@ export function rollLootDrop(opts: RollOptions): RolledLoot {
     };
   }
 
-  let base = baseRoll();
+  let base = baseRoll(theme);
   if (opts.luckBuffActive && Math.random() < 0.5) {
     const upRarity = upgradeRarity(base.rarity);
     if (upRarity !== base.rarity) {
-      const pool = LOOT_TABLE.filter((i: { rarity: Rarity }) => i.rarity === upRarity);
-      base = pool[Math.floor(Math.random() * pool.length)]!;
+      const pool = LOOT_TABLE.filter((i) => i.rarity === upRarity && i.theme === theme);
+      const finalPool = pool.length > 0 ? pool : LOOT_TABLE.filter((i) => i.rarity === upRarity);
+      base = finalPool[Math.floor(Math.random() * finalPool.length)]!;
     }
   }
   return {

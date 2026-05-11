@@ -3,7 +3,7 @@ import { getAuth } from "@clerk/express";
 import { db, usersTable, lootDropsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { addInventoryItem, rollLootDrop } from "../bot/inventory";
-import { LOOT_TABLE, type Rarity } from "../bot/loot-tables";
+import { LOOT_TABLE, type Rarity, type LootTheme } from "../bot/loot-tables";
 
 const router: IRouter = Router();
 
@@ -78,13 +78,15 @@ router.post("/loot-hoard/drop", async (req, res) => {
   }
 
   // kind === "item": roll a random plain item (no buffs) honoring an optional rarity hint.
+  const theme: LootTheme = (user.botTheme === "cs2" ? "cs2" : "goblin");
   const rarityHint =
     body.rarity && VALID_RARITIES.includes(body.rarity as Rarity)
       ? (body.rarity as Rarity)
       : null;
-  let loot = rollLootDrop({ luckBuffActive: false, allowBuffs: false });
+  let loot = rollLootDrop({ luckBuffActive: false, allowBuffs: false, theme });
   if (rarityHint) {
-    const pool = LOOT_TABLE.filter((i) => i.rarity === rarityHint);
+    const themedPool = LOOT_TABLE.filter((i) => i.rarity === rarityHint && i.theme === theme);
+    const pool = themedPool.length > 0 ? themedPool : LOOT_TABLE.filter((i) => i.rarity === rarityHint);
     const pick = pool[Math.floor(Math.random() * pool.length)]!;
     loot = {
       item: pick.item,
