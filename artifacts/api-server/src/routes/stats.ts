@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, usersTable } from "@workspace/db";
 import { eq, desc, count, sum, sql, and, gte } from "drizzle-orm";
 import { GetTopLootersQueryParams } from "@workspace/api-zod";
+import { requireStreamerChannel } from "../lib/auth-helpers";
 
 const router: IRouter = Router();
 
@@ -261,5 +262,94 @@ router.get("/stats/engagement", async (req, res) => {
 
 // Suppress unused-import warning for `and` (kept available for future joins).
 void and;
+
+/**
+ * GET /stats/export?range=...&kind=loot|commands|giveaways
+ * Returns a CSV of the chosen dataset for the chosen window.
+ *
+ * Why CSV: streamers asked for a "give me my numbers so I can put them in a
+ * sponsorship deck" export. Three small queries cover the common asks
+ * without standing up a full analytics export pipeline.
+ *
+ * Auth: scoped to the caller's own channel via `requireStreamerChannel`.
+ * Multi-tenant deployments must NOT leak other streamers' rows here.
+ */
+router.get("/stats/export", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const range = parseRange(req.query["range"]);
+  const since = await resolveSince(req, range);
+  const kind = String(req.query["kind"] ?? "loot");
+
+  function csvCell(v: string | number | null | undefined): string {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  }
+
+  let header: string[];
+  let rows: string[][];
+
+  if (kind === "commands") {
+    const channelFilter = eq(commandLogsTable.channel, ctx.channel);
+    const where = since ? and(channelFilter, gte(commandLogsTable.executedAt, since)) : channelFilter;
+    const data = await db
+      .select()
+      .from(commandLogsTable)
+      .where(where)
+      .orderBy(desc(commandLogsTable.executedAt))
+      .limit(10000);
+    header = ["executed_at", "channel", "username", "command"];
+    rows = data.map((r) => [r.executedAt.toISOString(), r.channel, r.username, r.command]);
+  } else if (kind === "giveaways") {
+    const channelFilter = eq(giveawaysTable.channel, ctx.channel);
+    const where = since ? and(channelFilter, gte(giveawaysTable.createdAt, since)) : channelFilter;
+    const data = await db
+      .select()
+      .from(giveawaysTable)
+      .where(where)
+      .orderBy(desc(giveawaysTable.createdAt))
+      .limit(10000);
+    header = ["created_at", "ended_at", "channel", "title", "prize", "status", "winner", "prize_kind"];
+    rows = data.map((r) => [
+      r.createdAt.toISOString(),
+      r.endedAt?.toISOString() ?? "",
+      r.channel,
+      r.title,
+      r.prize,
+      r.status,
+      r.winnerUsername ?? "",
+      r.prizeKind ?? "",
+    ]);
+  } else {
+    const channelFilter = eq(lootDropsTable.channel, ctx.channel);
+    const where = since ? and(channelFilter, gte(lootDropsTable.droppedAt, since)) : channelFilter;
+    const data = await db
+      .select()
+      .from(lootDropsTable)
+      .where(where)
+      .orderBy(desc(lootDropsTable.droppedAt))
+      .limit(10000);
+    header = ["dropped_at", "channel", "username", "item", "rarity", "points"];
+    rows = data.map((r) => [
+      r.droppedAt.toISOString(),
+      r.channel,
+      r.username,
+      r.item,
+      r.rarity,
+      String(r.points ?? 0),
+    ]);
+  }
+
+  const body =
+    [header.map(csvCell).join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\n") +
+    "\n";
+
+  const filename = `goblin-loot-${kind}-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(body);
+});
 
 export default router;

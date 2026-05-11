@@ -44,6 +44,7 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
         | "medium"
         | "fast",
     eliminationFlavorEnabled: user.eliminationFlavorEnabled,
+    discordWebhookUrl: user.discordWebhookUrl ?? null,
   };
 }
 
@@ -71,6 +72,7 @@ router.put("/settings", async (req, res) => {
     wheelMode?: string;
     wheelSpeed?: string;
     eliminationFlavorEnabled?: boolean;
+    discordWebhookUrl?: string | null;
   };
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
@@ -126,6 +128,17 @@ router.put("/settings", async (req, res) => {
   }
   if (typeof body.eliminationFlavorEnabled === "boolean") {
     updates.eliminationFlavorEnabled = body.eliminationFlavorEnabled;
+  }
+  if ("discordWebhookUrl" in body) {
+    const raw = body.discordWebhookUrl;
+    if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
+      updates.discordWebhookUrl = null;
+    } else if (typeof raw === "string" && /^https:\/\/(?:discord\.com|discordapp\.com)\/api\/webhooks\/[\w/-]+$/.test(raw.trim())) {
+      updates.discordWebhookUrl = raw.trim();
+    } else {
+      res.status(400).json({ error: "Invalid Discord webhook URL — must be a discord.com/api/webhooks/... URL." });
+      return;
+    }
   }
 
   const before = await getOrCreateUser(userId);

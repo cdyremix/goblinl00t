@@ -11,6 +11,7 @@ import { AlertCircle, Crown, Gem, Activity, Users, Zap, Trophy, Coins } from "lu
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ChatUsers } from "@/pages/chat-users";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
 
 /**
  * Operations Center.
@@ -38,6 +39,10 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Onboarding card sits at the very top so first-run users see it.
+          Self-dismisses once everything's checked off — no permanent clutter. */}
+      <OnboardingChecklist />
+
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-primary">Operations Center</h1>

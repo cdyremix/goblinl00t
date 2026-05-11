@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useAuth } from "@clerk/react";
+import { useToast } from "@/hooks/use-toast";
 import {
   useGetStatsOverview,
   useGetCommandStats,
@@ -6,9 +8,13 @@ import {
   useGetEngagementReport,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, Trophy, Gem, Users, Zap, Gift, Command, Clock, Lightbulb, AlertTriangle } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { BarChart3, Trophy, Gem, Users, Zap, Gift, Command, Clock, Lightbulb, AlertTriangle, Download } from "lucide-react";
 
 const RARITY_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
   legendary: { bg: "bg-amber-500/10", text: "text-amber-400", bar: "bg-amber-500" },
@@ -22,6 +28,46 @@ type Range = "day" | "week" | "month" | "year" | "all";
 
 export function Stats() {
   const [range, setRange] = useState<Range>("week");
+  const [exportKind, setExportKind] = useState<"loot" | "commands" | "giveaways">("loot");
+  const [exporting, setExporting] = useState(false);
+  const { getToken } = useAuth();
+  const { toast } = useToast();
+
+  /**
+   * Pull the CSV through an authed fetch, then trigger a synthetic download.
+   * We deliberately don't open a new tab against `/api/stats/export?...`
+   * — the proxy would not carry the Clerk Bearer token, so the route would
+   * 401. The Blob → object URL → anchor click pattern survives the auth
+   * gate and works in every browser we care about.
+   */
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/stats/export?range=${range}&kind=${exportKind}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `goblin-loot-${exportKind}-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "Export ready", description: `Downloaded ${exportKind} (${range}).` });
+    } catch (err) {
+      toast({
+        title: "Export failed",
+        description: err instanceof Error ? err.message : "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const { data: overview, isLoading: overviewLoading } = useGetStatsOverview({ range });
   const { data: commandStats, isLoading: commandsLoading } = useGetCommandStats({ range });
@@ -38,15 +84,40 @@ export function Stats() {
           <h1 className="text-4xl font-bold tracking-tight text-primary">Ledger</h1>
           <p className="text-muted-foreground mt-2 text-lg">The goblin's full accounting of loot and chaos.</p>
         </div>
-        <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
-          <TabsList data-testid="tabs-stats-range">
-            <TabsTrigger value="day">Day</TabsTrigger>
-            <TabsTrigger value="week">Week</TabsTrigger>
-            <TabsTrigger value="month">Month</TabsTrigger>
-            <TabsTrigger value="year">Year</TabsTrigger>
-            <TabsTrigger value="all">All-time</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-wrap items-center gap-3">
+          <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
+            <TabsList data-testid="tabs-stats-range">
+              <TabsTrigger value="day">Day</TabsTrigger>
+              <TabsTrigger value="week">Week</TabsTrigger>
+              <TabsTrigger value="month">Month</TabsTrigger>
+              <TabsTrigger value="year">Year</TabsTrigger>
+              <TabsTrigger value="all">All-time</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="flex items-center gap-2">
+            <Select value={exportKind} onValueChange={(v) => setExportKind(v as "loot" | "commands" | "giveaways")}>
+              <SelectTrigger className="w-[140px]" data-testid="select-export-kind">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="loot">Loot drops</SelectItem>
+                <SelectItem value="commands">Commands</SelectItem>
+                <SelectItem value="giveaways">Giveaways</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={exportCsv}
+              disabled={exporting}
+              data-testid="button-export-csv"
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Overview Cards */}

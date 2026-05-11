@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { db, usersTable, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable } from "@workspace/db";
-import { eq, desc, count } from "drizzle-orm";
+import { eq, desc, count, and } from "drizzle-orm";
 import { addInventoryItem, rollLootDrop } from "../bot/inventory";
 import { clampCoinAward } from "../bot/points";
 import {
@@ -15,6 +15,30 @@ import {
 } from "@workspace/api-zod";
 import { announceGiveawayStart, announceGiveawayEnd } from "../bot/bot-service";
 import { getActiveTheme } from "../bot/bot-themes";
+import { fireDiscordWebhook } from "../lib/discord-webhook";
+import { requireStreamerChannel } from "../lib/auth-helpers";
+
+/**
+ * Resolve the calling streamer's channel handle (lowercase Twitch username).
+ * Returns null + writes a 401/403 if the caller isn't signed in or hasn't
+ * linked Twitch yet — used by mutating giveaway routes to enforce that
+ * one streamer can never start/end/reroll another streamer's giveaway.
+ *
+ * Why local rather than the shared `requireStreamerChannel` helper: the
+ * giveaway routes also need the user's full row for Discord webhook
+ * notifications, and the channel match check is a few extra lines that
+ * make the ownership intent obvious at the call site.
+ */
+async function getCallerChannel(req: Parameters<typeof getAuth>[0]): Promise<string | null> {
+  const { userId } = getAuth(req);
+  if (!userId) return null;
+  const [user] = await db
+    .select({ twitchUsername: usersTable.twitchUsername })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId))
+    .limit(1);
+  return user?.twitchUsername?.trim().toLowerCase() ?? null;
+}
 
 const router: IRouter = Router();
 
@@ -45,16 +69,23 @@ function serializeGiveaway(g: typeof giveawaysTable.$inferSelect, entryCount: nu
 }
 
 router.get("/giveaway", async (req, res) => {
+  // Multi-tenancy: scope to the caller's own channel so two streamers can't
+  // see each other's giveaways.
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
   const query = ListGiveawaysQueryParams.safeParse(req.query);
   const status = query.success ? query.data.status : undefined;
   const limit = query.success ? (query.data.limit ?? 20) : 20;
 
-  let dbQuery = db.select().from(giveawaysTable).orderBy(desc(giveawaysTable.createdAt)).limit(limit);
-  if (status) {
-    // @ts-expect-error drizzle where chaining
-    dbQuery = dbQuery.where(eq(giveawaysTable.status, status));
-  }
-  const rows = await dbQuery;
+  const where = status
+    ? and(eq(giveawaysTable.channel, ctx.channel), eq(giveawaysTable.status, status))
+    : eq(giveawaysTable.channel, ctx.channel);
+  const rows = await db
+    .select()
+    .from(giveawaysTable)
+    .where(where)
+    .orderBy(desc(giveawaysTable.createdAt))
+    .limit(limit);
 
   const result = await Promise.all(
     rows.map(async (g) => {
@@ -69,6 +100,11 @@ router.get("/giveaway", async (req, res) => {
 });
 
 router.post("/giveaway", async (req, res) => {
+  // Multi-tenancy: ignore any caller-supplied `channel` and force the
+  // giveaway to live on the caller's own channel. Prevents cross-streamer
+  // record creation.
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
   const body = CreateGiveawayBody.parse(req.body);
   const [giveaway] = await db
     .insert(giveawaysTable)
@@ -82,7 +118,7 @@ router.post("/giveaway", async (req, res) => {
       prizeBotRarity: body.prizeBotRarity ?? null,
       description: body.description ?? null,
       keyword: body.keyword ?? "!enter",
-      channel: body.channel ?? "goblinl00t",
+      channel: ctx.channel,
       requireFollower: body.requireFollower ?? false,
       subscriberOnly: body.subscriberOnly ?? false,
       minSubTier: body.minSubTier ?? null,
@@ -247,11 +283,15 @@ const FAKE_VIEWERS: Array<{ name: string; tickets: number }> = [
     { name: "yolo_yara", tickets: 1 },
 ];
 
-router.get("/giveaway/current", async (_req, res) => {
+router.get("/giveaway/current", async (req, res) => {
+  // Scope "current giveaway" to the caller's channel — otherwise streamer A
+  // sees streamer B's active giveaway.
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
   const [active] = await db
     .select()
     .from(giveawaysTable)
-    .where(eq(giveawaysTable.status, "active"))
+    .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, ctx.channel)))
     .limit(1);
 
   if (!active) {
@@ -285,10 +325,14 @@ router.get("/giveaway/current", async (_req, res) => {
 });
 
 router.get("/giveaway/:id", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
   const { id } = GetGiveawayParams.parse({ id: Number(req.params["id"]) });
   const [giveaway] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
 
-  if (!giveaway) {
+  // Treat cross-channel access as 404 (don't reveal whether the row exists
+  // on someone else's channel).
+  if (!giveaway || giveaway.channel.toLowerCase() !== ctx.channel) {
     res.status(404).json({ error: "Giveaway not found" });
     return;
   }
@@ -365,7 +409,7 @@ router.delete("/giveaway/:id", async (req, res) => {
   //      giveaways, only the shared dev/seed bucket.
   // Anything else 404s (mirrored shape so we don't leak existence).
   const isOwner = !!callerChannel && existing.channel.toLowerCase() === callerChannel;
-  const isUnlinkedTestCleanup = !callerChannel && existing.channel.toLowerCase() === "goblinl00t";
+  const isUnlinkedTestCleanup = process.env["NODE_ENV"] !== "production" && !callerChannel && existing.channel.toLowerCase() === "goblinl00t";
   if (!isOwner && !isUnlinkedTestCleanup) {
     res.status(404).json({ error: "Giveaway not found" });
     return;
@@ -386,11 +430,25 @@ router.delete("/giveaway/:id", async (req, res) => {
 router.post("/giveaway/:id/start", async (req, res) => {
   const { id } = StartGiveawayParams.parse({ id: Number(req.params["id"]) });
 
-  // End any currently active giveaway first
+  // Ownership: caller must own the giveaway's channel. Same unlinked-account
+  // exception as DELETE so brand-new accounts can still try the seed flow.
+  const callerChannel = await getCallerChannel(req);
+  const [target] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
+  if (!target) { res.status(404).json({ error: "Giveaway not found" }); return; }
+  const isOwner = !!callerChannel && target.channel.toLowerCase() === callerChannel;
+  const isUnlinkedSeed = process.env["NODE_ENV"] !== "production" && !callerChannel && target.channel.toLowerCase() === "goblinl00t";
+  if (!isOwner && !isUnlinkedSeed) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+
+  // End any currently active giveaway first (scoped to this channel only —
+  // we used to wipe ALL active giveaways across every streamer in the DB,
+  // which broke other streamers when a multi-tenant account did a start).
   await db
     .update(giveawaysTable)
     .set({ status: "ended", endedAt: new Date() })
-    .where(eq(giveawaysTable.status, "active"));
+    .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, target.channel)));
 
   const [giveaway] = await db
     .update(giveawaysTable)
@@ -419,6 +477,17 @@ router.post("/giveaway/:id/start", async (req, res) => {
 
 router.post("/giveaway/:id/end", async (req, res) => {
   const { id } = EndGiveawayParams.parse({ id: Number(req.params["id"]) });
+
+  // Ownership guard — see /start for rationale.
+  const callerChannel = await getCallerChannel(req);
+  const [target] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
+  if (!target) { res.status(404).json({ error: "Giveaway not found" }); return; }
+  const isOwner = !!callerChannel && target.channel.toLowerCase() === callerChannel;
+  const isUnlinkedSeed = process.env["NODE_ENV"] !== "production" && !callerChannel && target.channel.toLowerCase() === "goblinl00t";
+  if (!isOwner && !isUnlinkedSeed) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
 
   const entries = await db
     .select()
@@ -456,6 +525,16 @@ router.post("/giveaway/:id/end", async (req, res) => {
   void announceGiveawayEnd({
     prize: giveaway.prize,
     channel: giveaway.channel,
+    winner: winner.username,
+    entryCount: entries.length,
+  });
+
+  // Best-effort Discord notification — fire-and-forget so a slow webhook
+  // never delays the in-app reveal. `fireDiscordWebhook` swallows errors.
+  void fireDiscordWebhook({
+    channel: giveaway.channel,
+    title: giveaway.title,
+    prize: giveaway.prize,
     winner: winner.username,
     entryCount: entries.length,
   });
@@ -519,6 +598,17 @@ router.post("/giveaway/:id/end", async (req, res) => {
 router.post("/giveaway/:id/reroll", async (req, res) => {
   const { id } = RerollGiveawayParams.parse({ id: Number(req.params["id"]) });
 
+  // Ownership guard — see /start for rationale.
+  const callerChannel = await getCallerChannel(req);
+  const [target] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
+  if (!target) { res.status(404).json({ error: "Giveaway not found" }); return; }
+  const isOwner = !!callerChannel && target.channel.toLowerCase() === callerChannel;
+  const isUnlinkedSeed = process.env["NODE_ENV"] !== "production" && !callerChannel && target.channel.toLowerCase() === "goblinl00t";
+  if (!isOwner && !isUnlinkedSeed) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+
   const entries = await db
     .select()
     .from(giveawayEntriesTable)
@@ -566,7 +656,20 @@ router.post("/giveaway/:id/reroll", async (req, res) => {
 });
 
 router.get("/giveaway/:id/entries", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
   const { id } = GetGiveawayEntriesParams.parse({ id: Number(req.params["id"]) });
+  // Verify the giveaway belongs to the caller before listing entries —
+  // otherwise viewer rosters leak across streamers.
+  const [giveaway] = await db
+    .select({ channel: giveawaysTable.channel })
+    .from(giveawaysTable)
+    .where(eq(giveawaysTable.id, id))
+    .limit(1);
+  if (!giveaway || giveaway.channel.toLowerCase() !== ctx.channel) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
 
   const entries = await db
     .select()

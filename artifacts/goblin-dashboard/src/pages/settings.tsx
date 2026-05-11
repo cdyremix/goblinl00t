@@ -34,6 +34,8 @@ interface BotSettings {
   wheelMode: "auto" | "manual";
   wheelSpeed: "slow" | "medium" | "fast";
   eliminationFlavorEnabled: boolean;
+  /** Optional Discord webhook URL — see below for validation rules. */
+  discordWebhookUrl: string | null;
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -356,6 +358,12 @@ export default function SettingsPage() {
           saving={mutation.isPending}
           onSave={(v) => mutation.mutate({ coinCap: v })}
         />
+
+        <DiscordWebhookSection
+          value={settings?.discordWebhookUrl ?? null}
+          saving={mutation.isPending}
+          onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
+        />
       </section>
 
       {/*
@@ -575,6 +583,71 @@ function CoinCapSection({
           Save
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Discord webhook URL — fires an end-of-giveaway embed if set. We validate
+ * the shape client-side (the server applies the same regex) so the streamer
+ * gets immediate feedback if they paste a non-webhook URL. Empty string
+ * clears the value on the server.
+ */
+function DiscordWebhookSection({
+  value,
+  saving,
+  onSave,
+}: {
+  value: string | null;
+  saving: boolean;
+  onSave: (v: string | null) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? value ?? "";
+  const trimmed = display.trim();
+  const isWebhook = /^https:\/\/(?:[a-z]+\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/i.test(trimmed);
+  const valid = trimmed === "" || isWebhook;
+  const changed = (trimmed === "" ? null : trimmed) !== (value ?? null);
+
+  function handleSave() {
+    if (!valid || !changed) return;
+    onSave(trimmed === "" ? null : trimmed);
+    setDraft(null);
+  }
+
+  return (
+    <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-lg">💬</span>
+        <Label htmlFor="discord-webhook" className="text-base font-semibold text-foreground">Discord Webhook</Label>
+        <Hint
+          text="Paste a Discord channel webhook URL. When set, every ended giveaway posts a winner embed there. Leave blank to disable."
+          side="right"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        When a giveaway ends, the goblin posts a winner announcement to this Discord channel. Server Settings → Integrations → Webhooks → New Webhook → Copy URL.
+      </p>
+      <div className="flex flex-wrap gap-2 items-start">
+        <Input
+          id="discord-webhook"
+          type="url"
+          value={display}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="https://discord.com/api/webhooks/…"
+          className={`flex-1 min-w-[260px] ${!valid ? "border-destructive" : ""}`}
+          data-testid="input-discord-webhook"
+        />
+        <Button size="sm" disabled={!valid || !changed || saving} onClick={handleSave} data-testid="button-save-discord-webhook">
+          <Save className="w-3.5 h-3.5 mr-1" />
+          Save
+        </Button>
+      </div>
+      {!valid && (
+        <p className="text-xs text-destructive">
+          That doesn't look like a Discord webhook URL. It should start with <code>https://discord.com/api/webhooks/</code>.
+        </p>
+      )}
     </div>
   );
 }

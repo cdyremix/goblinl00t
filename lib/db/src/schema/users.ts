@@ -40,5 +40,9 @@ export const usersTable = pgTable("users", {
   // include tokens like {user}, {balance}, {target} — see BUILT_IN_COMMANDS
   // in bot-service.ts for which tokens each command supports.
   commandResponses: jsonb("command_responses").$type<Record<string, string>>(),
+  // Optional Discord webhook URL — when set, giveaway end fires a posted
+  // embed announcing the winner. Validated against discord.com/api/webhooks/...
+  // before write; any other URL shape is rejected.
+  discordWebhookUrl: text("discord_webhook_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

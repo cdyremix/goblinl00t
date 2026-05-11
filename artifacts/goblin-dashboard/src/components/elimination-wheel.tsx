@@ -10,6 +10,7 @@ import { useUpdateBotSettings, getGetBotSettingsQueryKey } from "@workspace/api-
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { pickEliminationFlavor, pickFinalTwoFlavor, pickVictoryFlavor } from "./elimination-flavors";
+import { PixelFightScene } from "./pixel-fight-scene";
 
 export interface WheelEntry {
   id: number | string;
@@ -109,6 +110,11 @@ export function EliminationWheel({
   // Set of slot keys currently lit up by the shuffle animation (just for
   // glow — they're not eliminated).
   const [shuffleHighlights, setShuffleHighlights] = useState<Set<string>>(new Set());
+  // When true, the pixel-art "final showdown" scene is mounted between the
+  // final-two banner and the slot grid. Driven manually from the Final Spin
+  // button so the streamer is always the one who triggers it.
+  const [showPixelFight, setShowPixelFight] = useState(false);
+  const [pixelFightDone, setPixelFightDone] = useState(false);
   // Mounted toggle for the winner celebration overlay. Pops once when the
   // wheel transitions into the revealed phase; the streamer can dismiss it
   // and the underlying wheel stays visible behind.
@@ -141,6 +147,8 @@ export function EliminationWheel({
     setEliminated(new Set());
     setHighlight(null);
     setFlavorText(null);
+    setShowPixelFight(false);
+    setPixelFightDone(false);
     // If there's nothing to eliminate (single-slot giveaway), jump
     // straight to the reveal — otherwise sit idle until the streamer
     // (or the auto-spin effect) kicks things off.
@@ -220,7 +228,25 @@ export function EliminationWheel({
     }, highlightMs);
   }
 
+  // Identify the final loser (the slot that's NOT the winner among the two
+  // remaining survivors) so the pixel fight scene can label both fighters.
+  // We compute this from current state instead of pre-storing it because
+  // the streamer can shuffle right up until they hit Final Spin.
+  const finalLoserUsername = useMemo(() => {
+    if (phase !== "final-two") return null;
+    const surviving = slots.filter(
+      (s) => !eliminated.has(s.key) && s.key !== winningSlotKey,
+    );
+    return surviving[0]?.username ?? null;
+  }, [phase, slots, eliminated, winningSlotKey]);
+
   function revealWinner() {
+    // In the final-two phase, play the pixel fight first; the scene's
+    // onDone callback chains back into the actual reveal.
+    if (phase === "final-two" && !showPixelFight && !pixelFightDone && finalLoserUsername && winner) {
+      setShowPixelFight(true);
+      return;
+    }
     if (index < eliminationOrder.length) {
       const targetKey = eliminationOrder[index]!;
       const targetSlot = slots.find((s) => s.key === targetKey);
@@ -382,6 +408,23 @@ export function EliminationWheel({
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           {liveAnnouncement}
         </div>
+
+        {/* Pixel-art final showdown — mounted only during the final-two
+            phase, after the streamer hits "Final Spin." When it finishes
+            (or is skipped via reduced-motion), we mark pixelFightDone and
+            re-invoke revealWinner() to chain straight into the reveal. */}
+        {showPixelFight && winner && finalLoserUsername && phase === "final-two" && (
+          <PixelFightScene
+            winner={winner}
+            loser={finalLoserUsername}
+            onDone={() => {
+              setShowPixelFight(false);
+              setPixelFightDone(true);
+              // Trigger the actual reveal after the scene resolves.
+              setTimeout(() => revealWinner(), 50);
+            }}
+          />
+        )}
 
         {/* RPG flavor banner */}
         {flavorEnabled && flavorText && (

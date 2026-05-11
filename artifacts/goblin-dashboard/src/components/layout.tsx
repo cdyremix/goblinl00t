@@ -4,7 +4,7 @@ import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
-  Plug, X,
+  Plug, X, MessageCircle, CreditCard,
 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { OnboardingTour } from "@/components/onboarding-tour";
@@ -216,8 +216,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Help link pinned at the bottom of the sidebar */}
-        <div className="border-t border-border px-4 py-3">
+        {/* Help / pricing / community links pinned at the bottom of the sidebar.
+            "Join Discord" intentionally targets a placeholder URL until the
+            project has its own server — the goal is to surface the channel
+            so streamers know support exists, not to fake an active community. */}
+        <div className="border-t border-border px-4 py-3 space-y-1">
           <Link
             href="/help"
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -230,6 +233,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <BookOpen className="w-4 h-4 shrink-0" />
             <span className="font-medium">Help &amp; Guide</span>
           </Link>
+          <Link
+            href="/pricing"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              location.startsWith("/pricing")
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
+            }`}
+            data-testid="link-pricing"
+          >
+            <CreditCard className="w-4 h-4 shrink-0" />
+            <span className="font-medium">Pricing</span>
+          </Link>
+          <a
+            href="https://discord.gg/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent transition-colors"
+            data-testid="link-discord"
+          >
+            <MessageCircle className="w-4 h-4 shrink-0" />
+            <span className="font-medium">Join Discord</span>
+          </a>
+          <div className="px-3 pt-1 flex items-center gap-3 text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+            <Link href="/terms" className="hover:text-foreground" data-testid="link-terms">Terms</Link>
+            <span>·</span>
+            <Link href="/privacy" className="hover:text-foreground" data-testid="link-privacy">Privacy</Link>
+          </div>
         </div>
       </aside>
       <OnboardingTour />

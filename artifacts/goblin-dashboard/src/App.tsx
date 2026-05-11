@@ -19,7 +19,11 @@ import SettingsPage from "@/pages/settings";
 import TradeOffice from "@/pages/trade-office";
 import HelpGuide from "@/pages/help";
 import ChatUsers from "@/pages/chat-users";
+import Pricing from "@/pages/pricing";
+import Terms from "@/pages/terms";
+import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -210,6 +214,17 @@ function AppRouter() {
       <Route path="/help">
         <ProtectedRoute><Layout><HelpGuide /></Layout></ProtectedRoute>
       </Route>
+      {/* Public marketing/legal routes — accessible without sign-in so the
+          footer links and SEO landing actually work for first-time visitors. */}
+      <Route path="/pricing">
+        <Layout><Pricing /></Layout>
+      </Route>
+      <Route path="/terms">
+        <Layout><Terms /></Layout>
+      </Route>
+      <Route path="/privacy">
+        <Layout><Privacy /></Layout>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -260,9 +275,13 @@ function ClerkProviderWithRoutes() {
 
 function App() {
   return (
-    <WouterRouter base={basePath}>
-      <ClerkProviderWithRoutes />
-    </WouterRouter>
+    // Wrap the whole tree so a render error in any page (or a flaky third-
+    // party hook) shows the friendly Reload screen instead of a white tab.
+    <ErrorBoundary>
+      <WouterRouter base={basePath}>
+        <ClerkProviderWithRoutes />
+      </WouterRouter>
+    </ErrorBoundary>
   );
 }
 

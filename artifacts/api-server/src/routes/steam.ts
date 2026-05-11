@@ -4,6 +4,7 @@ import { db, usersTable, tradeFulfillmentsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import crypto from "crypto";
 import { MOCK_CS2_INVENTORY, MOCK_STEAM_ID64 } from "../bot/cs2-mock-data";
+import { rateLimit } from "../lib/auth-helpers";
 
 const router = Router();
 
@@ -160,6 +161,12 @@ router.post("/steam/auth/init", (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (!SESSION_SECRET) {
     res.status(500).json({ error: "SESSION_SECRET not configured" });
+    return;
+  }
+  // Match the Twitch init throttle. Steam's OpenID flow is a top-level
+  // redirect, so a runaway client could otherwise spam outbound init calls.
+  if (!rateLimit(`steam-init:${userId}`, { max: 10, windowMs: 60_000 })) {
+    res.status(429).json({ error: "Too many requests. Slow down." });
     return;
   }
 

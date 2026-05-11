@@ -1,0 +1,40 @@
+
+    Multi-tenancy hardening. Today most giveaway routes (start, end, reroll, list, current, entries) don't check that the caller owns the channel. With one streamer this is fine, with two it's a data leak. Add a requireStreamerChannel(req) helper and wrap every giveaway/loot/stats/commands route with it. Same for the bot — getActiveTheme() and command toggles are looked up by channel, but routes like PUT /commands/:name/toggle should verify the caller owns that channel.
+    Rate limit OAuth init endpoints. /api/auth/twitch and /api/steam/auth/init mint signed cookies and external-redirect URLs; add per-Clerk-user throttling (e.g. 10/min) so a bad actor can't fill the cookie store / blast Steam.
+    CSRF on Twitch callback. Twitch flow already sets a state param — make sure routes/auth.ts actually verifies it round-trips, same way Steam verifies the signed cookie.
+    Webhook for Twitch token refresh. OAuth tokens expire; right now if the bot's token expires mid-stream it just silently disconnects. Catch the auth failure, refresh, reconnect.
+    Real Twitch follower / sub gating — the gotchas note "best-effort, falls open if env not set." For a paid product the gate needs to be strict by default, with a clear setting to opt out.
+
+Big trust/conversion items
+
+    Onboarding checklist on the dashboard. A small "Get your bot live" card with: ✅ Sign in → ⬜ Connect Twitch → ⬜ Connect Steam (optional) → ⬜ Authorize bot in chat → ⬜ Run !loot → ⬜ Run first giveaway. Streamers churn fast when the first 5 minutes feel ambiguous.
+    A real "Test in chat" panel. A small simulated chat window on the Spells page where the streamer can type !loot, !giveaway, etc. and see the bot's response without bouncing to Twitch. Massive demo value.
+    Landing page social proof + 30-second demo video. The home page right now is feature-list heavy. Add a looping wheel-spin GIF and one quote.
+    Pricing page. Even a placeholder "Free during beta — paid tiers coming" page sets the expectation. Tier ideas: Free (1 channel, basic commands), Pro ($9/mo: CS2 trade office, presets, longer history, custom branding), Partner ($29/mo: multiple mods, priority bot host, advanced analytics).
+    Discord / support link in the sidebar footer or help page.
+
+Polish that makes it feel finished
+
+    Branding consistency. Goblin theme is great, but the favicon, page title (<title>), and the meta description haven't been customized — verify those.
+    Empty states everywhere. Lots of pages assume data; check that "no giveaways yet," "no commands run yet," "no chatters yet" all have nice illustrated empty states with a CTA.
+    Mobile dashboard. Many streamers manage from a phone between sets — the sidebar collapses but the data tables don't reflow. Check /dashboard, /giveaway, /users, /stats at 375px.
+    Toast on every success/failure. I noticed several mutations don't show feedback — easy polish win.
+    Audit log / undo. "Adjust Coins" on Chat Users is destructive; add a 5-second undo toast like Gmail. Same for delete-giveaway.
+    Error boundary. The HMR error logs show several "X is not defined" crashes that whitescreen the app — a top-level <ErrorBoundary> with "Something broke, here's the error and a Reload button" stops a single bug from being a total outage.
+
+Sustainability / ops
+
+    Backups. Confirm Postgres has automated daily snapshots before customer #1 — a deleted-everyone-coins bug would otherwise be unrecoverable.
+    Observability. You already use pino — ship logs to a real sink (Better Stack / Logtail / Axiom — there's an integration) and add a /healthz and /readyz endpoint so Replit deploy alerting can page you.
+    Privacy policy + ToS pages. Twitch requires both for OAuth app verification beyond the dev limit; you'll hit it the moment a third streamer signs up.
+    Twitch app submission. Your dev OAuth app is rate-limited to ~25 users; submit for review now — it takes 1-2 weeks.
+    Backfill the case-mismatched usernames mentioned in the gotchas — write a one-shot SQL UPDATE to lowercase historical rows so balances stop splitting.
+    Schedule the bot as a separate process. Today the bot runs in the API server. If you scale the API to multiple replicas you'd connect to chat N times. Split the bot worker into its own artifact / process.
+
+Sellable surface area to add (if you want to charge premium)
+
+    Stream OBS overlay. A /overlay/:channel browser-source URL that shows the live wheel, recent winners, top hoarders — streamers love OBS-ready widgets.
+    CSV export. Ledger → Export CSV/Excel for any range. Streamers running sponsored giveaways need this for sponsor reports.
+    Scheduled / recurring giveaways. "Run a 5-min giveaway every hour while live." The presets table already exists for this; just need a scheduler.
+    Per-viewer profile pages. Click a viewer in Chat Users → see their full coin history, items won, commands used. Fans love this.
+    Webhook out — "fire a Discord/Zapier webhook when a giveaway ends" so streamers can announce winners in their Discord automatically.
