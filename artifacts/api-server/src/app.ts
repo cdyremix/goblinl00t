@@ -15,6 +15,12 @@ import { maintenanceGuard } from "./lib/maintenance-guard";
 
 const app: Express = express();
 
+// Replit fronts every artifact with a reverse proxy, so `req.ip` would
+// otherwise resolve to the proxy's loopback address — making per-IP rate
+// limits (e.g. dev-bypass-pwned, twitch OAuth init) collapse into a single
+// shared bucket. Trust one hop so X-Forwarded-For yields the real client.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

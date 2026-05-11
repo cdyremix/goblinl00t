@@ -51,6 +51,15 @@ export function SignInPage() {
   );
 }
 
+// Clerk error codes that indicate the password is in a known breach list
+// and the user is being forced to reset. We surface a "dev bypass" button
+// only when one of these fires.
+const PWNED_ERROR_CODES = new Set([
+  "form_password_pwned",
+  "form_password_pwned_sign_in",
+  "form_password_compromised",
+]);
+
 function DevPasswordSignIn({ onClose }: { onClose: () => void }) {
   const { isLoaded, signIn, setActive } = useSignIn();
   const [, setLocation] = useLocation();
@@ -58,37 +67,66 @@ function DevPasswordSignIn({ onClose }: { onClose: () => void }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pwnedBlocked, setPwnedBlocked] = useState(false);
+  const [bypassing, setBypassing] = useState(false);
+
+  async function attemptSignIn(): Promise<boolean> {
+    if (!isLoaded || !signIn) return false;
+    const result = await signIn.create({
+      identifier: identifier.trim(),
+      password,
+      strategy: "password",
+    });
+    if (result.status === "complete") {
+      await setActive({ session: result.createdSessionId });
+      setLocation("/dashboard");
+      return true;
+    }
+    setError(`Sign-in incomplete (status: ${result.status}). Use the form above instead.`);
+    return false;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isLoaded || !signIn) return;
     setError(null);
+    setPwnedBlocked(false);
     setBusy(true);
     try {
-      // strategy: "password" forces Clerk to use the password first
-      // factor, sidestepping the hosted UI's strategy chooser.
-      const result = await signIn.create({
-        identifier: identifier.trim(),
-        password,
-        strategy: "password",
-      });
-
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
-        setLocation("/dashboard");
-        return;
-      }
-      // If Clerk responds with anything other than "complete" (e.g. a
-      // second factor required), surface it so the user knows to fall
-      // back to the hosted form.
-      setError(`Sign-in incomplete (status: ${result.status}). Use the form above instead.`);
+      await attemptSignIn();
     } catch (err) {
-      // Clerk SDK errors expose `.errors[0].longMessage` for human-readable copy.
-      const clerkErr = (err as { errors?: Array<{ longMessage?: string; message?: string }> })?.errors?.[0];
+      const clerkErr = (err as { errors?: Array<{ code?: string; longMessage?: string; message?: string }> })?.errors?.[0];
+      if (clerkErr?.code && PWNED_ERROR_CODES.has(clerkErr.code)) {
+        setPwnedBlocked(true);
+      }
       const msg = clerkErr?.longMessage ?? clerkErr?.message ?? (err instanceof Error ? err.message : "Sign-in failed");
       setError(msg);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleBypassAndRetry() {
+    setError(null);
+    setBypassing(true);
+    try {
+      const r = await fetch(`${basePath}/api/auth/dev-bypass-pwned`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: identifier.trim(), password }),
+      });
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}))) as { error?: string };
+        setError(body.error ?? "Bypass failed.");
+        return;
+      }
+      // Clerk has cleared the compromised flag — retry the sign-in.
+      setPwnedBlocked(false);
+      await attemptSignIn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bypass failed.");
+    } finally {
+      setBypassing(false);
     }
   }
 
@@ -143,6 +181,27 @@ function DevPasswordSignIn({ onClose }: { onClose: () => void }) {
       </div>
       {error && (
         <p className="text-xs text-destructive" data-testid="text-dev-signin-error">{error}</p>
+      )}
+      {pwnedBlocked && (
+        <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
+          <p className="text-[11px] text-amber-200 leading-relaxed">
+            This password was found in a public breach list and Clerk is forcing a reset.
+            For dev/admin accounts (fake mailbox), bypass the check below — the
+            credentials still need to be valid.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full border-amber-500/50 hover:bg-amber-500/20"
+            onClick={handleBypassAndRetry}
+            disabled={bypassing || !identifier.trim() || !password}
+            data-testid="button-dev-bypass-pwned"
+          >
+            {bypassing && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+            Bypass breach check & retry
+          </Button>
+        </div>
       )}
       <Button
         type="submit"
