@@ -91,6 +91,12 @@ router.post("/admin/users", async (req, res) => {
   // other role (Streamer / Dev) we enforce the same checks the public
   // sign-up flow does — those accounts represent real end users.
   const bypassValidation = isAdmin === true;
+  // Admin AND dev accounts skip the Clerk email-verification round-trip.
+  // Both roles are operator-provisioned (internal staff / QA), so a
+  // verification code email isn't useful — the admin already owns the
+  // mailbox or is just seeding a throwaway login. Streamer rows still
+  // get the standard verification flow.
+  const skipEmailVerification = isAdmin === true || isDev === true;
 
   if (!bypassValidation) {
     const issues: Array<{ path: (string | number)[]; message: string }> = [];
@@ -145,6 +151,25 @@ router.post("/admin/users", async (req, res) => {
       skipPasswordChecks: bypassValidation,
     });
     clerkUserId = created.id;
+    // For admin/dev rows: explicitly flip every email address to
+    // verified=true so Clerk doesn't gate first sign-in on a code we
+    // never want to send. `createUser` leaves new addresses unverified
+    // by default, so we sweep them post-create. Best-effort — a single
+    // failed verify shouldn't block the whole create (the row exists
+    // and can still sign in once the user clicks the verify link).
+    if (skipEmailVerification) {
+      for (const addr of created.emailAddresses) {
+        try {
+          await clerkClient.emailAddresses.updateEmailAddress(addr.id, { verified: true });
+        } catch (verifyErr) {
+          const verifyMsg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+          req.log.warn(
+            { verifyMsg, clerkUserId, emailId: addr.id, adminId: ctx.user.id },
+            "admin: failed to auto-verify email on admin/dev create",
+          );
+        }
+      }
+    }
   } catch (err) {
     const errMessage = err instanceof Error ? err.message : String(err);
     // Clerk SDK errors surface a `.errors[]` array with stable codes.
@@ -253,7 +278,42 @@ router.get("/admin/users", async (req, res) => {
     .from(usersTable)
     .orderBy(desc(usersTable.createdAt));
 
-  res.json({ users: rows });
+  // Best-effort enrich every row with `emailVerified` from Clerk. Done
+  // as a single batched `getUserList({ userId: [...] })` call so the
+  // roster pays one Clerk round-trip instead of N. Any failure leaves
+  // the field as `null` and the table renders an "unknown" badge —
+  // we don't want a flaky Clerk to take down the entire admin console.
+  const verifiedById = new Map<string, boolean>();
+  if (rows.length > 0) {
+    try {
+      // Clerk's getUserList caps `userId[]` at 100 per call; chunk so a
+      // big roster doesn't silently drop the tail.
+      const ids = rows.map((r) => r.clerkUserId);
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const list = await clerkClient.users.getUserList({ userId: chunk, limit: chunk.length });
+        for (const cu of list.data) {
+          const primary =
+            cu.emailAddresses.find((e) => e.id === cu.primaryEmailAddressId) ??
+            cu.emailAddresses[0];
+          // Clerk's verification status lives on `emailAddress.verification.status`
+          // — "verified" is the only success value; "unverified", "expired",
+          // "failed", and `null` all map to false.
+          verifiedById.set(cu.id, primary?.verification?.status === "verified");
+        }
+      }
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      req.log.warn({ errMessage }, "admin: bulk clerk lookup failed — emailVerified will be null");
+    }
+  }
+
+  const enriched = rows.map((r) => ({
+    ...r,
+    emailVerified: verifiedById.has(r.clerkUserId) ? verifiedById.get(r.clerkUserId)! : null,
+  }));
+
+  res.json({ users: enriched });
 });
 
 /**
@@ -281,6 +341,7 @@ router.get("/admin/users/:id", async (req, res) => {
   // a missing Clerk profile to block the rest of the dialog from loading.
   let clerk: {
     email: string | null;
+    emailVerified: boolean | null;
     firstName: string | null;
     lastName: string | null;
     createdAt: number | null;
@@ -288,12 +349,15 @@ router.get("/admin/users/:id", async (req, res) => {
   } | null = null;
   try {
     const cu = await clerkClient.users.getUser(user.clerkUserId);
-    const primaryEmail =
-      cu.emailAddresses.find((e) => e.id === cu.primaryEmailAddressId)?.emailAddress ??
-      cu.emailAddresses[0]?.emailAddress ??
-      null;
+    const primaryAddr =
+      cu.emailAddresses.find((e) => e.id === cu.primaryEmailAddressId) ??
+      cu.emailAddresses[0];
     clerk = {
-      email: primaryEmail,
+      email: primaryAddr?.emailAddress ?? null,
+      // null when Clerk lookup succeeded but the user has no email
+      // record at all (extremely rare — Clerk requires at least one
+      // identifier). Otherwise true/false from the verification status.
+      emailVerified: primaryAddr ? primaryAddr.verification?.status === "verified" : null,
       firstName: cu.firstName ?? null,
       lastName: cu.lastName ?? null,
       createdAt: cu.createdAt ?? null,

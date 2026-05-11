@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
   Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock, UserPlus, Eye, EyeOff,
+  CheckCircle2, XCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,10 @@ interface AdminUser {
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   createdAt: string;
+  // Pulled from Clerk on each list refresh. `null` means the lookup
+  // failed (Clerk transient error) — the row should render an
+  // "unknown" indicator rather than silently claiming unverified.
+  emailVerified: boolean | null;
 }
 
 interface AdminStats {
@@ -57,6 +62,7 @@ interface AdminUserDetail {
   user: AdminUser;
   clerk: {
     email: string | null;
+    emailVerified: boolean | null;
     firstName: string | null;
     lastName: string | null;
     createdAt: number | null;
@@ -958,6 +964,38 @@ function UserRow({
               ADMIN
             </Badge>
           )}
+          {user.isDev && !user.isAdmin && (
+            <Badge className="gap-1 text-[10px] bg-sky-500/20 text-sky-300 border-sky-500/40" variant="outline">
+              DEV
+            </Badge>
+          )}
+          {user.emailVerified === true ? (
+            <Badge
+              className="gap-1 text-[10px] bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+              variant="outline"
+              data-testid={`badge-email-verified-${user.id}`}
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              Email verified
+            </Badge>
+          ) : user.emailVerified === false ? (
+            <Badge
+              className="gap-1 text-[10px] bg-rose-500/15 text-rose-300 border-rose-500/40"
+              variant="outline"
+              data-testid={`badge-email-unverified-${user.id}`}
+            >
+              <XCircle className="w-3 h-3" />
+              Email unverified
+            </Badge>
+          ) : (
+            <Badge
+              className="gap-1 text-[10px] text-muted-foreground"
+              variant="outline"
+              data-testid={`badge-email-unknown-${user.id}`}
+            >
+              Email status unknown
+            </Badge>
+          )}
           {user.stripeSubscriptionId && (
             <Badge variant="outline" className="text-[10px]">Stripe sub</Badge>
           )}
@@ -1239,6 +1277,29 @@ function IdentitySection({
         <CardContent className="p-4 space-y-3">
           <h3 className="font-semibold text-sm flex items-center gap-1.5">
             <Mail className="w-4 h-4" /> Email
+            {detail.clerk?.emailVerified === true ? (
+              <Badge
+                className="gap-1 text-[10px] bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                variant="outline"
+                data-testid="badge-edit-email-verified"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                Verified
+              </Badge>
+            ) : detail.clerk?.emailVerified === false ? (
+              <Badge
+                className="gap-1 text-[10px] bg-rose-500/15 text-rose-300 border-rose-500/40"
+                variant="outline"
+                data-testid="badge-edit-email-unverified"
+              >
+                <XCircle className="w-3 h-3" />
+                Unverified
+              </Badge>
+            ) : detail.clerk ? (
+              <Badge className="gap-1 text-[10px] text-muted-foreground" variant="outline">
+                Status unknown
+              </Badge>
+            ) : null}
           </h3>
           <div className="flex gap-2 items-end">
             <div className="flex-1">
