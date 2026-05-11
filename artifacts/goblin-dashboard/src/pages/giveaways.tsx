@@ -3,8 +3,12 @@ import {
   getGetCurrentGiveawayQueryKey,
   useListGiveawayPresets, useCreateGiveawayPreset, useDeleteGiveawayPreset, useLaunchGiveawayPreset,
   getListGiveawayPresetsQueryKey,
-  useSeedTestGiveaway,
+  useSeedGiveawayEntries,
+  useStartGiveaway, useEndGiveaway,
+  useGetGiveawayEntries, useGetBotSettings,
+  getGetGiveawayEntriesQueryKey, getGetBotSettingsQueryKey,
 } from "@workspace/api-client-react";
+import type { Giveaway } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,11 +25,13 @@ import * as z from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
-import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins, Bookmark, Rocket, Trash2, FlaskConical } from "lucide-react";
+import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins, Bookmark, Rocket, Trash2, FlaskConical, Play, Sparkles, Users, ChevronDown, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { InventoryPicker, type PickedItem } from "@/components/inventory-picker";
 import { Hint } from "@/components/hint";
+import { EliminationWheel } from "@/components/elimination-wheel";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -58,33 +64,6 @@ export function Giveaways() {
   const { data: currentGiveaway } = useGetCurrentGiveaway();
 
   const createMutation = useCreateGiveaway();
-  // Dev/test seeder — drops an active giveaway with ~30 fake entries so the
-  // streamer can try the elimination wheel without waiting on real chat.
-  const seedTestMutation = useSeedTestGiveaway({
-    mutation: {
-      onSuccess: (data) => {
-        toast({
-          title: "Test giveaway ready",
-          description: "30 dummy entries seeded. Open it and spin the wheel.",
-        });
-        queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetCurrentGiveawayQueryKey() });
-        // Best-effort: nudge the user toward the new giveaway detail page.
-        if (data?.id) {
-          window.setTimeout(() => {
-            window.location.assign(`/giveaway/${data.id}`);
-          }, 400);
-        }
-      },
-      onError: () => {
-        toast({
-          title: "Seeding failed",
-          description: "The goblin sneezed mid-incantation. Try again.",
-          variant: "destructive",
-        });
-      },
-    },
-  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -164,25 +143,23 @@ export function Giveaways() {
     return g.status === filter;
   });
 
+  // Pick the "spotlight" giveaway: the live one if any, else the most recent
+  // pending. This is what the hero card features so the streamer always lands
+  // on the most relevant action (start it, spin it, or pick a fresh preset).
+  const spotlight =
+    currentGiveaway?.giveaway ??
+    giveaways?.find((g) => g.status === "pending") ??
+    null;
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight text-primary">Loot Hoard</h1>
-          <p className="text-muted-foreground mt-2 text-lg">Manage your giveaways and hand out the goods.</p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => seedTestMutation.mutate()}
-          disabled={seedTestMutation.isPending}
-          className="gap-2 border-dashed border-primary/40 text-primary hover:bg-primary/10"
-          data-testid="button-seed-test-giveaway"
-        >
-          <FlaskConical className="w-4 h-4" />
-          {seedTestMutation.isPending ? "Brewing…" : "Seed Test Giveaway"}
-        </Button>
+      <div>
+        <h1 className="text-4xl font-bold tracking-tight text-primary">Loot Hoard</h1>
+        <p className="text-muted-foreground mt-2 text-lg">Run giveaways. Spin the wheel. Hand out the goods.</p>
       </div>
+
+      {/* Hero — the streamer's primary action lives here. */}
+      <SpotlightCard giveaway={spotlight} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Create Form */}
@@ -579,7 +556,13 @@ export function Giveaways() {
         {/* List */}
         <div className="lg:col-span-2 space-y-6">
           <PresetsPanel />
-          <QuickPrizePanel />
+          <CollapsibleSection
+            title="Quick Prize Drop"
+            icon={<Coins className="w-4 h-4 text-amber-400" />}
+            description="Hand a viewer coins or a random item — no giveaway needed."
+          >
+            <QuickPrizePanel />
+          </CollapsibleSection>
           <div className="flex items-center gap-2 pb-4 border-b border-border/50 overflow-x-auto">
             <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>All Loot</FilterButton>
             <FilterButton active={filter === "active"} onClick={() => setFilter("active")}>Active</FilterButton>
@@ -601,67 +584,13 @@ export function Giveaways() {
                 </Card>
               ))
             ) : filteredGiveaways && filteredGiveaways.length > 0 ? (
-              filteredGiveaways.map((giveaway) => {
-                const isActive = giveaway.status === "active";
-                const isCurrent = currentGiveaway?.giveaway?.id === giveaway.id;
-
-                return (
-                  <Link key={giveaway.id} href={`/giveaway/${giveaway.id}`}>
-                    <Card className={`border-border/50 hover:border-primary/50 transition-all cursor-pointer group ${isActive ? "bg-primary/5" : "bg-card/50"}`}>
-                      <CardContent className="p-5 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          {giveaway.prizeIconUrl ? (
-                            <img
-                              src={giveaway.prizeIconUrl}
-                              alt=""
-                              className="w-12 h-12 object-contain rounded bg-background/40 shrink-0"
-                            />
-                          ) : giveaway.prizeKind === "bot_coins" ? (
-                            <div className="w-12 h-12 flex items-center justify-center rounded bg-amber-500/15 border border-amber-500/30 shrink-0">
-                              <Coins className="w-6 h-6 text-amber-400" />
-                            </div>
-                          ) : giveaway.prizeKind === "bot_item" ? (
-                            <div className="w-12 h-12 flex items-center justify-center rounded bg-green-500/15 border border-green-500/30 shrink-0 text-2xl">
-                              👺
-                            </div>
-                          ) : null}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-1">
-                              <h3 className="font-bold text-lg text-foreground truncate group-hover:text-primary transition-colors">{giveaway.title}</h3>
-                              <StatusBadge status={giveaway.status} isCurrent={isCurrent} />
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                              <span className="flex items-center gap-1.5">
-                                <Trophy className="w-3.5 h-3.5" /> {giveaway.prize}
-                                {giveaway.prizeKind === "bot_coins" && giveaway.prizeBotCoins ? (
-                                  <span className="text-amber-400 font-mono ml-1">({giveaway.prizeBotCoins} coins)</span>
-                                ) : null}
-                              </span>
-                              <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> !{giveaway.keyword}</span>
-                              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {new Date(giveaway.createdAt).toLocaleDateString()}</span>
-                              {giveaway.requireFollower && (
-                                <span className="flex items-center gap-1 text-pink-400"><Heart className="w-3 h-3" /> followers</span>
-                              )}
-                              {giveaway.subscriberOnly && (
-                                <span className="flex items-center gap-1 text-purple-400">
-                                  <Star className="w-3 h-3" /> subs{giveaway.minSubTier ? ` T${Number(giveaway.minSubTier) / 1000}+` : ""}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="shrink-0 flex items-center gap-4">
-                          <div className="text-right hidden sm:block">
-                            <div className="text-2xl font-mono font-bold">{giveaway.entryCount}</div>
-                            <div className="text-xs text-muted-foreground uppercase tracking-wider">Entries</div>
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors group-hover:translate-x-1" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })
+              filteredGiveaways.map((giveaway) => (
+                <GiveawayRow
+                  key={giveaway.id}
+                  giveaway={giveaway}
+                  isCurrent={currentGiveaway?.giveaway?.id === giveaway.id}
+                />
+              ))
             ) : (
               <div className="text-center py-16 border border-dashed border-border/50 rounded-lg">
                 <p className="text-muted-foreground">No loot found matching this filter.</p>
@@ -1008,4 +937,439 @@ function StatusBadge({ status, isCurrent }: { status: string; isCurrent?: boolea
   if (status === "pending") return <Badge variant="outline" className="text-muted-foreground border-border">PENDING</Badge>;
   if (status === "ended") return <Badge variant="secondary" className="bg-muted text-muted-foreground">ENDED</Badge>;
   return null;
+}
+
+// =====================================================================
+// CollapsibleSection — wraps a side panel in a click-to-open card so
+// the right column doesn't scream for attention. Closed by default.
+// =====================================================================
+
+function CollapsibleSection({
+  title,
+  description,
+  icon,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card className="border-border/50 bg-card/40">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-muted/30 transition-colors"
+            data-testid={`collapsible-${title.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              {icon}
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-foreground">{title}</p>
+                {description && (
+                  <p className="text-xs text-muted-foreground truncate">{description}</p>
+                )}
+              </div>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-5 pb-5 pt-1 border-t border-border/50">{children}</div>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
+// =====================================================================
+// SpotlightCard — top-of-page hero. Surfaces the active giveaway (or the
+// most recent pending) with the streamer's #1 action front-and-center:
+//   • Pending → Start Giveaway
+//   • Active  → Spin Wheel (opens the EliminationWheel modal inline so
+//     the streamer never has to bounce into the detail page just to draw)
+// Always exposes a "+ Add 30 test entries" button so the wheel can be
+// demoed without waiting for chat to type.
+// =====================================================================
+
+function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { isSignedIn } = useAuth();
+
+  const startMutation = useStartGiveaway();
+  const endMutation = useEndGiveaway();
+  const seedEntries = useSeedGiveawayEntries();
+
+  // Wheel settings come from /api/settings.
+  const { data: botSettings } = useGetBotSettings({
+    query: { enabled: !!isSignedIn, queryKey: getGetBotSettingsQueryKey() },
+  });
+  const wheelMode = (botSettings?.wheelMode === "manual" ? "manual" : "auto") as "auto" | "manual";
+  const wheelSpeed = (
+    botSettings?.wheelSpeed === "slow" || botSettings?.wheelSpeed === "fast"
+      ? botSettings.wheelSpeed
+      : "medium"
+  ) as "slow" | "medium" | "fast";
+
+  // Pre-fetch entries for the spotlighted giveaway so the wheel modal can
+  // animate against the real roster the moment the streamer hits Spin.
+  const { data: entries } = useGetGiveawayEntries(giveaway?.id ?? 0, {
+    query: {
+      enabled: !!giveaway?.id,
+      queryKey: getGetGiveawayEntriesQueryKey(giveaway?.id ?? 0),
+    },
+  });
+
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const [wheelWinner, setWheelWinner] = useState<string | null>(null);
+
+  function invalidate(id: number) {
+    queryClient.invalidateQueries({ queryKey: getGetGiveawayEntriesQueryKey(id) });
+    queryClient.invalidateQueries({ queryKey: getGetCurrentGiveawayQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
+  }
+
+  // Empty state — no live or pending giveaway.
+  if (!giveaway) {
+    return (
+      <Card className="border-dashed border-border/60 bg-gradient-to-br from-muted/20 to-transparent">
+        <CardContent className="py-10 px-6 text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 border border-primary/20">
+            <Sparkles className="w-7 h-7 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">No live giveaway right now</h2>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto">
+            Forge one with the form below, or launch a saved preset. The wheel spin happens right here — no clicking around.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const isPending = giveaway.status === "pending";
+  const isActive = giveaway.status === "active";
+  const entryCount = giveaway.entryCount ?? 0;
+  const needsTestEntries = entryCount < 5;
+
+  function handleSeed() {
+    if (!giveaway) return;
+    seedEntries.mutate(
+      { id: giveaway.id },
+      {
+        onSuccess: (g) => {
+          toast({
+            title: "Test entries added",
+            description: `${g.entryCount} total entries — ready to spin.`,
+          });
+          invalidate(giveaway.id);
+        },
+        onError: () => toast({ title: "Couldn't seed entries", variant: "destructive" }),
+      },
+    );
+  }
+
+  function handleStart() {
+    if (!giveaway) return;
+    startMutation.mutate(
+      { id: giveaway.id },
+      {
+        onSuccess: () => {
+          toast({ title: "Giveaway started!", description: "The goblin announced it in chat." });
+          invalidate(giveaway.id);
+        },
+        onError: () => toast({ title: "Couldn't start", variant: "destructive" }),
+      },
+    );
+  }
+
+  function handleSpin() {
+    if (!giveaway) return;
+    endMutation.mutate(
+      { id: giveaway.id },
+      {
+        onSuccess: (result) => {
+          // Open the wheel BEFORE invalidating so the entries we already loaded
+          // are still the full pre-end roster for the elimination animation.
+          setWheelWinner(result.winner.username);
+          setWheelOpen(true);
+        },
+        onError: (err: unknown) => {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : "No entries to draw from — try the test-entries button.";
+          toast({ title: "Couldn't pick a winner", description: msg, variant: "destructive" });
+        },
+      },
+    );
+  }
+
+  function handleWheelClose() {
+    setWheelOpen(false);
+    if (giveaway) invalidate(giveaway.id);
+  }
+
+  return (
+    <>
+      <Card
+        className={`border-2 ${isActive ? "border-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-[0_0_40px_rgba(255,180,0,0.15)]" : "border-border/60 bg-card/60"}`}
+        data-testid="card-spotlight-giveaway"
+      >
+        <CardContent className="p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+            {/* Prize visual */}
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              {giveaway.prizeIconUrl ? (
+                <img
+                  src={giveaway.prizeIconUrl}
+                  alt=""
+                  className="w-20 h-20 object-contain rounded-lg bg-background/40 shrink-0"
+                />
+              ) : giveaway.prizeKind === "bot_coins" ? (
+                <div className="w-20 h-20 flex items-center justify-center rounded-lg bg-amber-500/15 border border-amber-500/30 shrink-0">
+                  <Coins className="w-10 h-10 text-amber-400" />
+                </div>
+              ) : (
+                <div className="w-20 h-20 flex items-center justify-center rounded-lg bg-green-500/15 border border-green-500/30 shrink-0 text-4xl">
+                  👺
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <StatusBadge status={giveaway.status} isCurrent={isActive} />
+                  <span className="text-xs text-muted-foreground font-mono">!{giveaway.keyword}</span>
+                </div>
+                <h2 className="text-2xl font-bold text-foreground truncate">{giveaway.title}</h2>
+                <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                  <Trophy className="w-3.5 h-3.5" />
+                  {giveaway.prize}
+                  {giveaway.prizeKind === "bot_coins" && giveaway.prizeBotCoins ? (
+                    <span className="text-amber-400 font-mono ml-1">({giveaway.prizeBotCoins} coins)</span>
+                  ) : null}
+                </p>
+              </div>
+            </div>
+
+            {/* Entry count */}
+            <div className="flex items-center gap-6 lg:border-l lg:border-border/50 lg:pl-6">
+              <div className="text-center">
+                <div className="text-4xl font-mono font-bold text-foreground" data-testid="text-spotlight-entry-count">
+                  {entryCount}
+                </div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
+                  Entries
+                </div>
+              </div>
+            </div>
+
+            {/* Primary action */}
+            <div className="flex flex-col gap-2 lg:min-w-[200px]">
+              {isPending && (
+                <Button
+                  onClick={handleStart}
+                  disabled={startMutation.isPending}
+                  size="lg"
+                  className="font-bold gap-2 shadow-[0_0_20px_rgba(255,180,0,0.25)]"
+                  data-testid="button-spotlight-start"
+                >
+                  <Play className="w-4 h-4" />
+                  {startMutation.isPending ? "Starting…" : "Start Giveaway"}
+                </Button>
+              )}
+              {isActive && (
+                <Button
+                  onClick={handleSpin}
+                  disabled={endMutation.isPending || entryCount === 0}
+                  size="lg"
+                  className="font-bold gap-2 bg-primary text-primary-foreground shadow-[0_0_20px_rgba(255,180,0,0.4)]"
+                  data-testid="button-spotlight-spin"
+                >
+                  <Zap className="w-4 h-4" />
+                  {endMutation.isPending ? "Drawing…" : "🎡 Spin Wheel"}
+                </Button>
+              )}
+              {needsTestEntries && (
+                <Button
+                  onClick={handleSeed}
+                  disabled={seedEntries.isPending}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-dashed border-primary/40 text-primary hover:bg-primary/10"
+                  data-testid="button-spotlight-seed-entries"
+                >
+                  <FlaskConical className="w-3.5 h-3.5" />
+                  {seedEntries.isPending ? "Seeding…" : "+ 30 test entries"}
+                </Button>
+              )}
+              <Link
+                href={`/giveaway/${giveaway.id}`}
+                className="text-xs text-center text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                data-testid="link-spotlight-detail"
+              >
+                Open detail page →
+              </Link>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <EliminationWheel
+        open={wheelOpen}
+        onClose={handleWheelClose}
+        entries={(entries ?? []).map((e) => ({ id: e.id, username: e.username, tickets: e.tickets }))}
+        winner={wheelWinner}
+        mode={wheelMode}
+        speed={wheelSpeed}
+      />
+    </>
+  );
+}
+
+// =====================================================================
+// GiveawayRow — list item with inline actions. Click anywhere on the
+// title/prize area to open the detail page; the action buttons on the
+// right are scoped click handlers (stopPropagation) so they don't fire
+// the navigation. Pending rows can be started in place; active rows
+// expose a "Spin" shortcut; rows with <5 entries get a "+ Test" button.
+// =====================================================================
+
+function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: boolean }) {
+  const isActive = giveaway.status === "active";
+  const isPending = giveaway.status === "pending";
+  const isEnded = giveaway.status === "ended";
+  const entryCount = giveaway.entryCount ?? 0;
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const seedEntries = useSeedGiveawayEntries();
+  const startMutation = useStartGiveaway();
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetCurrentGiveawayQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetGiveawayEntriesQueryKey(giveaway.id) });
+  }
+
+  function handleSeed(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    seedEntries.mutate(
+      { id: giveaway.id },
+      {
+        onSuccess: (g) => {
+          toast({ title: "Test entries added", description: `${g.entryCount} total entries.` });
+          invalidate();
+        },
+        onError: () => toast({ title: "Couldn't seed", variant: "destructive" }),
+      },
+    );
+  }
+
+  function handleStart(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    startMutation.mutate(
+      { id: giveaway.id },
+      {
+        onSuccess: () => {
+          toast({ title: "Giveaway started!" });
+          invalidate();
+        },
+        onError: () => toast({ title: "Couldn't start", variant: "destructive" }),
+      },
+    );
+  }
+
+  return (
+    <Card className={`border-border/50 hover:border-primary/50 transition-all group ${isActive ? "bg-primary/5" : "bg-card/50"}`}>
+      <CardContent className="p-5 flex items-center justify-between gap-4">
+        <Link
+          href={`/giveaway/${giveaway.id}`}
+          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+          data-testid={`link-giveaway-${giveaway.id}`}
+        >
+          {giveaway.prizeIconUrl ? (
+            <img
+              src={giveaway.prizeIconUrl}
+              alt=""
+              className="w-12 h-12 object-contain rounded bg-background/40 shrink-0"
+            />
+          ) : giveaway.prizeKind === "bot_coins" ? (
+            <div className="w-12 h-12 flex items-center justify-center rounded bg-amber-500/15 border border-amber-500/30 shrink-0">
+              <Coins className="w-6 h-6 text-amber-400" />
+            </div>
+          ) : giveaway.prizeKind === "bot_item" ? (
+            <div className="w-12 h-12 flex items-center justify-center rounded bg-green-500/15 border border-green-500/30 shrink-0 text-2xl">
+              👺
+            </div>
+          ) : null}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-1">
+              <h3 className="font-bold text-lg text-foreground truncate group-hover:text-primary transition-colors">{giveaway.title}</h3>
+              <StatusBadge status={giveaway.status} isCurrent={isCurrent} />
+            </div>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+              <span className="flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5" /> {giveaway.prize}
+                {giveaway.prizeKind === "bot_coins" && giveaway.prizeBotCoins ? (
+                  <span className="text-amber-400 font-mono ml-1">({giveaway.prizeBotCoins} coins)</span>
+                ) : null}
+              </span>
+              <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> !{giveaway.keyword}</span>
+              <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {entryCount} entries</span>
+              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {new Date(giveaway.createdAt).toLocaleDateString()}</span>
+              {giveaway.requireFollower && (
+                <span className="flex items-center gap-1 text-pink-400"><Heart className="w-3 h-3" /> followers</span>
+              )}
+              {giveaway.subscriberOnly && (
+                <span className="flex items-center gap-1 text-purple-400">
+                  <Star className="w-3 h-3" /> subs{giveaway.minSubTier ? ` T${Number(giveaway.minSubTier) / 1000}+` : ""}
+                </span>
+              )}
+            </div>
+          </div>
+        </Link>
+        <div className="shrink-0 flex items-center gap-2">
+          {(isPending || isActive) && entryCount < 5 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSeed}
+              disabled={seedEntries.isPending}
+              className="gap-1 border-dashed border-primary/30 text-primary hover:bg-primary/10 hidden sm:inline-flex"
+              data-testid={`button-row-seed-${giveaway.id}`}
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+              + Test
+            </Button>
+          )}
+          {isPending && (
+            <Button
+              size="sm"
+              onClick={handleStart}
+              disabled={startMutation.isPending}
+              className="gap-1 font-bold"
+              data-testid={`button-row-start-${giveaway.id}`}
+            >
+              <Play className="w-3.5 h-3.5" />
+              Start
+            </Button>
+          )}
+          {isEnded && giveaway.winnerUsername && (
+            <span className="text-xs text-amber-400 font-mono hidden md:inline-flex items-center gap-1">
+              👑 {giveaway.winnerUsername}
+            </span>
+          )}
+          {/* Decorative — the title-area Link already handles navigation. */}
+          <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" aria-hidden="true" />
+        </div>
+      </CardContent>
+    </Card>
+  );
 }

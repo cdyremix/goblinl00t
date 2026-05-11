@@ -382,6 +382,57 @@ export const RerollGiveawayResponse = zod.object({
 });
 
 /**
+ * Dev/test helper. Inserts ~30 fake entries with varied ticket counts
+into the specified giveaway. Uses onConflictDoNothing on (giveawayId,
+username) so calling it twice is safe — duplicates are skipped.
+
+ * @summary Bulk-insert fake entries into an existing giveaway (test helper)
+ */
+export const SeedGiveawayEntriesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SeedGiveawayEntriesResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  prize: zod.string(),
+  prizeAssetId: zod.string().nullable(),
+  prizeIconUrl: zod.string().nullable(),
+  prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+  prizeBotCoins: zod.number().nullable(),
+  prizeBotRarity: zod
+    .union([
+      zod.literal("common"),
+      zod.literal("uncommon"),
+      zod.literal("rare"),
+      zod.literal("epic"),
+      zod.literal("legendary"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  description: zod.string().nullable(),
+  status: zod.enum(["pending", "active", "ended"]),
+  channel: zod.string(),
+  keyword: zod.string(),
+  requireFollower: zod.boolean(),
+  subscriberOnly: zod.boolean(),
+  minSubTier: zod
+    .union([
+      zod.literal("1000"),
+      zod.literal("2000"),
+      zod.literal("3000"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  winnerId: zod.number().nullable(),
+  winnerUsername: zod.string().nullable(),
+  entryCount: zod.number(),
+  createdAt: zod.string(),
+  startedAt: zod.string().nullable(),
+  endedAt: zod.string().nullable(),
+});
+
+/**
  * @summary Get entries for a giveaway
  */
 export const GetGiveawayEntriesParams = zod.object({

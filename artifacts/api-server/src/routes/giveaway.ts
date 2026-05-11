@@ -108,6 +108,11 @@ router.post("/giveaway", async (req, res) => {
  * channel — matches the rest of giveaway.ts' channel resolution).
  */
 router.post("/giveaway/seed-test", async (req, res) => {
+  // Same prod-gate as /seed-entries — see that handler for rationale.
+  if (process.env["NODE_ENV"] === "production") {
+    res.status(403).json({ error: "Seeding is disabled in production" });
+    return;
+  }
   const { userId } = getAuth(req);
   let channel = "goblinl00t";
   if (userId) {
@@ -144,10 +149,72 @@ router.post("/giveaway/seed-test", async (req, res) => {
     })
     .returning();
 
-  // Hand-rolled cast of fake viewers — varied vibes so the wheel feels alive.
-  // Ticket counts are weighted: most viewers have 1 ticket, a handful are
-  // whales with 3-7, exercising the elimination wheel's odds calculations too.
-  const FAKE_VIEWERS: Array<{ name: string; tickets: number }> = [
+  await db.insert(giveawayEntriesTable).values(
+    FAKE_VIEWERS.map((v) => ({
+      giveawayId: giveaway!.id,
+      username: v.name,
+      tickets: v.tickets,
+    }))
+  );
+
+  res.status(201).json(serializeGiveaway(giveaway!, FAKE_VIEWERS.length));
+});
+
+/**
+ * POST /giveaway/:id/seed-entries — companion to /giveaway/seed-test.
+ *
+ * Bulk-inserts the canned FAKE_VIEWERS roster into an existing giveaway so
+ * the streamer can test the elimination wheel against any giveaway they've
+ * already created (e.g. the one they just made via the form). Idempotent
+ * via onConflictDoNothing on the (giveawayId, username) unique index.
+ */
+router.post("/giveaway/:id/seed-entries", async (req, res) => {
+  // Gate dev/test seeders out of production so a stray button click on the
+  // live deployment can't dump 30 fake viewers into a real channel's stats.
+  if (process.env["NODE_ENV"] === "production") {
+    res.status(403).json({ error: "Seeding is disabled in production" });
+    return;
+  }
+  const id = Number(req.params["id"]);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [giveaway] = await db
+    .select()
+    .from(giveawaysTable)
+    .where(eq(giveawaysTable.id, id))
+    .limit(1);
+  if (!giveaway) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+
+  await db
+    .insert(giveawayEntriesTable)
+    .values(
+      FAKE_VIEWERS.map((v) => ({
+        giveawayId: id,
+        username: v.name,
+        tickets: v.tickets,
+      }))
+    )
+    .onConflictDoNothing();
+
+  const [{ count: cnt }] = await db
+    .select({ count: count() })
+    .from(giveawayEntriesTable)
+    .where(eq(giveawayEntriesTable.giveawayId, id));
+
+  res.json(serializeGiveaway(giveaway, Number(cnt)));
+});
+
+// Hand-rolled cast of fake viewers — varied vibes so the wheel feels alive.
+// Ticket counts are weighted: most viewers have 1 ticket, a handful are
+// whales with 3-7, exercising the elimination wheel's odds calculations too.
+// Module-scope so both seed routes share the same roster.
+const FAKE_VIEWERS: Array<{ name: string; tickets: number }> = [
     { name: "loot_pirate", tickets: 5 },
     { name: "neon_cat", tickets: 1 },
     { name: "speedrun_sam", tickets: 3 },
@@ -178,18 +245,7 @@ router.post("/giveaway/seed-test", async (req, res) => {
     { name: "afk_alex", tickets: 1 },
     { name: "clutch_clara", tickets: 3 },
     { name: "yolo_yara", tickets: 1 },
-  ];
-
-  await db.insert(giveawayEntriesTable).values(
-    FAKE_VIEWERS.map((v) => ({
-      giveawayId: giveaway!.id,
-      username: v.name,
-      tickets: v.tickets,
-    }))
-  );
-
-  res.status(201).json(serializeGiveaway(giveaway!, FAKE_VIEWERS.length));
-});
+];
 
 router.get("/giveaway/current", async (_req, res) => {
   const [active] = await db

@@ -224,6 +224,31 @@ paths:
         "401":
           description: Unauthorized
 
+  /giveaway/{id}/seed-entries:
+    post:
+      operationId: seedGiveawayEntries
+      tags: [giveaway]
+      summary: Bulk-insert fake entries into an existing giveaway (test helper)
+      description: |
+        Dev/test helper. Inserts ~30 fake entries with varied ticket counts
+        into the specified giveaway. Uses onConflictDoNothing on (giveawayId,
+        username) so calling it twice is safe — duplicates are skipped.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Entries seeded; returns updated giveaway with entryCount
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Giveaway"
+        "404":
+          description: Giveaway not found
+
   /giveaway/{id}/entries:
     get:
       operationId: getGiveawayEntries
