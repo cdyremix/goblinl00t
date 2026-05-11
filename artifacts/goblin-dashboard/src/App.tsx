@@ -23,6 +23,7 @@ import { Admin } from "@/pages/admin";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
+import DevSignIn from "@/pages/dev-sign-in";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useSubscriptionTier } from "@/hooks/use-tier";
 import { MaintenanceGate } from "@/components/maintenance-gate";
@@ -210,6 +211,10 @@ function AppRouter() {
       <Route path="/" component={HomeRedirect} />
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
+      {/* Dev-only sign-in shortcut. The server endpoint hard-404s in
+          production, but we also gate the route so the bundle doesn't
+          even ship the page in published builds. */}
+      {import.meta.env.DEV && <Route path="/dev-sign-in" component={DevSignIn} />}
       <Route path="/dashboard">
         <ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>
       </Route>

@@ -168,4 +168,55 @@ router.get("/auth/twitch/callback", async (req, res) => {
   res.redirect(`https://${host}/account?tab=channel&connected=twitch`);
 });
 
+/**
+ * POST /auth/dev-sign-in — DEV-ONLY shortcut that issues a Clerk
+ * sign-in ticket for the requested email so QA can hop into the
+ * dashboard without going through Clerk's email-OTP / new-device
+ * verification flows.
+ *
+ * Hard-gated to `NODE_ENV !== "production"` so this endpoint literally
+ * does not exist on the published app — even an attacker who knew the
+ * URL would get a 404. Rate-limited per-IP to make brute-forcing email
+ * addresses noisy. Returns `{ ticket }` which the frontend exchanges
+ * via `signIn.create({ strategy: "ticket", ticket })`.
+ */
+const DevSignInBody = z.object({ email: z.string().trim().min(1).max(254) });
+
+router.post("/auth/dev-sign-in", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (!rateLimit(`dev-sign-in:${req.ip ?? "unknown"}`, { max: 10, windowMs: 60_000 })) {
+    res.status(429).json({ error: "Too many attempts" });
+    return;
+  }
+  const parsed = DevSignInBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body" });
+    return;
+  }
+  const email = parsed.data.email.toLowerCase();
+  try {
+    // Clerk's `getUserList({ emailAddress })` is the supported lookup
+    // path. We then mint a sign-in token bound to that user id; the
+    // token is single-use and short-lived (default 30d, we cap to 5m).
+    const list = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
+    const user = list.data[0];
+    if (!user) {
+      res.status(404).json({ error: "No user with that email." });
+      return;
+    }
+    const token = await clerkClient.signInTokens.createSignInToken({
+      userId: user.id,
+      expiresInSeconds: 300,
+    });
+    res.json({ ticket: token.token });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : "Unknown error";
+    req.log.warn({ errMessage }, "dev-sign-in: failed to mint ticket");
+    res.status(500).json({ error: "Failed to mint dev ticket" });
+  }
+});
+
 export default router;
