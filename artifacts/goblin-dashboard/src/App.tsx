@@ -239,7 +239,7 @@ function ClerkProviderWithRoutes() {
         },
         signUp: {
           start: {
-            title: "Join the Hoard",
+            title: "Join the Horde",
             subtitle: "Create your goblin account to get started",
           },
         },

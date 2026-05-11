@@ -39,7 +39,7 @@ interface BotSettings {
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
   {
     id: "goblin",
-    name: "Goblin Hoard",
+    name: "Goblin Horde",
     emoji: "👺",
     description: "The original mischievous loot goblin — chaotic, greedy, and very excitable.",
   },
@@ -88,19 +88,24 @@ function useSteamConnection() {
   const { getToken } = useAuth();
   const qc = useQueryClient();
 
+  // Real Steam OpenID 2.0 sign-in. The server returns the URL we should send
+  // the user to; Steam authenticates them and posts back to our callback,
+  // which sets a cookie and redirects to /settings?connected=steam.
   const connect = useMutation({
     mutationFn: async () => {
       const token = await getToken();
-      const res = await fetch("/api/steam/connect", {
+      const res = await fetch("/api/steam/auth/init", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to connect Steam");
-      return res.json() as Promise<{ steamId64: string; steamUsername: string }>;
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["bot-settings"] });
-      void qc.invalidateQueries({ queryKey: ["steam-inventory"] });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to start Steam sign-in");
+      }
+      const { url } = (await res.json()) as { url: string };
+      // Top-level navigation — Steam needs a real browser redirect.
+      window.location.assign(url);
+      return { url };
     },
   });
 
@@ -307,7 +312,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2">
                 <span className="text-lg">✨</span>
                 <Label htmlFor="loot-drops" className="text-base font-semibold text-foreground">Special-Item Loot Drops</Label>
-                <Hint text="When ON, !loot occasionally drops buff items (Lucky Charm, Goblin Blessing, Hoard Magnet, Trickster's Die) instead of plain sellable items. Turn OFF to make !loot only roll regular items." side="right" />
+                <Hint text="When ON, !loot occasionally drops buff items (Lucky Charm, Goblin Blessing, Horde Magnet, Trickster's Die) instead of plain sellable items. Turn OFF to make !loot only roll regular items." side="right" />
               </div>
               <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
                 Allow buff items (Lucky Charm, Goblin Blessing, etc.) to roll from !loot.
@@ -476,7 +481,7 @@ export default function SettingsPage() {
                   </p>
                 )}
                 <p className="text-[10px] text-muted-foreground/70">
-                  Test mode — uses a sample inventory for demo purposes
+                  Sign in with your real Steam account. We only store your public SteamID and profile name.
                 </p>
               </div>
             )}
@@ -689,7 +694,7 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
   const customs = visible.filter((c) => c.isCustom);
   const totalCount = visible.length;
   const enabledCount = visible.filter((c) => c.enabled).length;
-  const themeLabel = activeTheme === "cs2" ? "CS2 Arms Deal" : "Goblin Hoard";
+  const themeLabel = activeTheme === "cs2" ? "CS2 Arms Deal" : "Goblin Horde";
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} asChild>
@@ -1079,7 +1084,7 @@ function NewCustomCommandForm({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="both">Both themes</SelectItem>
-            <SelectItem value="goblin">Goblin Hoard only</SelectItem>
+            <SelectItem value="goblin">Goblin Horde only</SelectItem>
             <SelectItem value="cs2">CS2 Arms Deal only</SelectItem>
           </SelectContent>
         </Select>

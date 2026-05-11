@@ -29,7 +29,7 @@ const COMMANDS: { cmd: string; desc: string; rarity: string; group: CmdGroup }[]
 
 const GROUP_META: Record<CmdGroup, { label: string; tag: string; tagClass: string }> = {
   general: { label: "General Commands", tag: "always available", tagClass: "text-muted-foreground" },
-  goblin:  { label: "Goblin Hoard Commands", tag: "Goblin theme", tagClass: "text-amber-400" },
+  goblin:  { label: "Goblin Horde Commands", tag: "Goblin theme", tagClass: "text-amber-400" },
   cs2:     { label: "CS2 Arms Deal Commands", tag: "CS2 theme", tagClass: "text-blue-400" },
 };
 
@@ -139,7 +139,7 @@ export function Home() {
             <p className="text-lg text-muted-foreground max-w-xl lg:mx-0 mx-auto mb-8 leading-relaxed">
               Goblin L00t turns your Twitch chat into a loot economy — viewers earn coins, roll for drops,
               and battle through an elimination wheel for whatever prize you put on the line. Pick a theme
-              like Goblin Hoard or CS2 Arms Deal, or stick with the classic goblin chaos.
+              like Goblin Horde or CS2 Arms Deal, or stick with the classic goblin chaos.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 lg:justify-start justify-center mb-6">
@@ -263,7 +263,7 @@ export function Home() {
             <HeroFeature
               icon={<Package className="w-7 h-7 text-blue-400" />}
               title="Themed prizes"
-              desc="Goblin Hoard for chaos and custom rewards, CS2 Arms Deal for skin giveaways with Steam inventory + a Trade Office to track delivery. More themes coming."
+              desc="Goblin Horde for chaos and custom rewards, CS2 Arms Deal for skin giveaways with Steam inventory + a Trade Office to track delivery. More themes coming."
               accent="blue"
             />
           </div>

@@ -9,12 +9,8 @@ const CLIENT_ID = process.env.TWITCH_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET ?? "";
 const REDIRECT_URI = process.env.TWITCH_REDIRECT_URI ?? "";
 
-// Step 1 — redirect user to Twitch OAuth
-router.get("/auth/twitch", (req, res) => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-
-  const state = Buffer.from(JSON.stringify({ userId })).toString("base64url");
+function buildTwitchAuthUrl(clerkUserId: string): string {
+  const state = Buffer.from(JSON.stringify({ userId: clerkUserId })).toString("base64url");
   const scopes = "chat:read chat:edit channel:manage:broadcast";
   const url = new URL("https://id.twitch.tv/oauth2/authorize");
   url.searchParams.set("client_id", CLIENT_ID);
@@ -22,7 +18,24 @@ router.get("/auth/twitch", (req, res) => {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", scopes);
   url.searchParams.set("state", state);
-  res.redirect(url.toString());
+  return url.toString();
+}
+
+// Step 1 — return the Twitch OAuth URL the frontend should send the user to.
+// We *return JSON* rather than `res.redirect()` because the previous flow
+// triggered the redirect from a top-level `<a href>`, which doesn't carry
+// the Clerk Bearer token; Clerk's session cookie isn't reliably set on the
+// API origin under the proxy setup, so the route would 401 and the button
+// silently did nothing for users. Frontend now does
+// `authedFetch('/api/auth/twitch')` then `window.location.assign(url)`.
+router.get("/auth/twitch", (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!CLIENT_ID || !REDIRECT_URI) {
+    res.status(500).json({ error: "Twitch OAuth is not configured (missing TWITCH_CLIENT_ID / TWITCH_REDIRECT_URI)." });
+    return;
+  }
+  res.json({ url: buildTwitchAuthUrl(userId) });
 });
 
 // Step 2 — Twitch redirects back here
@@ -90,10 +103,10 @@ router.get("/auth/twitch/callback", async (req, res) => {
     });
   }
 
-  // Redirect back to account page
+  // Redirect back to the channel tab so the user lands on the binding card.
   const domains = (process.env.REPLIT_DOMAINS ?? "").split(",");
   const host = domains[0] ?? "localhost";
-  res.redirect(`https://${host}/account`);
+  res.redirect(`https://${host}/account?tab=channel&connected=twitch`);
 });
 
 export default router;

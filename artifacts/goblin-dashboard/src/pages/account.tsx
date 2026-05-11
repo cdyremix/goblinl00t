@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useUser, useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -56,7 +56,7 @@ const PLANS = [
   },
   {
     id: "premium",
-    name: "Hoard Master",
+    name: "Horde Master",
     price: "$9.99",
     period: "per month",
     icon: <Sword className="w-6 h-6 text-purple-400" />,
@@ -105,6 +105,34 @@ export function Account() {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [twitchConnecting, setTwitchConnecting] = useState(false);
+
+  // Read `?tab=channel` (set by the sidebar's "Connect Twitch" reminder
+  // and by the Twitch OAuth callback) so the user lands on the right tab
+  // instead of the default Identity view.
+  const initialTab = useMemo(() => {
+    if (typeof window === "undefined") return "identity";
+    const t = new URLSearchParams(window.location.search).get("tab");
+    return t === "channel" || t === "rank" || t === "identity" ? t : "identity";
+  }, []);
+
+  async function startTwitchConnect() {
+    setTwitchConnecting(true);
+    try {
+      const r = await authedFetch("/api/auth/twitch");
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        toast({ title: "Couldn't start Twitch sign-in", description: err.error ?? "Try again.", variant: "destructive" });
+        setTwitchConnecting(false);
+        return;
+      }
+      const { url } = (await r.json()) as { url: string };
+      window.location.assign(url);
+    } catch {
+      setTwitchConnecting(false);
+      toast({ title: "Couldn't start Twitch sign-in", variant: "destructive" });
+    }
+  }
 
   async function authedFetch(path: string, init: RequestInit = {}) {
     const token = await getToken();
@@ -178,10 +206,10 @@ export function Account() {
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
         <h1 className="font-medieval text-4xl font-bold tracking-tight text-primary">The Scroll</h1>
-        <p className="text-muted-foreground mt-2 text-lg">Manage your hoard membership and channel bindings.</p>
+        <p className="text-muted-foreground mt-2 text-lg">Manage your horde membership and channel bindings.</p>
       </div>
 
-      <Tabs defaultValue="identity" className="w-full">
+      <Tabs defaultValue={initialTab} className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="identity" data-testid="tab-identity">
             <Gem className="w-3.5 h-3.5 mr-1.5" /> Identity
@@ -321,13 +349,19 @@ export function Account() {
                 <p className="text-foreground font-medium">No channel bound yet</p>
                 <p className="text-sm text-muted-foreground">The goblin is homeless. Give him a stream to haunt.</p>
               </div>
-              <a
-                href={`${BASE}/api/auth/twitch`}
-                className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-lg font-bold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+              <button
+                type="button"
+                onClick={startTwitchConnect}
+                disabled={twitchConnecting}
+                className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-lg font-bold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+                data-testid="button-authorize-twitch"
               >
-                <Tv className="w-4 h-4" />
-                Authorize on Twitch
-              </a>
+                {twitchConnecting ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting…</>
+                ) : (
+                  <><Tv className="w-4 h-4" /> Authorize on Twitch</>
+                )}
+              </button>
             </div>
           )}
         </CardContent>
@@ -775,6 +809,6 @@ function ChangePasswordDialog({ open, onOpenChange, user, onSuccess }: DialogPro
 
 function PlanBadge({ tier }: { tier: string }) {
   if (tier === "pro") return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 font-medieval"><Crown className="w-3 h-3 mr-1" />Goblin King</Badge>;
-  if (tier === "premium") return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 font-medieval"><Sword className="w-3 h-3 mr-1" />Hoard Master</Badge>;
+  if (tier === "premium") return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 font-medieval"><Sword className="w-3 h-3 mr-1" />Horde Master</Badge>;
   return <Badge variant="outline" className="text-muted-foreground font-medieval"><Shield className="w-3 h-3 mr-1" />Cave Dweller</Badge>;
 }

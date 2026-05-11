@@ -2,7 +2,7 @@ import {
   useListGiveaways, useCreateGiveaway, getListGiveawaysQueryKey, useGetCurrentGiveaway,
   getGetCurrentGiveawayQueryKey,
   useSeedGiveawayEntries,
-  useStartGiveaway, useEndGiveaway, useDeleteGiveaway,
+  useStartGiveaway, useEndGiveaway, useDeleteGiveaway, useSeedTestGiveaway,
   useGetGiveawayEntries, useGetBotSettings,
   getGetGiveawayEntriesQueryKey, getGetBotSettingsQueryKey,
 } from "@workspace/api-client-react";
@@ -30,6 +30,10 @@ import { InventoryPicker, type PickedItem } from "@/components/inventory-picker"
 import { Hint } from "@/components/hint";
 import { EliminationWheel } from "@/components/elimination-wheel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -119,7 +123,7 @@ export function Giveaways() {
         onSuccess: () => {
           toast({
             title: "Giveaway created",
-            description: "Ready to be started from the hoard list.",
+            description: "Ready to be started from the horde list.",
           });
           form.reset();
           setPickedIcon(null);
@@ -151,9 +155,12 @@ export function Giveaways() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-4xl font-bold tracking-tight text-primary">Loot Hoard</h1>
-        <p className="text-muted-foreground mt-2 text-lg">Run giveaways. Spin the wheel. Hand out the goods.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight text-primary">Loot Horde</h1>
+          <p className="text-muted-foreground mt-2 text-lg">Run giveaways. Spin the wheel. Hand out the goods.</p>
+        </div>
+        <TestGiveawayButton />
       </div>
 
       {/* Hero — the streamer's primary action lives here. */}
@@ -220,7 +227,7 @@ export function Giveaways() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="cs2">🔫 CS2 Skin</SelectItem>
-                            <SelectItem value="bot_item">👺 Goblin Hoard</SelectItem>
+                            <SelectItem value="bot_item">👺 Goblin Horde</SelectItem>
                             <SelectItem value="bot_coins">🪙 Coins</SelectItem>
                           </SelectContent>
                         </Select>
@@ -540,7 +547,7 @@ export function Giveaways() {
                   </div>
 
                   <Button type="submit" disabled={createMutation.isPending} className="w-full font-bold">
-                    {createMutation.isPending ? "Forging..." : "Add to Hoard"}
+                    {createMutation.isPending ? "Forging..." : "Add to Horde"}
                   </Button>
                 </form>
               </Form>
@@ -557,11 +564,22 @@ export function Giveaways() {
           >
             <QuickPrizePanel />
           </CollapsibleSection>
-          <div className="flex items-center gap-2 pb-4 border-b border-border/50 overflow-x-auto">
-            <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>All Loot</FilterButton>
-            <FilterButton active={filter === "active"} onClick={() => setFilter("active")}>Active</FilterButton>
-            <FilterButton active={filter === "pending"} onClick={() => setFilter("pending")}>Pending</FilterButton>
-            <FilterButton active={filter === "ended"} onClick={() => setFilter("ended")}>Ended</FilterButton>
+          <div className="space-y-3 pb-4 border-b border-border/50">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-primary" />
+                Your Giveaways
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Every giveaway you've forged. Filter by status, then start, spin, or delete.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto">
+              <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>All Loot</FilterButton>
+              <FilterButton active={filter === "active"} onClick={() => setFilter("active")}>Active</FilterButton>
+              <FilterButton active={filter === "pending"} onClick={() => setFilter("pending")}>Pending</FilterButton>
+              <FilterButton active={filter === "ended"} onClick={() => setFilter("ended")}>Ended</FilterButton>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -596,6 +614,46 @@ export function Giveaways() {
 
       <InventoryPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={handlePick} />
     </div>
+  );
+}
+
+// Header-bar shortcut that spins up a fresh giveaway pre-loaded with ~30
+// fake entries so the streamer can demo the wheel without rallying real
+// chatters. Calls POST /giveaway/seed-test (dev-gated server-side — won't
+// run in prod). Shown next to the page title so it's always reachable
+// regardless of whether a giveaway already exists.
+function TestGiveawayButton() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const seedTest = useSeedTestGiveaway();
+  return (
+    <Button
+      variant="outline"
+      onClick={() =>
+        seedTest.mutate(undefined, {
+          onSuccess: () => {
+            toast({
+              title: "🧪 Test giveaway forged",
+              description: "Loaded with ~30 fake entries — spin the wheel whenever you're ready.",
+            });
+            queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
+            queryClient.invalidateQueries({ queryKey: getGetCurrentGiveawayQueryKey() });
+          },
+          onError: () =>
+            toast({
+              title: "Couldn't create test giveaway",
+              description: "Test giveaways are dev-only. They're disabled in production.",
+              variant: "destructive",
+            }),
+        })
+      }
+      disabled={seedTest.isPending}
+      className="gap-2 border-dashed border-primary/40 text-primary hover:bg-primary/10"
+      data-testid="button-create-test-giveaway"
+    >
+      <FlaskConical className="w-4 h-4" />
+      {seedTest.isPending ? "Forging…" : "Create Test Giveaway"}
+    </Button>
   );
 }
 
@@ -775,7 +833,7 @@ function QuickPrizePanel() {
 // Giveaway Presets (SavePresetButton + PresetsPanel) lived here. Removed
 // per UX simplification — streamers asked to drop the saved-preset
 // workflow because the create form is fast enough on its own and the
-// presets panel was visual clutter on the Loot Hoard. The DB table and
+// presets panel was visual clutter on the Loot Horde. The DB table and
 // /giveaway-presets routes still exist for back-compat with any
 // pre-existing preset rows, but no UI surfaces them anymore.
 
@@ -1099,6 +1157,7 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
   const seedEntries = useSeedGiveawayEntries();
   const startMutation = useStartGiveaway();
   const deleteMutation = useDeleteGiveaway();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
@@ -1106,21 +1165,22 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
     queryClient.invalidateQueries({ queryKey: getGetGiveawayEntriesQueryKey(giveaway.id) });
   }
 
-  // Confirm-then-delete. We use the native confirm() dialog rather than
-  // an AlertDialog because this is a destructive but reversible-by-recreate
-  // action and the row already has a trash-can icon making intent clear.
-  function handleDelete(e: React.MouseEvent) {
+  // Open the styled AlertDialog instead of the browser's native confirm().
+  // The trash-can button is inside a Link, so we stop propagation/default
+  // to keep the user from being navigated to the detail page mid-confirm.
+  function openDelete(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const ok = window.confirm(
-      `Delete "${giveaway.title}" and all its entries?\n\nCoins already credited to a winner are NOT clawed back. This cannot be undone.`,
-    );
-    if (!ok) return;
+    setDeleteOpen(true);
+  }
+
+  function confirmDelete() {
     deleteMutation.mutate(
       { id: giveaway.id },
       {
         onSuccess: () => {
           toast({ title: "Giveaway deleted" });
+          setDeleteOpen(false);
           invalidate();
         },
         onError: () => toast({ title: "Couldn't delete", variant: "destructive" }),
@@ -1241,7 +1301,7 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
           <Button
             size="icon"
             variant="ghost"
-            onClick={handleDelete}
+            onClick={openDelete}
             disabled={deleteMutation.isPending}
             className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 w-8"
             title="Delete giveaway"
@@ -1253,6 +1313,37 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
           <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" aria-hidden="true" />
         </div>
       </CardContent>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent data-testid={`dialog-delete-giveaway-${giveaway.id}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" />
+              Delete &ldquo;{giveaway.title}&rdquo;?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 pt-2">
+              <span className="block">
+                This permanently removes the giveaway and all of its entries.
+              </span>
+              <span className="block text-amber-400/90">
+                Coins already credited to a winner are <span className="font-semibold">not</span> clawed back.
+              </span>
+              <span className="block text-muted-foreground">This action cannot be undone.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-delete-${giveaway.id}`}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid={`button-confirm-delete-${giveaway.id}`}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete forever"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

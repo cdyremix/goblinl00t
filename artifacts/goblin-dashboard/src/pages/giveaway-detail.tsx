@@ -131,7 +131,7 @@ export function GiveawayDetail() {
       <div className="text-center py-24">
         <h2 className="text-2xl font-bold text-foreground mb-2">Giveaway not found</h2>
         <p className="text-muted-foreground mb-6">The goblin lost track of this one.</p>
-        <Link href="/giveaway" className="text-primary hover:underline">Back to Hoard</Link>
+        <Link href="/giveaway" className="text-primary hover:underline">Back to Horde</Link>
       </div>
     );
   }
@@ -147,7 +147,7 @@ export function GiveawayDetail() {
       <div>
         <Link href="/giveaway" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm mb-4" data-testid="link-back">
           <ArrowLeft className="w-4 h-4" />
-          Back to Hoard
+          Back to Horde
         </Link>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>

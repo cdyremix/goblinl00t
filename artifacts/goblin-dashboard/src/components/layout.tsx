@@ -77,7 +77,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // Operations (`/dashboard`). The `/users` route still works for deep links.
   const allLinks = [
     { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
-    { href: "/giveaway", label: "Loot Hoard", icon: Gift },
+    { href: "/giveaway", label: "Loot Horde", icon: Gift },
     { href: "/stats", label: "Ledger", icon: BarChart3 },
     { href: "/settings", label: "Forge", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true, newWhen: isCS2 },
@@ -296,7 +296,7 @@ function ConnectTwitchReminder({ show, userId }: { show: boolean; userId: string
         </p>
       </div>
       <Link
-        href="/account"
+        href="/account?tab=channel"
         className="shrink-0 inline-flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-bold px-3 py-1.5 rounded-md hover:brightness-110 transition-all"
         data-testid="link-connect-twitch"
       >

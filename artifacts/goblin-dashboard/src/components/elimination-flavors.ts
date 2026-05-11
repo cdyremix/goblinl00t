@@ -70,10 +70,10 @@ export function pickFinalTwoFlavor(usernames: [string, string]): string {
  */
 export function pickVictoryFlavor(username: string): string {
   const lines = [
-    `👑 @${username} stands victorious atop the goblin's hoard!`,
+    `👑 @${username} stands victorious atop the goblin's horde!`,
     `🏆 The wheel has spoken: @${username} wins it all!`,
     `🎉 @${username} survived the carnage and claims the prize!`,
-    `⚜️ Hail @${username} — champion of the hoard!`,
+    `⚜️ Hail @${username} — champion of the horde!`,
     `🌟 @${username} rolled a natural 20 on destiny.`,
   ];
   return lines[Math.floor(Math.random() * lines.length)]!;

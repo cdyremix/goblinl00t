@@ -34,11 +34,11 @@ const SECTIONS: Section[] = [
   },
   {
     icon: <Gift className="w-5 h-5 text-primary" />,
-    title: "Loot Hoard (giveaways)",
+    title: "Loot Horde (giveaways)",
     description: "Forge giveaways and hand out Quick Prizes.",
     bullets: [
-      { title: "Three prize sources", body: "🔫 CS2 Skin (manual delivery via Trade Office), 👺 Goblin Hoard (random item rolled into winner's pouch), 🪙 Coins (credited directly)." },
-      { title: "Bonus coins", body: "Add a coin amount to a CS2 or Goblin Hoard prize and the winner gets both." },
+      { title: "Three prize sources", body: "🔫 CS2 Skin (manual delivery via Trade Office), 👺 Goblin Horde (random item rolled into winner's pouch), 🪙 Coins (credited directly)." },
+      { title: "Bonus coins", body: "Add a coin amount to a CS2 or Goblin Horde prize and the winner gets both." },
       { title: "Quick Prize", body: "Drop coins or a random item to any viewer instantly without making a giveaway." },
       { title: "Elimination Wheel", body: "When ending a giveaway, the wheel animates eliminations until the winner remains. Speed and manual/auto mode in Forge." },
     ],
@@ -76,11 +76,11 @@ const SECTIONS: Section[] = [
   {
     icon: <User className="w-5 h-5 text-primary" />,
     title: "Account Settings",
-    description: "Your hoard membership and channel binding.",
+    description: "Your horde membership and channel binding.",
     bullets: [
       { title: "Identity", body: "Avatar, email, password. Email/password use Clerk's secure flow." },
       { title: "Channel Binding", body: "Connect or banish your Twitch channel." },
-      { title: "Rank", body: "Cave Dweller (free), Hoard Master, Goblin King — billing coming soon." },
+      { title: "Rank", body: "Cave Dweller (free), Horde Master, Goblin King — billing coming soon." },
     ],
   },
 ];

@@ -26,8 +26,8 @@ const STEPS: Step[] = [
   },
   {
     icon: <Settings2 className="w-5 h-5 text-primary" />,
-    title: "Forge & Loot Hoard",
-    body: "Tune commands, theme, and economy in the Forge. Build giveaways and hand out Quick Prizes from the Loot Hoard.",
+    title: "Forge & Loot Horde",
+    body: "Tune commands, theme, and economy in the Forge. Build giveaways and hand out Quick Prizes from the Loot Horde.",
   },
   {
     icon: <BookOpen className="w-5 h-5 text-primary" />,
