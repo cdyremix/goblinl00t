@@ -278,12 +278,14 @@ router.get("/admin/users", async (req, res) => {
     .from(usersTable)
     .orderBy(desc(usersTable.createdAt));
 
-  // Best-effort enrich every row with `emailVerified` from Clerk. Done
-  // as a single batched `getUserList({ userId: [...] })` call so the
-  // roster pays one Clerk round-trip instead of N. Any failure leaves
-  // the field as `null` and the table renders an "unknown" badge —
-  // we don't want a flaky Clerk to take down the entire admin console.
-  const verifiedById = new Map<string, boolean>();
+  // Best-effort enrich every row with `emailVerified` + `passwordEnabled`
+  // from Clerk via a single batched `getUserList({ userId: [...] })`. We
+  // surface `passwordEnabled` so the admin can spot accounts where Clerk
+  // would fall back to email-code sign-in (no password = no password
+  // first-factor available, so the prebuilt SignIn component only offers
+  // "email me a code" — which surprises operators who marked the email
+  // verified). Any Clerk failure leaves both fields `null`.
+  const clerkInfoById = new Map<string, { emailVerified: boolean; passwordEnabled: boolean }>();
   if (rows.length > 0) {
     try {
       // Clerk's getUserList caps `userId[]` at 100 per call; chunk so a
@@ -299,19 +301,26 @@ router.get("/admin/users", async (req, res) => {
           // Clerk's verification status lives on `emailAddress.verification.status`
           // — "verified" is the only success value; "unverified", "expired",
           // "failed", and `null` all map to false.
-          verifiedById.set(cu.id, primary?.verification?.status === "verified");
+          clerkInfoById.set(cu.id, {
+            emailVerified: primary?.verification?.status === "verified",
+            passwordEnabled: cu.passwordEnabled === true,
+          });
         }
       }
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : String(err);
-      req.log.warn({ errMessage }, "admin: bulk clerk lookup failed — emailVerified will be null");
+      req.log.warn({ errMessage }, "admin: bulk clerk lookup failed — clerk fields will be null");
     }
   }
 
-  const enriched = rows.map((r) => ({
-    ...r,
-    emailVerified: verifiedById.has(r.clerkUserId) ? verifiedById.get(r.clerkUserId)! : null,
-  }));
+  const enriched = rows.map((r) => {
+    const info = clerkInfoById.get(r.clerkUserId);
+    return {
+      ...r,
+      emailVerified: info ? info.emailVerified : null,
+      passwordEnabled: info ? info.passwordEnabled : null,
+    };
+  });
 
   res.json({ users: enriched });
 });
@@ -342,6 +351,7 @@ router.get("/admin/users/:id", async (req, res) => {
   let clerk: {
     email: string | null;
     emailVerified: boolean | null;
+    passwordEnabled: boolean | null;
     firstName: string | null;
     lastName: string | null;
     createdAt: number | null;
@@ -358,6 +368,10 @@ router.get("/admin/users/:id", async (req, res) => {
       // record at all (extremely rare — Clerk requires at least one
       // identifier). Otherwise true/false from the verification status.
       emailVerified: primaryAddr ? primaryAddr.verification?.status === "verified" : null,
+      // When false, the Clerk SignIn component will only offer email-code
+      // first-factor — no password input. Admin should hit "Set new
+      // password" to give the user a real password they can sign in with.
+      passwordEnabled: cu.passwordEnabled === true,
       firstName: cu.firstName ?? null,
       lastName: cu.lastName ?? null,
       createdAt: cu.createdAt ?? null,

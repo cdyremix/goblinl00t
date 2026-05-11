@@ -51,6 +51,9 @@ interface AdminUser {
   // failed (Clerk transient error) — the row should render an
   // "unknown" indicator rather than silently claiming unverified.
   emailVerified: boolean | null;
+  // When false, Clerk's SignIn component will only offer email-code
+  // sign-in (no password input shown). Operator should set a password.
+  passwordEnabled: boolean | null;
 }
 
 interface AdminStats {
@@ -63,6 +66,7 @@ interface AdminUserDetail {
   clerk: {
     email: string | null;
     emailVerified: boolean | null;
+    passwordEnabled: boolean | null;
     firstName: string | null;
     lastName: string | null;
     createdAt: number | null;
@@ -996,6 +1000,17 @@ function UserRow({
               Email status unknown
             </Badge>
           )}
+          {user.passwordEnabled === false && (
+            <Badge
+              className="gap-1 text-[10px] bg-amber-500/15 text-amber-300 border-amber-500/40"
+              variant="outline"
+              data-testid={`badge-no-password-${user.id}`}
+              title="Clerk's sign-in will only offer 'email me a code' for this account. Set a password in the Identity tab."
+            >
+              <Key className="w-3 h-3" />
+              No password
+            </Badge>
+          )}
           {user.stripeSubscriptionId && (
             <Badge variant="outline" className="text-[10px]">Stripe sub</Badge>
           )}
@@ -1373,7 +1388,32 @@ function IdentitySection({
         <CardContent className="p-4 space-y-3">
           <h3 className="font-semibold text-sm flex items-center gap-1.5">
             <Key className="w-4 h-4" /> Password
+            {detail.clerk?.passwordEnabled === true ? (
+              <Badge
+                className="gap-1 text-[10px] bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                variant="outline"
+                data-testid="badge-password-enabled"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                Set
+              </Badge>
+            ) : detail.clerk?.passwordEnabled === false ? (
+              <Badge
+                className="gap-1 text-[10px] bg-amber-500/15 text-amber-300 border-amber-500/40"
+                variant="outline"
+                data-testid="badge-password-disabled"
+              >
+                <XCircle className="w-3 h-3" />
+                Not set
+              </Badge>
+            ) : null}
           </h3>
+          {detail.clerk?.passwordEnabled === false && (
+            <p className="text-[11px] text-amber-300/80 -mt-1">
+              No password on this Clerk account — sign-in only offers an emailed code.
+              Set one below so the user can sign in with email + password.
+            </p>
+          )}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
               <Label htmlFor="admin-pw">Set new password</Label>
