@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "seed-products": "tsx ./src/seed-products.ts",
+    "seed-products:prod": "REPLIT_DEPLOYMENT=1 tsx ./src/seed-products.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
