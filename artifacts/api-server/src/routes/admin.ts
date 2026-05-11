@@ -84,13 +84,14 @@ router.post("/admin/users", async (req, res) => {
   // channel join all key on the same string.
   const normalizedTwitch = twitchUsername ? twitchUsername.toLowerCase() : null;
 
-  // Super-admin accounts auto-bypass validation. Rationale: ops/QA
-  // routinely seed admin accounts with weak well-known credentials
-  // (e.g. local dev), and there's no UX win in forcing format checks
-  // on a row the operator already has full system access to. For every
-  // other role (Streamer / Dev) we enforce the same checks the public
-  // sign-up flow does — those accounts represent real end users.
-  const bypassValidation = isAdmin === true;
+  // The /admin/users route is `requireAdmin`-gated, so the caller is
+  // ALWAYS a super-admin. Per product policy, super-admins can create
+  // any account with any credentials — fake emails, weak passwords,
+  // odd Twitch handles. We pass `skipPasswordChecks: true` to Clerk so
+  // its server-side strength rules don't reject test fixtures either.
+  // The only thing we still enforce is non-empty (Clerk requires both
+  // an email and a password to exist; that's a Clerk-side hard rule).
+  const bypassValidation = true;
   // Admin AND dev accounts skip the Clerk email-verification round-trip.
   // Both roles are operator-provisioned (internal staff / QA), so a
   // verification code email isn't useful — the admin already owns the
@@ -567,6 +568,35 @@ router.patch("/admin/users/:id", async (req, res) => {
   if (!updated) {
     res.status(404).json({ error: "User not found" });
     return;
+  }
+
+  // Promotion-to-dev/admin auto-verify: when an existing account flips
+  // from non-privileged to dev/admin, sweep its Clerk email addresses
+  // to verified=true. Mirrors the create-flow behavior (line ~160) so
+  // an operator promoting a fresh account to "dev" doesn't have to
+  // immediately follow up with a separate email-verify call. Best-effort
+  // — Clerk failures are logged but don't roll back the role change.
+  const justBecamePrivileged =
+    (nextIsAdmin && !before.isAdmin) || (nextIsDev && !before.isDev);
+  if (justBecamePrivileged) {
+    try {
+      const cu = await clerkClient.users.getUser(updated.clerkUserId);
+      for (const addr of cu.emailAddresses) {
+        if (addr.verification?.status === "verified") continue;
+        try {
+          await clerkClient.emailAddresses.updateEmailAddress(addr.id, { verified: true });
+        } catch (verifyErr) {
+          const verifyMsg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+          req.log.warn(
+            { verifyMsg, clerkUserId: updated.clerkUserId, emailId: addr.id, adminId: ctx.user.id },
+            "admin: failed to auto-verify email on dev/admin promotion",
+          );
+        }
+      }
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      req.log.warn({ errMessage, userId: id }, "admin: clerk lookup failed during promotion auto-verify");
+    }
   }
 
   // Reconcile bot membership + per-channel caches whenever the linked

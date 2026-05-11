@@ -4,8 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
   Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock, UserPlus, Eye, EyeOff,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, MoreHorizontal, UserCog, UserX,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -172,6 +176,58 @@ export function Admin() {
       toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
+  // One-click row actions. Role flips piggy-back on PATCH /admin/users/:id
+  // — the same endpoint the Edit dialog uses, so the mutex check + the
+  // promotion-auto-verify side-effect both still fire. Email-verify hits
+  // its own dedicated endpoint. We disambiguate by `user.id` in the
+  // pending check so multiple rows can show their own spinner state.
+  const quickAction = useMutation({
+    mutationFn: async ({ user, action }: { user: AdminUser; action: QuickAction }) => {
+      if (action === "verify-email") {
+        const r = await authedFetch(`/api/admin/users/${user.id}/email/verify`, {
+          method: "POST",
+        });
+        if (!r.ok) {
+          const err = (await r.json().catch(() => ({}))) as { error?: string };
+          throw new Error(err.error ?? "Verify failed");
+        }
+        return { kind: "verify" as const };
+      }
+      const body =
+        action === "make-admin"
+          ? { isAdmin: true, isDev: false }
+          : action === "make-dev"
+            ? { isAdmin: false, isDev: true }
+            : { isAdmin: false, isDev: false };
+      const r = await authedFetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Update failed");
+      }
+      return { kind: "role" as const, action };
+    },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["admin"] });
+      if (result.kind === "verify") {
+        toast({ title: "Email verified", description: "All addresses on this account are now verified." });
+      } else {
+        const label =
+          result.action === "make-admin"
+            ? "Promoted to super admin"
+            : result.action === "make-dev"
+              ? "Promoted to dev"
+              : "Demoted to regular user";
+        toast({ title: label });
+      }
+    },
+    onError: (err: Error) =>
+      toast({ title: "Action failed", description: err.message, variant: "destructive" }),
+  });
+
   const filtered = useMemo(() => {
     const all = usersQuery.data?.users ?? [];
     const q = filter.trim().toLowerCase();
@@ -275,6 +331,8 @@ export function Admin() {
                   user={u}
                   onEdit={() => setEditingId(u.id)}
                   onDelete={() => setDeletingUser(u)}
+                  onQuickAction={(action) => quickAction.mutate({ user: u, action })}
+                  quickActionPending={quickAction.isPending && quickAction.variables?.user.id === u.id}
                 />
               ))}
             </div>
@@ -495,11 +553,13 @@ function CreateUserDialog({
   // immediate feedback that they're addressing the problem.
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; twitchUsername?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
-  // Super-admin role auto-bypasses validation — server agrees and will
-  // also pass `skipPasswordChecks: true` to Clerk. Streamer/Dev rows
-  // still go through the full email/password/handle gate because they
-  // represent real end users.
-  const bypassValidation = role === "admin";
+  // The dialog only opens for super-admins (route is requireAdmin), and
+  // per product policy super-admins create accounts with no validation
+  // gate — fake emails, weak passwords, odd handles all welcome. The
+  // server agrees and will pass `skipPasswordChecks: true` to Clerk.
+  // We still surface the strength meter for visibility but it never
+  // blocks submit.
+  const bypassValidation = true;
 
   // Reset the form whenever the dialog re-opens so a previous attempt's
   // half-typed values don't bleed into the next create flow.
@@ -940,14 +1000,24 @@ function StatCard({ label, value, icon }: { label: string; value: number | strin
   );
 }
 
+type QuickAction =
+  | "make-admin"
+  | "make-dev"
+  | "make-regular"
+  | "verify-email";
+
 function UserRow({
   user,
   onEdit,
   onDelete,
+  onQuickAction,
+  quickActionPending,
 }: {
   user: AdminUser;
   onEdit: () => void;
   onDelete: () => void;
+  onQuickAction: (action: QuickAction) => void;
+  quickActionPending: boolean;
 }) {
   const tier = (user.subscriptionTier in TIER_BADGE ? user.subscriptionTier : "free") as Tier;
   const badge = TIER_BADGE[tier];
@@ -1036,15 +1106,73 @@ function UserRow({
           <Pencil className="w-3.5 h-3.5 mr-1.5" />
           Edit
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={onDelete}
-          data-testid={`button-delete-${user.id}`}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+        {/* Quick-action dropdown — one-click role flips and email
+            verify so the operator doesn't have to open the full Edit
+            dialog for the most common admin chores. The full dialog
+            still owns identity/billing/danger-zone ops. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={quickActionPending}
+              data-testid={`button-quick-actions-${user.id}`}
+              aria-label="Quick actions"
+            >
+              {quickActionPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="text-xs">Role</DropdownMenuLabel>
+            <DropdownMenuItem
+              disabled={user.isAdmin}
+              onClick={() => onQuickAction("make-admin")}
+              data-testid={`menu-make-admin-${user.id}`}
+            >
+              <Crown className="w-3.5 h-3.5 mr-2 text-amber-400" />
+              Make super admin
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={user.isDev && !user.isAdmin}
+              onClick={() => onQuickAction("make-dev")}
+              data-testid={`menu-make-dev-${user.id}`}
+            >
+              <UserCog className="w-3.5 h-3.5 mr-2 text-sky-400" />
+              Make dev account
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!user.isAdmin && !user.isDev}
+              onClick={() => onQuickAction("make-regular")}
+              data-testid={`menu-make-regular-${user.id}`}
+            >
+              <UserX className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+              Make regular user
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs">Auth</DropdownMenuLabel>
+            <DropdownMenuItem
+              disabled={user.emailVerified === true}
+              onClick={() => onQuickAction("verify-email")}
+              data-testid={`menu-verify-email-${user.id}`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 mr-2 text-emerald-400" />
+              Mark email verified
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={onDelete}
+              className="text-destructive focus:text-destructive focus:bg-destructive/10"
+              data-testid={`menu-delete-${user.id}`}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-2" />
+              Delete account
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
