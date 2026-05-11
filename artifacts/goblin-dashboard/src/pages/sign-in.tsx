@@ -14,8 +14,6 @@ import { Loader2, Wrench } from "lucide-react";
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function SignInPage() {
-  const [showDevForm, setShowDevForm] = useState(false);
-
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-8 dark">
       <div className="w-full max-w-md space-y-4">
@@ -26,26 +24,16 @@ export function SignInPage() {
           fallbackRedirectUrl={`${basePath}/dashboard`}
         />
 
-        {/* Direct password sign-in escape hatch — bypasses Clerk's hosted
-            UI entirely. Necessary because Clerk's prebuilt <SignIn /> can
-            default to email-code as the first factor depending on instance
-            config, even when the user has a password set. This form calls
-            signIn.create({ strategy: "password" }) directly so dev/admin
-            accounts (whose mailboxes are fake and can't receive a code)
-            can always get in. */}
-        {showDevForm ? (
-          <DevPasswordSignIn onClose={() => setShowDevForm(false)} />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowDevForm(true)}
-            className="text-xs text-muted-foreground hover:text-foreground underline-offset-4 hover:underline w-full text-center flex items-center justify-center gap-1.5"
-            data-testid="button-show-dev-signin"
-          >
-            <Wrench className="w-3 h-3" />
-            Dev / direct password sign-in
-          </button>
-        )}
+        {/* Direct password sign-in escape hatch — always visible so users
+            stuck on Clerk's hosted "Password compromised" / "Verify email"
+            screens can hit Back, scroll down, and route around without
+            having to re-discover the form. Calls signIn.create({
+            strategy: "password" }) directly, sidestepping the hosted UI's
+            strategy chooser AND the breach-check screen (the dev/admin
+            bypass endpoint clears the flag mid-flow). Required because
+            Replit-managed Clerk doesn't let us disable either flow at the
+            instance level. */}
+        <DevPasswordSignIn />
       </div>
     </div>
   );
@@ -60,7 +48,25 @@ const PWNED_ERROR_CODES = new Set([
   "form_password_compromised",
 ]);
 
-function DevPasswordSignIn({ onClose }: { onClose: () => void }) {
+// Heuristic: if the email looks like a throwaway dev/test address, we
+// auto-prompt the bypass UI so the user doesn't have to fail-then-discover.
+// Real users with these patterns are vanishingly rare; worst case is they
+// see a tooltip-sized hint they can ignore.
+const DEV_EMAIL_PATTERNS = [
+  /@test\./i,
+  /@example\./i,
+  /@localhost$/i,
+  /^test@/i,
+  /^dev@/i,
+  /^admin@/i,
+];
+function looksLikeDevEmail(email: string): boolean {
+  const trimmed = email.trim();
+  if (!trimmed) return false;
+  return DEV_EMAIL_PATTERNS.some((re) => re.test(trimmed));
+}
+
+function DevPasswordSignIn() {
   const { isLoaded, signIn, setActive } = useSignIn();
   const [, setLocation] = useLocation();
   const [identifier, setIdentifier] = useState("");
@@ -130,29 +136,22 @@ function DevPasswordSignIn({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const showDevHint = looksLikeDevEmail(identifier);
+
   return (
     <form
       onSubmit={handleSubmit}
       className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-3"
       data-testid="form-dev-signin"
     >
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5 text-amber-300">
-          <Wrench className="w-3.5 h-3.5" />
-          Direct password sign-in
-        </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-[11px] text-muted-foreground hover:text-foreground"
-          data-testid="button-hide-dev-signin"
-        >
-          Hide
-        </button>
-      </div>
+      <h3 className="text-sm font-semibold flex items-center gap-1.5 text-amber-300">
+        <Wrench className="w-3.5 h-3.5" />
+        Direct password sign-in
+      </h3>
       <p className="text-[11px] text-amber-200/80 leading-relaxed">
-        Skips Clerk's email-code flow. Use for dev/admin accounts with fake mailboxes
-        that can't receive a verification code.
+        Skips the form above entirely — including the email-code step AND the
+        "password compromised" wall. Use for dev/admin accounts with fake
+        mailboxes that can't receive a verification code.
       </p>
       <div className="space-y-2">
         <Label htmlFor="dev-identifier" className="text-xs">Email</Label>
@@ -181,6 +180,12 @@ function DevPasswordSignIn({ onClose }: { onClose: () => void }) {
       </div>
       {error && (
         <p className="text-xs text-destructive" data-testid="text-dev-signin-error">{error}</p>
+      )}
+      {showDevHint && !pwnedBlocked && !error && (
+        <p className="text-[11px] text-amber-200/70 leading-relaxed" data-testid="text-dev-email-hint">
+          Looks like a dev account — if Clerk says the password is compromised after you hit
+          sign-in, a "Bypass breach check" button will appear here.
+        </p>
       )}
       {pwnedBlocked && (
         <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
