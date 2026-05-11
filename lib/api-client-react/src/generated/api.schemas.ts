@@ -573,6 +573,18 @@ export interface ChatUser {
   inventory: ChatUserInventoryItem[];
 }
 
+/**
+ * Optional payload for `POST /giveaway/{id}/end`. The dashboard's
+elimination wheel passes the locally-chosen winner here; automated
+/ scripted callers may omit the body entirely and the server will
+fall back to a weighted-random pick.
+
+ */
+export interface EndGiveawayRequest {
+  /** Lowercased Twitch username chosen by the wheel. Must be present in the giveaway's entries. */
+  winnerUsername?: string;
+}
+
 export interface AdjustCoinsRequest {
   delta: number;
   reason?: string;

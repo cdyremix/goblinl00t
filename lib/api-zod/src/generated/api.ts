@@ -282,11 +282,32 @@ export const StartGiveawayResponse = zod.object({
 });
 
 /**
- * @summary End giveaway and pick winner
+ * Records the giveaway as ended with a winner. Two flows:
+
+- **Wheel-driven (dashboard)**: client supplies `winnerUsername`
+  (the last contender standing on the elimination wheel). Server
+  validates the name is in the entries pool before recording.
+- **Automated / no-body**: server falls back to a weighted-random
+  pick from the entries (legacy chat / scripted callers).
+
+ * @summary End giveaway and record the winner
  */
 export const EndGiveawayParams = zod.object({
   id: zod.coerce.number(),
 });
+
+export const EndGiveawayBody = zod
+  .object({
+    winnerUsername: zod
+      .string()
+      .optional()
+      .describe(
+        "Lowercased Twitch username chosen by the wheel. Must be present in the giveaway's entries.",
+      ),
+  })
+  .describe(
+    "Optional payload for `POST \/giveaway\/{id}\/end`. The dashboard's\nelimination wheel passes the locally-chosen winner here; automated\n\/ scripted callers may omit the body entirely and the server will\nfall back to a weighted-random pick.\n",
+  );
 
 export const EndGiveawayResponse = zod.object({
   giveaway: zod.object({

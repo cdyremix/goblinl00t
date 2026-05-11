@@ -967,7 +967,10 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
   });
 
   const [wheelOpen, setWheelOpen] = useState(false);
-  const [wheelWinner, setWheelWinner] = useState<string | null>(null);
+  // Tracks whether the wheel actually ran an elimination this open (vs
+  // the streamer dismissing without spinning). Drives whether we
+  // refetch on close — avoids button flicker when nothing happened.
+  const [didDraw, setDidDraw] = useState(false);
 
   function invalidate(id: number) {
     queryClient.invalidateQueries({ queryKey: getGetGiveawayEntriesQueryKey(id) });
@@ -1028,33 +1031,30 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
     );
   }
 
-  // Issue #2: Opening the wheel must NOT auto-end the giveaway. We open
-  // the modal first with no winner; the actual end-mutation only fires
-  // when the streamer clicks "Draw Winner!" inside the wheel. That way
-  // hitting the X just closes the modal — the giveaway stays active.
+  // Opening the wheel never touches the server. The wheel itself runs
+  // real eliminations; whoever's left at the end IS the winner, and
+  // the wheel reports them via `onWinnerDecided` — only THEN do we
+  // call the server end-mutation. Closing the modal without spinning
+  // leaves the giveaway active.
   function handleSpin() {
     if (!giveaway) return;
-    setWheelWinner(null);
+    setDidDraw(false);
     setWheelOpen(true);
   }
 
-  function handleDrawWinner() {
+  function handleWinnerDecided(username: string) {
     if (!giveaway) return;
+    setDidDraw(true);
     endMutation.mutate(
-      { id: giveaway.id },
+      { id: giveaway.id, data: { winnerUsername: username } },
       {
-        onSuccess: (result) => {
-          setWheelWinner(result.winner.username);
+        onSuccess: () => {
+          toast({ title: `Winner: ${username}`, description: "Recorded — chat has been notified." });
+          invalidate(giveaway.id);
         },
         onError: (err: unknown) => {
-          const msg =
-            err instanceof Error
-              ? err.message
-              : "No entries to draw from — try the test-entries button.";
-          toast({ title: "Couldn't pick a winner", description: msg, variant: "destructive" });
-          // Close the wheel on failure so the streamer isn't stuck staring
-          // at a non-functional draw button.
-          setWheelOpen(false);
+          const msg = err instanceof Error ? err.message : "Couldn't record winner";
+          toast({ title: "Failed to record winner", description: msg, variant: "destructive" });
         },
       },
     );
@@ -1062,9 +1062,7 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
 
   function handleWheelClose() {
     setWheelOpen(false);
-    // Only invalidate if we actually drew a winner — otherwise the cached
-    // list is still accurate and a refetch flickers the button states.
-    if (giveaway && wheelWinner) invalidate(giveaway.id);
+    if (giveaway && didDraw) invalidate(giveaway.id);
   }
 
   return (
@@ -1143,7 +1141,7 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
                   data-testid="button-spotlight-spin"
                 >
                   <Zap className="w-4 h-4" />
-                  {endMutation.isPending ? "Drawing…" : "🎡 Spin Wheel"}
+                  {endMutation.isPending ? "Recording…" : "🎡 Spin Wheel"}
                 </Button>
               )}
               {needsTestEntries && (
@@ -1175,12 +1173,11 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
         open={wheelOpen}
         onClose={handleWheelClose}
         entries={(entries ?? []).map((e) => ({ id: e.id, username: e.username, tickets: e.tickets }))}
-        winner={wheelWinner}
         mode={wheelMode}
         speed={wheelSpeed}
         flavorEnabled={flavorEnabled}
-        onDrawWinner={handleDrawWinner}
-        drawingWinner={endMutation.isPending}
+        onWinnerDecided={handleWinnerDecided}
+        recordingWinner={endMutation.isPending}
       />
     </>
   );

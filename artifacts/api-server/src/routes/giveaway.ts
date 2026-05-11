@@ -545,12 +545,31 @@ router.post("/giveaway/:id/end", async (req, res) => {
     return;
   }
 
-  // Weighted draw by tickets
-  const pool: typeof entries = [];
-  for (const entry of entries) {
-    for (let i = 0; i < entry.tickets; i++) pool.push(entry);
+  // Two paths for picking the winner:
+  //   1. Client-supplied (the elimination wheel — last contender standing
+  //      IS the winner; the wheel sends us their username here so we
+  //      simply record it). We MUST validate the name is in the entries
+  //      pool to avoid trusting arbitrary input.
+  //   2. No body — fallback to weighted random by tickets, used by any
+  //      automated / scripted callers (and historically the only path).
+  const bodyWinnerRaw = (req.body as { winnerUsername?: unknown } | undefined)?.winnerUsername;
+  const bodyWinner = typeof bodyWinnerRaw === "string" ? bodyWinnerRaw.trim().toLowerCase() : null;
+
+  let winner: (typeof entries)[number];
+  if (bodyWinner) {
+    const found = entries.find((e) => e.username.toLowerCase() === bodyWinner);
+    if (!found) {
+      res.status(400).json({ error: "winnerUsername is not in the entries pool" });
+      return;
+    }
+    winner = found;
+  } else {
+    const pool: typeof entries = [];
+    for (const entry of entries) {
+      for (let i = 0; i < entry.tickets; i++) pool.push(entry);
+    }
+    winner = pool[Math.floor(Math.random() * pool.length)]!;
   }
-  const winner = pool[Math.floor(Math.random() * pool.length)]!;
 
   const [giveaway] = await db
     .update(giveawaysTable)

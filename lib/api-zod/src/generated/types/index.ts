@@ -27,6 +27,7 @@ export * from "./createGiveawayPresetPrizeBotRarity";
 export * from "./createGiveawayPresetPrizeKind";
 export * from "./deleteGiveawayPreset200";
 export * from "./disconnectSteam200";
+export * from "./endGiveawayRequest";
 export * from "./engagementReport";
 export * from "./engagementReportMetrics";
 export * from "./engagementTip";

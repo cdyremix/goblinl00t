@@ -29,6 +29,7 @@ import type {
   CreateGiveawayPreset,
   DeleteGiveawayPreset200,
   DisconnectSteam200,
+  EndGiveawayRequest,
   EngagementReport,
   GetCommandStatsParams,
   GetEngagementReportParams,
@@ -818,7 +819,15 @@ export const useStartGiveaway = <
 };
 
 /**
- * @summary End giveaway and pick winner
+ * Records the giveaway as ended with a winner. Two flows:
+
+- **Wheel-driven (dashboard)**: client supplies `winnerUsername`
+  (the last contender standing on the elimination wheel). Server
+  validates the name is in the entries pool before recording.
+- **Automated / no-body**: server falls back to a weighted-random
+  pick from the entries (legacy chat / scripted callers).
+
+ * @summary End giveaway and record the winner
  */
 export const getEndGiveawayUrl = (id: number) => {
   return `/api/giveaway/${id}/end`;
@@ -826,11 +835,14 @@ export const getEndGiveawayUrl = (id: number) => {
 
 export const endGiveaway = async (
   id: number,
+  endGiveawayRequest?: EndGiveawayRequest,
   options?: RequestInit,
 ): Promise<GiveawayResult> => {
   return customFetch<GiveawayResult>(getEndGiveawayUrl(id), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(endGiveawayRequest),
   });
 };
 
@@ -841,14 +853,14 @@ export const getEndGiveawayMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof endGiveaway>>,
     TError,
-    { id: number },
+    { id: number; data: BodyType<EndGiveawayRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof endGiveaway>>,
   TError,
-  { id: number },
+  { id: number; data: BodyType<EndGiveawayRequest> },
   TContext
 > => {
   const mutationKey = ["endGiveaway"];
@@ -862,11 +874,11 @@ export const getEndGiveawayMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof endGiveaway>>,
-    { id: number }
+    { id: number; data: BodyType<EndGiveawayRequest> }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, data } = props ?? {};
 
-    return endGiveaway(id, requestOptions);
+    return endGiveaway(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -875,11 +887,11 @@ export const getEndGiveawayMutationOptions = <
 export type EndGiveawayMutationResult = NonNullable<
   Awaited<ReturnType<typeof endGiveaway>>
 >;
-
+export type EndGiveawayMutationBody = BodyType<EndGiveawayRequest>;
 export type EndGiveawayMutationError = ErrorType<unknown>;
 
 /**
- * @summary End giveaway and pick winner
+ * @summary End giveaway and record the winner
  */
 export const useEndGiveaway = <
   TError = ErrorType<unknown>,
@@ -888,14 +900,14 @@ export const useEndGiveaway = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof endGiveaway>>,
     TError,
-    { id: number },
+    { id: number; data: BodyType<EndGiveawayRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof endGiveaway>>,
   TError,
-  { id: number },
+  { id: number; data: BodyType<EndGiveawayRequest> },
   TContext
 > => {
   return useMutation(getEndGiveawayMutationOptions(options));

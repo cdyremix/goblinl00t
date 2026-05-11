@@ -25,13 +25,15 @@ export interface EliminationWheelProps {
   /** All entries currently in the giveaway, with their ticket counts. */
   entries: WheelEntry[];
   /**
-   * The pre-determined winner returned by the server. When `null`, the
-   * wheel sits idle showing only the "Start Eliminations" button — once
-   * the streamer clicks it we call `onDrawWinner`, the server picks the
-   * winner, and the wheel then auto-runs every phase (spinning →
-   * final-two → fight → reveal) without any further clicks.
+   * Optional pre-determined winner — for replaying an already-ended
+   * giveaway. In the LIVE flow this MUST be null/undefined: the wheel
+   * picks the winner organically when the streamer clicks
+   * "Start Eliminations" (weighted random by tickets), runs real
+   * eliminations against everyone else, and the last contender
+   * standing IS the winner. The wheel then reports them via
+   * `onWinnerDecided` so the parent can record on the server.
    */
-  winner: string | null;
+  winner?: string | null;
   /** Spin mode setting from the streamer's bot settings (cosmetic only — wheel always auto-progresses). */
   mode: "auto" | "manual";
   /** Animation pacing. */
@@ -39,15 +41,13 @@ export interface EliminationWheelProps {
   /** When true, show RPG-style flavor text on each elimination. */
   flavorEnabled: boolean;
   /**
-   * Streamer-initiated draw. The wheel's only footer CTA is
-   * "Start Eliminations" — clicking it (a) fires this callback so the
-   * server picks the winner, then (b) auto-runs everything the moment
-   * the parent feeds back a non-null `winner`. Without this prop the
-   * wheel assumes the parent has already drawn before opening.
+   * Fired EXACTLY ONCE per open, the moment the wheel reaches the
+   * `revealed` phase with a winner. Parent should record this winner
+   * on the server (e.g. `useEndGiveaway({ winnerUsername })`).
    */
-  onDrawWinner?: () => void;
-  /** Loading flag for the draw-winner network call. */
-  drawingWinner?: boolean;
+  onWinnerDecided?: (username: string) => void;
+  /** Optional indicator while parent is recording the winner on the server. */
+  recordingWinner?: boolean;
   /** Optional callback once the final winner reveal completes. */
   onComplete?: () => void;
 }
@@ -93,27 +93,49 @@ function buildOrder(userSlots: UserSlot[], winnerUsername: string): string[] {
   return shuffle(targets);
 }
 
+/**
+ * Pick a winner client-side using weighted random by ticket count
+ * (matches the server's legacy fallback behavior so existing odds /
+ * loyalty incentives are unchanged). The last contender standing on
+ * the wheel IS this user — eliminations target everyone else.
+ */
+function pickWeightedWinner(entries: WheelEntry[]): string | null {
+  const pool: string[] = [];
+  for (const e of entries) {
+    const t = Math.max(1, e.tickets);
+    for (let i = 0; i < t; i++) pool.push(e.username);
+  }
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)] ?? null;
+}
+
 export function EliminationWheel({
   open,
   onClose,
   entries,
-  winner,
+  winner: predeterminedWinner,
   mode: _mode, // kept for API compat / settings popover; wheel always auto-runs.
   speed,
   flavorEnabled,
-  onDrawWinner,
-  drawingWinner,
+  onWinnerDecided,
+  recordingWinner,
   onComplete,
 }: EliminationWheelProps) {
   const baseUserSlots = useMemo(() => buildUserSlots(entries), [entries]);
 
-  // If the server-chosen winner isn't present in the entries snapshot
-  // (chat can outpace the dashboard refetch), we splice them into the
-  // wheel as an extra slot. This MUST flow into `livingUsers` /
-  // `finalOpponent` derivation too — otherwise the auto
-  // final-two → fight transition stalls because `finalOpponent` stays
-  // null. We keep the patched slot in its own state so the splice is
-  // single-source-of-truth for tickets, displayOrder, AND livingUsers.
+  // The wheel chooses the winner LOCALLY when the streamer clicks
+  // "Start Eliminations" (or honors `predeterminedWinner` if the parent
+  // is replaying an already-ended giveaway). Either way this string is
+  // the single source of truth for "who survives" while the modal is
+  // open, and gets fed to `onWinnerDecided` once we hit the reveal.
+  const [internalWinner, setInternalWinner] = useState<string | null>(null);
+  const winner = predeterminedWinner ?? internalWinner;
+
+  // For the replay path (predeterminedWinner supplied) the username
+  // might not be in the entries snapshot if entries were edited after
+  // the giveaway ended. Splice them in so `finalOpponent` derivation
+  // and the card grid never see a null/missing slot. NOT used in the
+  // live flow — the wheel only picks names that exist in `entries`.
   const [extraWinnerSlot, setExtraWinnerSlot] = useState<UserSlot | null>(null);
   const userSlots = useMemo(
     () => (extraWinnerSlot ? [...baseUserSlots, extraWinnerSlot] : baseUserSlots),
@@ -139,15 +161,26 @@ export function EliminationWheel({
   >("idle");
   const [flavorText, setFlavorText] = useState<string | null>(null);
   const [shuffleHighlights, setShuffleHighlights] = useState<Set<string>>(new Set());
-  // True once the streamer clicks "Start Eliminations" — the wheel
-  // begins auto-spinning the moment the parent passes back a winner.
-  const [autoStartAfterDraw, setAutoStartAfterDraw] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shuffleTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // Reset effect — runs when the modal opens or the entry pool changes.
+  // Fires `onWinnerDecided` exactly once per open. Reset on each open.
+  const winnerReportedRef = useRef(false);
+
+  // Tracks previous `open` so the reset effect only fires on a
+  // false→true transition. CRITICAL: parents call `invalidate()` /
+  // `invalidateAll()` immediately on successful record, which refetches
+  // entries WHILE the modal is still open. If we reset on every
+  // `baseUserSlots` change we'd wipe `phase`/`internalWinner` mid-
+  // session, re-enable Start, and permit a second `onWinnerDecided` →
+  // a duplicate end-mutation. Scoping the reset to open transitions
+  // means in-session entry refetches are ignored entirely.
+  const prevOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (!open || wasOpen) return;
+    // false → true: fresh open, do the reset.
     const initialTickets: Record<string, number> = {};
     for (const u of baseUserSlots) initialTickets[u.username] = u.originalTickets;
     setTickets(initialTickets);
@@ -158,45 +191,59 @@ export function EliminationWheel({
     setHighlight(null);
     setFlavorText(null);
     setPhase("idle");
-    setAutoStartAfterDraw(false);
+    setInternalWinner(null);
+    winnerReportedRef.current = false;
     // Crucial: clear the in-flight lock so a previous spin tick that
     // never completed (because the modal closed mid-highlight-timeout)
     // can't permanently jam the next session's elimination loop.
     eliminatingRef.current = false;
   }, [open, baseUserSlots]);
 
-  // When the parent finally returns a winner (after Start Eliminations
-  // fired the draw), build the elimination order and auto-spin.
+  // Replay path: parent supplied a `predeterminedWinner` for an already
+  // -ended giveaway. Build the elimination order against that winner so
+  // the visual replay still ends with them standing. The LIVE flow does
+  // NOT use this branch — `handleStart` builds the order itself the
+  // instant it picks the winner.
   useEffect(() => {
-    if (!open || !winner) return;
+    if (!open || !predeterminedWinner) return;
     if (eliminationOrder.length > 0) return;
-    // Defensive: if the server-chosen winner isn't in our local entries
-    // snapshot (entries can lag behind server when chat is fast), splice
-    // them in so the fight overlay can never soft-lock on a null opponent.
-    const winnerInSlots = userSlots.some((u) => u.username === winner);
+    const winnerInSlots = userSlots.some((u) => u.username === predeterminedWinner);
     let effectiveSlots = userSlots;
     if (!winnerInSlots) {
-      const patched: UserSlot = { username: winner, originalTickets: 1 };
+      const patched: UserSlot = { username: predeterminedWinner, originalTickets: 1 };
       setExtraWinnerSlot(patched);
-      setTickets((prev) => ({ ...prev, [winner]: 1 }));
-      setDisplayOrder((prev) => (prev.includes(winner) ? prev : [...prev, winner]));
+      setTickets((prev) => ({ ...prev, [predeterminedWinner]: 1 }));
+      setDisplayOrder((prev) => (prev.includes(predeterminedWinner) ? prev : [...prev, predeterminedWinner]));
       effectiveSlots = [...userSlots, patched];
     }
-    const order = buildOrder(effectiveSlots, winner);
+    const order = buildOrder(effectiveSlots, predeterminedWinner);
     setEliminationOrder(order);
     if (order.length === 0) {
-      // Single-user giveaway — straight to reveal.
       setPhase("revealed");
-      if (flavorEnabled) setFlavorText(pickVictoryFlavor(winner));
+      if (flavorEnabled) setFlavorText(pickVictoryFlavor(predeterminedWinner));
       onComplete?.();
-      return;
-    }
-    if (autoStartAfterDraw) {
-      // Tiny defer so React commits the order before the spin loop sees it.
-      timerRef.current = setTimeout(() => setPhase("spinning"), 50);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, winner, userSlots]);
+  }, [open, predeterminedWinner, userSlots]);
+
+  // Once we land on `revealed` with a known winner, tell the parent so
+  // they can record on the server. Guarded by a ref so it fires once
+  // per open, no matter which code path drove us into `revealed`
+  // (eliminateOne tail, spinning useEffect lone-survivor, finishFight,
+  // or single-user shortcut). REPLAY MODE guard: when the parent
+  // supplied `predeterminedWinner`, this is a re-open of an
+  // already-ended giveaway — the server already knows the winner and
+  // we MUST NOT call back, otherwise we'd issue a duplicate
+  // end-mutation against an already-ended row.
+  useEffect(() => {
+    if (phase !== "revealed") return;
+    if (winnerReportedRef.current) return;
+    if (!winner) return;
+    if (predeterminedWinner != null) return;
+    winnerReportedRef.current = true;
+    onWinnerDecided?.(winner);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, winner]);
 
   // Cleanup on unmount and on close.
   useEffect(() => {
@@ -338,17 +385,37 @@ export function EliminationWheel({
   // when to peak the stream's tension instead of an arbitrary 1.6s pause.
 
   /**
-   * Single primary CTA. When no winner is drawn yet, fire the draw and
-   * flag auto-start so eliminations begin the moment the winner comes
-   * back. When a winner is already known (parent didn't supply
-   * `onDrawWinner` and pre-drew), kick off the spin directly.
+   * Single primary CTA. The wheel picks the winner ITSELF (weighted
+   * random by tickets) the moment the streamer commits, then runs real
+   * eliminations against everyone else. The server isn't told about
+   * the winner until we hit `revealed` (the `onWinnerDecided` effect
+   * handles that). If the parent supplied a `predeterminedWinner` for
+   * a replay we honor it instead — the order was already built by the
+   * predeterminedWinner useEffect above.
    */
   function handleStart() {
-    if (!winner && onDrawWinner) {
-      setAutoStartAfterDraw(true);
-      onDrawWinner();
+    if (!winner) {
+      const picked = pickWeightedWinner(entries);
+      if (!picked) return; // no entries — nothing to spin
+      setInternalWinner(picked);
+      const slotsForOrder = buildUserSlots(entries);
+      const order = buildOrder(slotsForOrder, picked);
+      setEliminationOrder(order);
+      if (order.length === 0) {
+        // Single-user giveaway — straight to reveal. The
+        // onWinnerDecided effect will fire once `winner` resolves to
+        // `picked` on the next render.
+        setPhase("revealed");
+        if (flavorEnabled) setFlavorText(pickVictoryFlavor(picked));
+        onComplete?.();
+        return;
+      }
+      // Tiny defer so React commits the order + winner state before the
+      // spin loop sees them.
+      timerRef.current = setTimeout(() => setPhase("spinning"), 50);
       return;
     }
+    // Replay path — order was already built by the effect above.
     setPhase("spinning");
   }
 
@@ -412,10 +479,15 @@ export function EliminationWheel({
   //   revealed             → "Continue" (closes the modal)
   // Spinning / shuffling / fight phases hide the button entirely so the
   // streamer can't accidentally double-fire while animations play.
-  const showStartCta = phase === "idle" && !winner && !!onDrawWinner;
+  // Idle-with-no-winner is the only state where Start makes sense.
+  // Replay mode (predetermined winner) STILL needs a Start — the
+  // streamer should kick off the visual replay deliberately.
+  const showStartCta = phase === "idle";
   const showFinalBattleCta = phase === "final-two" && !!winner && !!finalOpponent;
   const showContinueCta = phase === "revealed";
-  const startDisabled = !!drawingWinner || autoStartAfterDraw;
+  // Disable Start while there are no entries to spin (defensive — the
+  // parent should already have hidden the open trigger in that case).
+  const startDisabled = entries.length === 0;
 
   // Screen-reader announcement.
   const liveAnnouncement = isComplete && winner
@@ -465,18 +537,16 @@ export function EliminationWheel({
                 Elimination Wheel
               </DialogTitle>
               <DialogDescription className="mt-1">
-                {phase === "idle" && !winner && (
-                  <>Click <span className="font-semibold text-amber-400">Start Eliminations</span> — the wheel will eliminate contestants one by one until two remain, then crown a champion.</>
-                )}
-                {phase === "idle" && winner && livingCount > 2 && (
-                  <>Drawing your champion…</>
+                {phase === "idle" && (
+                  <>Click <span className="font-semibold text-amber-400">Start Eliminations</span> — the wheel knocks out contestants one by one until two remain, then crowns the last contender standing.</>
                 )}
                 {phase === "spinning" && <>Spinning… {livingCount} contenders still in</>}
                 {phase === "shuffling" && <>🔀 Reshuffling the bones…</>}
                 {phase === "final-two" && <>🔥 The final two! The showdown begins…</>}
                 {phase === "fight" && <>⚔️ Final clash!</>}
                 {phase === "revealed" && winner && (
-                  <>🏆 Winner: <span className="text-amber-400 font-bold">{winner}</span></>
+                  <>🏆 Winner: <span className="text-amber-400 font-bold">{winner}</span>
+                  {recordingWinner && <span className="ml-2 text-xs text-muted-foreground">(recording…)</span>}</>
                 )}
               </DialogDescription>
             </div>
@@ -651,7 +721,7 @@ export function EliminationWheel({
                 data-testid="button-wheel-start"
               >
                 <Play className="w-4 h-4" />
-                {startDisabled ? "Drawing…" : "Start Eliminations"}
+                Start Eliminations
               </Button>
             )}
             {showFinalBattleCta && (

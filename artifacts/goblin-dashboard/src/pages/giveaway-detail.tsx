@@ -72,7 +72,10 @@ export function GiveawayDetail() {
   ) as "slow" | "medium" | "fast";
 
   const [wheelOpen, setWheelOpen] = useState(false);
-  const [wheelWinner, setWheelWinner] = useState<string | null>(null);
+  // Tracks whether the wheel actually ran an elimination this open (vs
+  // the streamer dismissing without spinning). Used to decide whether to
+  // refetch on close — avoids button flicker when nothing happened.
+  const [didDraw, setDidDraw] = useState(false);
   // Inline manual-entry editor state for issue #4. Held local so we can
   // clear after a successful add.
   const [newEntryUsername, setNewEntryUsername] = useState("");
@@ -94,34 +97,39 @@ export function GiveawayDetail() {
     });
   }
 
-  // Issue #2: Open the wheel WITHOUT firing the end-mutation. The actual
-  // server end-call only happens when the streamer clicks "Draw Winner!"
-  // inside the modal — closing via X just dismisses the modal, leaving
-  // the giveaway active.
+  // Open the wheel WITHOUT touching the server. The wheel itself picks
+  // the winner organically through eliminations; we only call the
+  // server `end` mutation once the wheel reports the last contender
+  // standing via `onWinnerDecided`. Closing via X without spinning
+  // leaves the giveaway active.
   function handleEnd() {
-    setWheelWinner(null);
+    setDidDraw(false);
     setWheelOpen(true);
   }
 
-  function handleDrawWinner() {
-    endMutation.mutate({ id }, {
-      onSuccess: (result) => {
-        setWheelWinner(result.winner.username);
-        toast({ title: `Winner: ${result.winner.username}`, description: "Spin the wheel to reveal!" });
+  // Wheel finished — its last contender standing IS the winner. Tell
+  // the server to record it. The server validates the username is in
+  // the entries pool before writing.
+  function handleWinnerDecided(username: string) {
+    setDidDraw(true);
+    endMutation.mutate(
+      { id, data: { winnerUsername: username } },
+      {
+        onSuccess: () => {
+          toast({ title: `Winner: ${username}`, description: "Recorded — chat has been notified." });
+          invalidateAll();
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Couldn't record winner";
+          toast({ title: "Failed to record winner", description: msg, variant: "destructive" });
+        },
       },
-      onError: (err: unknown) => {
-        const msg = err instanceof Error ? err.message : "No entries to draw from";
-        toast({ title: "Failed to end", description: msg, variant: "destructive" });
-        setWheelOpen(false);
-      },
-    });
+    );
   }
 
   function handleWheelClose() {
     setWheelOpen(false);
-    // Only refetch if we actually drew a winner — otherwise the entries
-    // we have are still authoritative.
-    if (wheelWinner) invalidateAll();
+    if (didDraw) invalidateAll();
   }
 
   function handleRestart() {
@@ -239,7 +247,7 @@ export function GiveawayDetail() {
                 data-testid="button-end-giveaway"
               >
                 <Square className="w-4 h-4" />
-                {endMutation.isPending ? "Drawing..." : "End & Pick Winner"}
+                {endMutation.isPending ? "Recording…" : "🎡 Spin Wheel"}
               </Button>
             )}
             {isEnded && (
@@ -262,12 +270,11 @@ export function GiveawayDetail() {
         open={wheelOpen}
         onClose={handleWheelClose}
         entries={(entries ?? []).map((e) => ({ id: e.id, username: e.username, tickets: e.tickets }))}
-        winner={wheelWinner}
         mode={wheelMode}
         speed={wheelSpeed}
         flavorEnabled={botSettings?.eliminationFlavorEnabled ?? true}
-        onDrawWinner={handleDrawWinner}
-        drawingWinner={endMutation.isPending}
+        onWinnerDecided={handleWinnerDecided}
+        recordingWinner={endMutation.isPending}
       />
 
       {/* Stats Row */}
