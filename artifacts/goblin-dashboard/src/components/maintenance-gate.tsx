@@ -7,6 +7,10 @@ import { Sparkles, Wrench, Mail, LogIn, ShieldCheck } from "lucide-react";
 interface MaintenanceStatus {
   enabled: boolean;
   isAdmin: boolean;
+  // Internal QA/dev accounts. Bypass the wall just like admins, but
+  // see a different banner so it's obvious which flag is in play (and
+  // they don't accidentally think they have /admin/* powers).
+  isDev: boolean;
 }
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -72,9 +76,13 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   // Off → render the app normally, no banner, no overhead.
   if (!data.enabled) return <>{children}</>;
 
-  // Admin bypass — surface a slim banner so it's obvious the wall is
-  // active for everyone else, but let the admin keep working.
-  if (data.isAdmin) {
+  // Admin / dev bypass — surface a slim banner so it's obvious the wall
+  // is active for everyone else, but let them keep working. The banner
+  // copy distinguishes the two flags; the bypass behavior is identical.
+  if (data.isAdmin || data.isDev) {
+    const label = data.isAdmin
+      ? "You're bypassing it as an admin."
+      : "You're bypassing it as a dev account.";
     return (
       <>
         <div
@@ -82,7 +90,7 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
           data-testid="banner-maintenance-admin"
         >
           <ShieldCheck className="w-3.5 h-3.5" />
-          Maintenance mode is ON — public visitors see the launch wall. You're bypassing it as an admin.
+          Maintenance mode is ON — public visitors see the launch wall. {label}
         </div>
         {children}
       </>
