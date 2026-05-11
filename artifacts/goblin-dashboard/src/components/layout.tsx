@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutDashboard, Gift, BarChart3, Home, User, LogOut, Settings2, Send, Sparkles, ChevronDown,
+  LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown,
 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import {
@@ -175,15 +175,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </CollapsibleContent>
             </Collapsible>
-
-            <Link
-              href="/"
-              className="flex items-center gap-2 px-2 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-              data-testid="link-exit-cave"
-            >
-              <Home className="w-4 h-4 shrink-0" />
-              Exit Cave
-            </Link>
           </div>
         )}
 

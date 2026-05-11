@@ -236,6 +236,7 @@ router.post("/giveaway/:id/end", async (req, res) => {
 
   // Award bot prizes directly; only CS2 prizes need streamer-managed delivery.
   const prizeKind = (giveaway.prizeKind ?? "cs2") as "cs2" | "bot_item" | "bot_coins";
+  const bonusCoins = Math.max(0, giveaway.prizeBotCoins ?? 0);
   if (prizeKind === "bot_coins") {
     const amount = Math.max(1, giveaway.prizeBotCoins ?? 0);
     await db.insert(lootDropsTable).values({
@@ -258,6 +259,16 @@ router.post("/giveaway/:id/end", async (req, res) => {
         points: loot.coinValue,
       });
     }
+    // Optional combo prize: bonus coins on top of the loot drop.
+    if (bonusCoins > 0) {
+      await db.insert(lootDropsTable).values({
+        channel: giveaway.channel,
+        username: winner.username,
+        item: `Giveaway Bonus: ${giveaway.title}`,
+        rarity: "epic",
+        points: bonusCoins,
+      });
+    }
   } else {
     void db.insert(tradeFulfillmentsTable).values({
       giveawayId: giveaway.id,
@@ -265,6 +276,16 @@ router.post("/giveaway/:id/end", async (req, res) => {
       prize: giveaway.prize,
       status: "pending",
     }).onConflictDoNothing();
+    // Optional combo prize: bonus coins on top of the CS2 skin.
+    if (bonusCoins > 0) {
+      await db.insert(lootDropsTable).values({
+        channel: giveaway.channel,
+        username: winner.username,
+        item: `Giveaway Bonus: ${giveaway.title}`,
+        rarity: "epic",
+        points: bonusCoins,
+      });
+    }
   }
 
   res.json({
