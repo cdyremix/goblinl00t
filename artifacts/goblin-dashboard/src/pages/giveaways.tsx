@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
 import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins } from "lucide-react";
@@ -48,8 +48,30 @@ export function Giveaways() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickedIcon, setPickedIcon] = useState<string | null>(null);
 
+  const { getToken, isSignedIn } = useAuth();
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
+
+  // Theme is needed so the bot_item / bot_coins prize-source labels read
+  // "Skin Drop" in CS2 mode (vs "Loot Drop" in goblin mode). Inline fetch
+  // mirrors the pattern in layout.tsx.
+  const settingsQuery = useQuery<{ botTheme: "goblin" | "cs2" }>({
+    queryKey: ["bot-settings"],
+    enabled: !!isSignedIn,
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/settings", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+  const isCS2 = settingsQuery.data?.botTheme === "cs2";
+  const botItemLabel = isCS2 ? "Skin Drop" : "Loot Drop";
+  const botItemEmoji = isCS2 ? "📦" : "👺";
+  const botItemDefaultName = isCS2 ? "Random CS2 Skin" : "Random Goblin Loot";
+  const botItemHelpText = isCS2
+    ? "Bot rolls a random CS2-themed skin into the winner's inventory."
+    : "Goblin rolls a random item into the winner's inventory.";
 
   const createMutation = useCreateGiveaway();
 
@@ -172,7 +194,7 @@ export function Giveaways() {
                         <div className="grid grid-cols-3 gap-1.5 rounded-md border border-input bg-background p-1">
                           {([
                             { v: "cs2", label: "CS2 Skin", emoji: "🔫" },
-                            { v: "bot_item", label: "Loot Drop", emoji: "👺" },
+                            { v: "bot_item", label: botItemLabel, emoji: botItemEmoji },
                             { v: "bot_coins", label: "Coins", emoji: "🪙" },
                           ] as const).map((opt) => (
                             <button
@@ -188,7 +210,7 @@ export function Giveaways() {
                                 if (opt.v === "bot_coins") {
                                   form.setValue("prize", "Bag of Coins", { shouldValidate: true });
                                 } else if (opt.v === "bot_item") {
-                                  form.setValue("prize", "Random Goblin Loot", { shouldValidate: true });
+                                  form.setValue("prize", botItemDefaultName, { shouldValidate: true });
                                 } else {
                                   form.setValue("prize", "", { shouldValidate: false });
                                 }
@@ -254,7 +276,7 @@ export function Giveaways() {
                           <FormItem>
                             <FormLabel>Display Name</FormLabel>
                             <FormControl>
-                              <Input placeholder="Random Goblin Loot" {...field} className="bg-background" />
+                              <Input placeholder={botItemDefaultName} {...field} className="bg-background" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -280,7 +302,7 @@ export function Giveaways() {
                                 <SelectItem value="legendary">Legendary</SelectItem>
                               </SelectContent>
                             </Select>
-                            <p className="text-[11px] text-muted-foreground">Goblin rolls a random item into the winner's inventory.</p>
+                            <p className="text-[11px] text-muted-foreground">{botItemHelpText}</p>
                           </FormItem>
                         )}
                       />

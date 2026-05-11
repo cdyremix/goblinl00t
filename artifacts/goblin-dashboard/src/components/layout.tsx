@@ -2,8 +2,15 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, Gift, BarChart3, Home, User, LogOut, Settings2, Send, Sparkles } from "lucide-react";
+import {
+  LayoutDashboard, Gift, BarChart3, Home, User, LogOut, Settings2, Send, Sparkles, ChevronDown,
+} from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const NEW_SECTIONS_KEY_PREFIX = "goblin-loot-seen-sections";
 
@@ -33,6 +40,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const { signOut } = useClerk();
   const { getToken, isSignedIn } = useAuth();
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const settingsQuery = useQuery<{ botTheme: "goblin" | "cs2" }>({
     queryKey: ["bot-settings"],
@@ -61,24 +69,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const twitchUsername = profileQuery.data?.user.twitchUsername ?? null;
   const displayName = twitchUsername ?? "Unknown Goblin";
 
+  // "The Scroll" (account page) used to sit in the main nav; it now lives
+  // inside the expandable user menu as "Account Settings".
   const allLinks = [
     { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
     { href: "/giveaway", label: "Loot Hoard", icon: Gift },
     { href: "/stats", label: "Ledger", icon: BarChart3 },
-    { href: "/account", label: "The Scroll", icon: User },
     { href: "/settings", label: "Forge", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true, newWhen: isCS2 },
   ];
 
   const links = allLinks.filter((l) => !("cs2Only" in l) || isCS2);
 
+  // Auto-expand the user menu while the user is on /account so the highlighted
+  // sub-link is visible without an extra click.
+  useEffect(() => {
+    if (location.startsWith("/account")) setAccountOpen(true);
+  }, [location]);
+
   // Highlight newly-revealed sections until visited.
-  // When a link's `newWhen` is true and the user hasn't visited that route yet,
-  // show a "NEW" pulse beside it. Marks seen on click or when the user navigates there.
   const userId = user?.id ?? null;
   const [seen, setSeen] = useState<Set<string>>(() => loadSeen(userId));
 
-  // When the signed-in user changes, reload that user's seen-set.
   useEffect(() => {
     setSeen(loadSeen(userId));
   }, [userId]);
@@ -101,6 +113,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     saveSeen(userId, next);
   }
 
+  const accountActive = location.startsWith("/account");
+
   return (
     <div className="min-h-screen w-full flex bg-background text-foreground selection:bg-primary/30 dark">
       {/* Sidebar */}
@@ -111,8 +125,70 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <span className="font-medieval font-bold text-xl tracking-tight text-primary leading-none">Goblin L00t</span>
         </div>
 
+        {/* User identity + account menu (directly under logo) */}
+        {user && (
+          <div className="px-3 pt-3 pb-2 border-b border-border space-y-1">
+            <Collapsible open={accountOpen} onOpenChange={setAccountOpen}>
+              <CollapsibleTrigger
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors text-left group ${
+                  accountActive
+                    ? "bg-primary/10 text-primary"
+                    : "hover:bg-muted/50 text-foreground"
+                }`}
+                data-testid="button-account-menu"
+              >
+                <UserAvatar
+                  presetId={avatarPreset}
+                  imageUrl={user.imageUrl}
+                  fallbackText={twitchUsername ?? "G"}
+                  className="w-7 h-7"
+                  emojiClass="text-sm"
+                />
+                <span className="text-sm font-medium truncate flex-1">{displayName}</span>
+                <ChevronDown
+                  className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${accountOpen ? "rotate-180" : ""}`}
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                <div className="pt-1 pl-2 space-y-0.5">
+                  <Link
+                    href="/account"
+                    onClick={() => markSeen("/account")}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      accountActive
+                        ? "bg-primary/10 text-primary border border-primary/20"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
+                    }`}
+                    data-testid="link-account-settings"
+                  >
+                    <User className="w-4 h-4 shrink-0" />
+                    Account Settings
+                  </Link>
+                  <button
+                    onClick={() => signOut({ redirectUrl: "/" })}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-transparent"
+                    data-testid="button-sign-out"
+                  >
+                    <LogOut className="w-4 h-4 shrink-0" />
+                    Sign Out
+                  </button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <Link
+              href="/"
+              className="flex items-center gap-2 px-2 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              data-testid="link-exit-cave"
+            >
+              <Home className="w-4 h-4 shrink-0" />
+              Exit Cave
+            </Link>
+          </div>
+        )}
+
         {/* Nav */}
-        <nav className="flex-1 py-6 px-4 space-y-1">
+        <nav className="flex-1 py-4 px-4 space-y-1 overflow-y-auto">
           {links.map((link) => {
             const isActive = location.startsWith(link.href);
             const Icon = link.icon;
@@ -144,40 +220,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-
-        {/* User footer */}
-        <div className="p-4 border-t border-border space-y-3">
-          {user && (
-            <div className="flex items-center gap-3 px-2">
-              <UserAvatar
-                presetId={avatarPreset}
-                imageUrl={user.imageUrl}
-                fallbackText={twitchUsername ?? "G"}
-                className="w-7 h-7"
-                emojiClass="text-sm"
-              />
-              <span className="text-xs text-muted-foreground truncate flex-1">
-                {displayName}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors text-sm flex-1 rounded-md hover:bg-muted/30"
-            >
-              <Home className="w-4 h-4" />
-              Exit Cave
-            </Link>
-            <button
-              onClick={() => signOut({ redirectUrl: "/" })}
-              className="flex items-center gap-2 px-2 py-2 text-muted-foreground hover:text-destructive transition-colors text-sm rounded-md hover:bg-destructive/10"
-              title="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content */}

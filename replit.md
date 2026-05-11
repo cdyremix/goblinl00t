@@ -35,7 +35,7 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
   - `src/routes/` — giveaway, loot, stats, commands, bot, inventory, settings routes
 - `artifacts/goblin-dashboard/src/` — React frontend
   - `src/pages/` — home, dashboard, giveaways, giveaway-detail, stats, commands
-  - `src/components/layout.tsx` — sidebar nav layout
+  - `src/components/layout.tsx` — sidebar layout: brand logo → expandable user menu (Collapsible: Account Settings + Sign Out) → Exit Cave → main nav (Operations, Loot Hoard, Ledger, Forge, Trade Office). The user menu auto-opens when on `/account`. Account Settings is the only entry point to `/account` (the old top-level "The Scroll" nav link was removed); there is a single Sign Out button (inside the user menu).
   - `src/index.css` — dark goblin cave theme (gold/amber primary, purple epic, green uncommon)
 
 ## Architecture decisions
@@ -89,7 +89,7 @@ Without them, the API and dashboard work fully; the bot just won't connect to Tw
 - `POST /giveaway/:id/redeem` is Clerk-authed and operates on the caller's linked `usersTable.twitchUsername` — it cannot redeem for another user.
 - Sub-tier detection reads `tags.badges?.subscriber` (only `"2000"` / `"3000"` indicate Tier 2 / 3; anything else is Tier 1). `badges-raw` and `badge-info` are NOT reliable for tier.
 - Follower gating is best-effort and falls open when `TWITCH_CLIENT_ID` / `TWITCH_OAUTH_TOKEN` aren't set or the broadcaster has no stored `twitchUserId`. For strict enforcement, configure a real Twitch app token.
-- Giveaway prizes have three kinds (`prizeKind`): `cs2` (manual streamer delivery via Trade Office), `bot_item` (auto-rolls into winner's inventory; falls back to coin credit if pouch is full), `bot_coins` (credits `prizeBotCoins` directly to the winner via `loot_drops`). Always serialize/deserialize all three new fields (`prizeKind`, `prizeBotCoins`, `prizeBotRarity`).
+- Giveaway prizes have three kinds (`prizeKind`): `cs2` (manual streamer delivery via Trade Office), `bot_item` (auto-rolls into winner's inventory; falls back to coin credit if pouch is full), `bot_coins` (credits `prizeBotCoins` directly to the winner via `loot_drops`). Always serialize/deserialize all three new fields (`prizeKind`, `prizeBotCoins`, `prizeBotRarity`). The giveaway create form's prize-source tabs are theme-aware: in CS2 mode `bot_item` reads "Skin Drop / 📦" with CS2-flavored default name + help text; in goblin mode it reads "Loot Drop / 👺".
 - Inventory is capped at 5 slots per (channel, username). All inserts MUST go through `addInventoryItem()` — it takes a per-user `pg_advisory_xact_lock` to enforce the cap under concurrency. The luck-buff charge consumption is atomic with the insert (pass `consumeLuckOnSuccess: true`); a "full" result never burns the charge.
 - Ticket buff (`!enter`) is consumed only after the entry insert lands. The insert uses `onConflictDoNothing` on `(giveaway_id, username)` so a concurrent duplicate entry won't burn the buff either.
 - New chat-driven inventory paths normalize username via `tags.username` (lowercase). Historical `loot_drops` / `point_redemptions` rows may be mixed-case, so balance lookups can split across casings until backfilled — known limitation, not a regression.
