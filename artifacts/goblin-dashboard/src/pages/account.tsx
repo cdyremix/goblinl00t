@@ -1,10 +1,8 @@
-import { useState } from "react";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -13,7 +11,7 @@ import { Hint } from "@/components/hint";
 import { UserAvatar } from "@/components/user-avatar";
 import { AVATAR_PRESETS } from "@/lib/avatar-presets";
 import {
-  Crown, Sword, Shield, Tv, CheckCircle2, XCircle, Gem, KeyRound, Mail, Save, AlertCircle
+  Crown, Sword, Shield, Tv, CheckCircle2, XCircle, Gem, KeyRound, Mail
 } from "lucide-react";
 
 interface UserProfile {
@@ -99,10 +97,6 @@ export function Account() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
-  const [usernameSaving, setUsernameSaving] = useState(false);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-
   async function authedFetch(path: string, init: RequestInit = {}) {
     const token = await getToken();
     return fetch(`${BASE}${path}`, {
@@ -168,24 +162,6 @@ export function Account() {
     onError: () => toast({ title: "Failed to disconnect", variant: "destructive" }),
   });
 
-  async function saveUsername() {
-    if (!clerkUser) return;
-    const newUsername = (usernameDraft ?? "").trim();
-    if (!newUsername || newUsername === clerkUser.username) return;
-    setUsernameSaving(true);
-    setUsernameError(null);
-    try {
-      await clerkUser.update({ username: newUsername });
-      toast({ title: "Username updated" });
-      setUsernameDraft(null);
-    } catch (err: unknown) {
-      const e = err as { errors?: { message: string }[]; message?: string };
-      setUsernameError(e.errors?.[0]?.message ?? e.message ?? "Failed to update");
-    } finally {
-      setUsernameSaving(false);
-    }
-  }
-
   const currentTier = profile?.user.subscriptionTier ?? "free";
   const twitchConnected = !!profile?.user.twitchUsername;
 
@@ -222,7 +198,9 @@ export function Account() {
                   emojiClass="text-3xl"
                 />
                 <div>
-                  <p className="font-bold text-xl text-foreground">{clerkUser?.fullName ?? clerkUser?.username ?? "Unknown Goblin"}</p>
+                  <p className="font-bold text-xl text-foreground">
+                    {profile?.user.twitchUsername ?? "Unknown Goblin"}
+                  </p>
                   <p className="text-muted-foreground text-sm">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
                   <div className="mt-1">
                     <PlanBadge tier={currentTier} />
@@ -261,39 +239,22 @@ export function Account() {
 
               <Separator className="opacity-50" />
 
-              {/* Username */}
+              {/* Username (read-only — sourced from Twitch authorization) */}
               <div className="space-y-2 max-w-sm">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="username" className="text-sm font-semibold">Username</Label>
-                  <Hint text="Your handle across the goblin realm. Used by Twitch chat lookups and the leaderboard." />
+                  <Label className="text-sm font-semibold">Username</Label>
+                  <Hint text="Your username is taken from Twitch when you connect your channel below. Until then it stays as 'Unknown Goblin'." />
                 </div>
-                <div className="flex gap-2 items-start">
-                  <div className="flex-1 space-y-1">
-                    <Input
-                      id="username"
-                      value={usernameDraft ?? clerkUser?.username ?? ""}
-                      onChange={(e) => setUsernameDraft(e.target.value)}
-                      placeholder="goblin_lord"
-                    />
-                    {usernameError && (
-                      <p className="text-xs text-destructive flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" /> {usernameError}
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={saveUsername}
-                    disabled={usernameSaving || usernameDraft === null || (usernameDraft ?? "").trim() === clerkUser?.username}
-                    className="gap-1.5 shrink-0"
-                  >
-                    {usernameSaving ? (
-                      <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
-                    ) : (
-                      <Save className="w-3.5 h-3.5" />
-                    )}
-                    Save
-                  </Button>
+                <div className="flex items-center gap-3 rounded-md border border-border bg-muted/30 px-3 py-2">
+                  <Tv className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span className="text-sm text-foreground font-medium flex-1 truncate">
+                    {profile?.user.twitchUsername ?? "Unknown Goblin"}
+                  </span>
+                  {profile?.user.twitchUsername ? (
+                    <Badge variant="outline" className="text-[10px] border-green-500/40 text-green-400">From Twitch</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Not connected</Badge>
+                  )}
                 </div>
               </div>
 
