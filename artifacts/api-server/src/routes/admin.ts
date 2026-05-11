@@ -19,13 +19,21 @@ router.get("/admin/me", async (req, res) => {
   res.json({ isAdmin: true, user: ctx.user });
 });
 
-const CreateUserBody = z.object({
-  email: z.string().email().max(254),
-  password: z.string().min(8).max(128),
-  twitchUsername: z.string().trim().min(1).max(64).optional().nullable(),
-  isAdmin: z.boolean().optional(),
-  subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
-});
+const CreateUserBody = z
+  .object({
+    email: z.string().email().max(254),
+    password: z.string().min(8).max(128),
+    isAdmin: z.boolean().optional(),
+    isDev: z.boolean().optional(),
+    subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
+  })
+  // Mutually exclusive — admin already implies feature bypass; the dev
+  // flag is for accounts that should NOT have admin powers, so allowing
+  // both at once would be a UX trap (the admin Switch silently wins).
+  .refine((d) => !(d.isAdmin && d.isDev), {
+    message: "isAdmin and isDev are mutually exclusive",
+    path: ["isDev"],
+  });
 
 /**
  * POST /admin/users — create a fresh streamer account. Provisions the
@@ -55,25 +63,7 @@ router.post("/admin/users", async (req, res) => {
     res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
     return;
   }
-  const { email, password, twitchUsername, isAdmin, subscriptionTier } = parsed.data;
-  const normalizedTwitch = twitchUsername ? twitchUsername.toLowerCase() : null;
-
-  // Pre-flight: refuse if a DB row already owns this twitchUsername.
-  // Clerk would happily create the user but the bot would then have
-  // two rows pointing at the same channel and `loadJoinableChannels`
-  // would still dedupe — but the admin would see a confusing duplicate
-  // in the table. Better to fail loud here.
-  if (normalizedTwitch) {
-    const [conflict] = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(eq(usersTable.twitchUsername, normalizedTwitch))
-      .limit(1);
-    if (conflict) {
-      res.status(409).json({ error: `Twitch handle "${normalizedTwitch}" is already taken.` });
-      return;
-    }
-  }
+  const { email, password, isAdmin, isDev, subscriptionTier } = parsed.data;
 
   // Step 1: Clerk create (isolated try). Map Clerk's structured errors
   // (`{ errors: [{ code, message }] }`) into appropriate HTTP statuses
@@ -120,8 +110,11 @@ router.post("/admin/users", async (req, res) => {
       .insert(usersTable)
       .values({
         clerkUserId,
-        twitchUsername: normalizedTwitch,
+        // Twitch handle is intentionally NOT set here — it gets bound
+        // later when the user completes Twitch OAuth from /account.
+        // Until then they show as "Unknown Goblin" in the UI.
         isAdmin: isAdmin ?? false,
+        isDev: isDev ?? false,
         subscriptionTier: subscriptionTier ?? "free",
         // Skip the post-signup tier picker for admin-created accounts —
         // the operator already chose the tier in the dialog.
@@ -177,6 +170,7 @@ router.get("/admin/users", async (req, res) => {
       subscriptionTier: usersTable.subscriptionTier,
       tierSelected: usersTable.tierSelected,
       isAdmin: usersTable.isAdmin,
+      isDev: usersTable.isDev,
       botTheme: usersTable.botTheme,
       botName: usersTable.botName,
       goblinEventsEnabled: usersTable.goblinEventsEnabled,
@@ -325,6 +319,7 @@ const PatchUserBody = z.object({
   // Subscription / role.
   subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
   isAdmin: z.boolean().optional(),
+  isDev: z.boolean().optional(),
   tierSelected: z.boolean().optional(),
   // Bot config.
   botTheme: z.enum(["goblin", "cs2"]).optional(),
@@ -385,15 +380,37 @@ router.patch("/admin/users/:id", async (req, res) => {
     return;
   }
 
-  // Snapshot the previous twitchUsername BEFORE the update so we can
-  // part the bot from the old channel and join the new one if an admin
-  // renames a streamer's Twitch link. Without this the bot keeps
-  // listening on a channel that's no longer associated with any user.
+  // Snapshot the previous row BEFORE the update for two reasons:
+  //   1) `twitchUsername` change → part old / join new bot channel.
+  //   2) `isAdmin`/`isDev` mutex enforcement (these flags are mutually
+  //      exclusive by design — admin already implies feature bypass; a
+  //      dev account exists precisely to grant feature bypass WITHOUT
+  //      admin powers). Partial PATCHes can otherwise sneak both true
+  //      (e.g. user is already isDev=true, admin sets isAdmin=true and
+  //      omits isDev). Compute the EFFECTIVE post-update flags and
+  //      reject if both would land true.
   const [before] = await db
-    .select({ twitchUsername: usersTable.twitchUsername })
+    .select({
+      twitchUsername: usersTable.twitchUsername,
+      isAdmin: usersTable.isAdmin,
+      isDev: usersTable.isDev,
+    })
     .from(usersTable)
     .where(eq(usersTable.id, id))
     .limit(1);
+  if (!before) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const nextIsAdmin = updates.isAdmin ?? before.isAdmin;
+  const nextIsDev = updates.isDev ?? before.isDev;
+  if (nextIsAdmin && nextIsDev) {
+    res.status(400).json({
+      error:
+        "isAdmin and isDev are mutually exclusive. Clear one before setting the other.",
+    });
+    return;
+  }
 
   const [updated] = await db
     .update(usersTable)

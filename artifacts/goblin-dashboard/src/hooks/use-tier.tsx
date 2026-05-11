@@ -12,7 +12,7 @@ import {
 } from "@/lib/plans";
 
 interface MeResponse {
-  user: { subscriptionTier: string; isAdmin?: boolean };
+  user: { subscriptionTier: string; isAdmin?: boolean; isDev?: boolean };
 }
 
 /**
@@ -53,12 +53,16 @@ export function useSubscriptionTier(): {
   const tier: TierId =
     raw === "premium" || raw === "pro" || raw === "free" ? raw : "free";
   const isAdmin = !!data?.user.isAdmin;
+  // Dev accounts get every feature unlocked but DO NOT pass the
+  // `/admin/*` gate — keep these flags distinct so dev accounts can't
+  // reach destructive admin endpoints (mirrors `tier-helpers.ts`).
+  const isDev = !!data?.user.isDev;
 
   return {
     tier,
     loading: !enabled || isLoading,
     isAdmin,
-    hasFeature: (f: FeatureId) => isAdmin || hasFeature(tier, f),
+    hasFeature: (f: FeatureId) => isAdmin || isDev || hasFeature(tier, f),
   };
 }
 

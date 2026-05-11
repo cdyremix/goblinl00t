@@ -36,6 +36,7 @@ interface AdminUser {
   subscriptionTier: Tier;
   tierSelected: boolean;
   isAdmin: boolean;
+  isDev: boolean;
   botTheme: string;
   botName: string;
   goblinEventsEnabled: boolean;
@@ -463,9 +464,12 @@ function CreateUserDialog({
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [twitchUsername, setTwitchUsername] = useState("");
   const [tier, setTier] = useState<Tier>("free");
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Three-way role selector. "none" = ordinary streamer (just gets the
+  // chosen tier). "dev" = full feature bypass, no admin. "admin" = full
+  // super-user. Modeled as a single value (rather than two booleans) so
+  // the UI can't accidentally check both.
+  const [role, setRole] = useState<"none" | "dev" | "admin">("none");
   const [showPassword, setShowPassword] = useState(false);
 
   // Reset the form whenever the dialog re-opens so a previous attempt's
@@ -474,9 +478,8 @@ function CreateUserDialog({
     if (open) {
       setEmail("");
       setPassword("");
-      setTwitchUsername("");
       setTier("free");
-      setIsAdmin(false);
+      setRole("none");
       setShowPassword(false);
     }
   }, [open]);
@@ -489,9 +492,9 @@ function CreateUserDialog({
         body: JSON.stringify({
           email: email.trim(),
           password,
-          twitchUsername: twitchUsername.trim() || null,
           subscriptionTier: tier,
-          isAdmin,
+          isAdmin: role === "admin",
+          isDev: role === "dev",
         }),
       });
       const json = await r.json().catch(() => ({}));
@@ -603,43 +606,47 @@ function CreateUserDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="create-twitch">Twitch handle (optional)</Label>
-            <Input
-              id="create-twitch"
-              value={twitchUsername}
-              onChange={(e) => setTwitchUsername(e.target.value)}
-              placeholder="goblinl00t"
-              data-testid="input-create-twitch"
-            />
+            <Label htmlFor="create-tier">Tier</Label>
+            <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
+              <SelectTrigger id="create-tier" data-testid="select-create-tier">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="free">Free</SelectItem>
+                <SelectItem value="premium">Premium</SelectItem>
+                <SelectItem value="pro">Pro</SelectItem>
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
-              Pre-fills the row. The user still needs to complete Twitch OAuth from
-              their account page before the bot can authenticate as them.
+              The user will appear as <span className="font-semibold">Unknown Goblin</span> until
+              they connect their Twitch account from the account page.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="create-tier">Tier</Label>
-              <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
-                <SelectTrigger id="create-tier" data-testid="select-create-tier">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="free">Free</SelectItem>
-                  <SelectItem value="premium">Premium</SelectItem>
-                  <SelectItem value="pro">Pro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col justify-end">
-              <Label className="flex items-center gap-2 cursor-pointer">
-                <Switch
-                  checked={isAdmin}
-                  onCheckedChange={setIsAdmin}
-                  data-testid="switch-create-admin"
-                />
-                <span className="text-sm">Super admin</span>
-              </Label>
+          <div className="space-y-2">
+            <Label>Role</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <RolePill
+                active={role === "none"}
+                onClick={() => setRole("none")}
+                title="Streamer"
+                desc="Standard account at the chosen tier."
+                testId="role-none"
+              />
+              <RolePill
+                active={role === "dev"}
+                onClick={() => setRole("dev")}
+                title="Dev"
+                desc="Full bot/dashboard access. No admin panel."
+                testId="role-dev"
+              />
+              <RolePill
+                active={role === "admin"}
+                onClick={() => setRole("admin")}
+                title="Super admin"
+                desc="Full bot/dashboard + admin panel."
+                testId="role-admin"
+              />
             </div>
           </div>
 
@@ -663,6 +670,26 @@ function CreateUserDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RolePill({
+  active, onClick, title, desc, testId,
+}: { active: boolean; onClick: () => void; title: string; desc: string; testId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className={`text-left rounded-md border px-3 py-2 transition-colors ${
+        active
+          ? "border-amber-400 bg-amber-500/10 ring-1 ring-amber-400/40"
+          : "border-border/60 hover:border-border bg-background"
+      }`}
+    >
+      <div className="text-sm font-semibold">{title}</div>
+      <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">{desc}</div>
+    </button>
   );
 }
 
@@ -1064,12 +1091,14 @@ function SubscriptionSection({
 }) {
   const [tier, setTier] = useState<Tier>(detail.user.subscriptionTier);
   const [isAdmin, setIsAdmin] = useState(detail.user.isAdmin);
+  const [isDev, setIsDev] = useState(detail.user.isDev);
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     setTier(detail.user.subscriptionTier);
     setIsAdmin(detail.user.isAdmin);
+    setIsDev(detail.user.isDev);
   }, [detail]);
 
   async function save() {
@@ -1078,7 +1107,7 @@ function SubscriptionSection({
       const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionTier: tier, isAdmin }),
+        body: JSON.stringify({ subscriptionTier: tier, isAdmin, isDev }),
       });
       if (!r.ok) {
         const err = (await r.json().catch(() => ({}))) as { error?: string };
@@ -1131,15 +1160,37 @@ function SubscriptionSection({
               </p>
             </div>
             <div className="flex flex-col gap-1">
-              <Label>Super-user</Label>
+              <Label>Super admin</Label>
               <div className="flex items-center gap-2 h-10">
                 <Switch
                   checked={isAdmin}
-                  onCheckedChange={setIsAdmin}
+                  onCheckedChange={(v) => {
+                    setIsAdmin(v);
+                    // Mutex with dev — admin already implies feature
+                    // bypass and adds admin powers, so dev becomes a no-op.
+                    if (v) setIsDev(false);
+                  }}
                   data-testid="switch-edit-admin"
                 />
-                <span className="text-sm text-muted-foreground">Bypass all feature gates</span>
+                <span className="text-sm text-muted-foreground">Bypass all gates + admin panel</span>
               </div>
+            </div>
+          </div>
+          <div>
+            <Label>Dev account</Label>
+            <div className="flex items-center gap-2 h-10">
+              <Switch
+                checked={isDev}
+                onCheckedChange={(v) => {
+                  setIsDev(v);
+                  if (v) setIsAdmin(false);
+                }}
+                disabled={isAdmin}
+                data-testid="switch-edit-dev"
+              />
+              <span className="text-sm text-muted-foreground">
+                Bypass all feature gates (no admin panel)
+              </span>
             </div>
           </div>
           <Button onClick={save} disabled={busy} data-testid="button-save-subscription">

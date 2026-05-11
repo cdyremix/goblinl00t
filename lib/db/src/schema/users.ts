@@ -5,6 +5,12 @@ export const usersTable = pgTable("users", {
   clerkUserId: text("clerk_user_id").notNull().unique(),
   twitchUserId: text("twitch_user_id"),
   twitchUsername: text("twitch_username").unique(),
+  // Dev account flag — like `isAdmin` for FEATURE-GATE purposes
+  // (`userHasFeature` short-circuits to true) but does NOT grant
+  // `/admin/*` access. Used for internal QA accounts that need to
+  // exercise every paid surface of the bot/dashboard without paying
+  // for a real Stripe sub and without inheriting super-user powers.
+  isDev: boolean("is_dev").notNull().default(false),
   twitchAccessToken: text("twitch_access_token"),
   twitchRefreshToken: text("twitch_refresh_token"),
   subscriptionTier: text("subscription_tier").notNull().default("premium"),
