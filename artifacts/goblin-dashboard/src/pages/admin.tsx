@@ -123,6 +123,32 @@ function useAuthedFetch() {
   };
 }
 
+/**
+ * Pull a structured `{ message, fields }` out of a non-OK fetch Response.
+ * Server validation errors come back as `{ error, issues }` where `issues`
+ * is the raw zod issue list — we map each issue's leaf path segment to
+ * its message so the calling component can render it inline next to the
+ * exact field that failed instead of dumping a generic toast. Anything
+ * the server didn't tag with a path falls through into `message` so the
+ * caller still has something meaningful to show at the top of the card.
+ */
+async function parseApiError(r: Response): Promise<{ message: string; fields: Record<string, string> }> {
+  let body: unknown;
+  try {
+    body = await r.json();
+  } catch {
+    return { message: `Request failed (${r.status})`, fields: {} };
+  }
+  const obj = (body ?? {}) as { error?: string; issues?: Array<{ path?: Array<string | number>; message?: string }> };
+  const fields: Record<string, string> = {};
+  for (const iss of obj.issues ?? []) {
+    const leaf = iss.path?.[iss.path.length - 1];
+    if (typeof leaf === "string" && iss.message) fields[leaf] = iss.message;
+  }
+  const message = obj.error ?? `Request failed (${r.status})`;
+  return { message, fields };
+}
+
 function fmtMoney(amountCents: number, currency: string) {
   try {
     return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase() })
@@ -1240,8 +1266,7 @@ function EditUserDialog({ userId, onClose }: { userId: number; onClose: () => vo
               <IdentitySection
                 detail={detail}
                 authedFetch={authedFetch}
-                onSaved={() => { invalidate(); toast({ title: "Identity saved" }); }}
-                onError={(m) => toast({ title: "Save failed", description: m, variant: "destructive" })}
+                onSaved={invalidate}
               />
             </TabsContent>
 
@@ -1249,8 +1274,7 @@ function EditUserDialog({ userId, onClose }: { userId: number; onClose: () => vo
               <SubscriptionSection
                 detail={detail}
                 authedFetch={authedFetch}
-                onChanged={() => { invalidate(); toast({ title: "Subscription updated" }); }}
-                onError={(m) => toast({ title: "Update failed", description: m, variant: "destructive" })}
+                onChanged={invalidate}
               />
             </TabsContent>
 
@@ -1289,18 +1313,33 @@ function IdentitySection({
   detail,
   authedFetch,
   onSaved,
-  onError,
 }: {
   detail: AdminUserDetail;
   authedFetch: ReturnType<typeof useAuthedFetch>;
   onSaved: () => void;
-  onError: (m: string) => void;
 }) {
   const [twitchUsername, setTwitchUsername] = useState(detail.user.twitchUsername ?? "");
   const [steamUsername, setSteamUsername] = useState(detail.user.steamUsername ?? "");
   const [email, setEmail] = useState(detail.clerk?.email ?? "");
   const [password, setPassword] = useState("");
   const [busyKind, setBusyKind] = useState<"profile" | "email" | "password" | "verify" | null>(null);
+
+  // Per-card error state — surfaced inline next to the offending field
+  // (and at the top of the card for non-field errors) instead of being
+  // fired off as a toast. This lets the user see exactly which input
+  // the server rejected and why, especially for the twitchUsername
+  // regex / length validations on PATCH /admin/users/:id.
+  const [profileErrors, setProfileErrors] = useState<{ top?: string; twitchUsername?: string; steamUsername?: string }>({});
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  // Tiny "Saved ✓" pulse instead of a toast — same surface, cheaper UX.
+  const [savedFlash, setSavedFlash] = useState<"profile" | "email" | "password" | "verify" | null>(null);
+  function flashSaved(kind: "profile" | "email" | "password" | "verify") {
+    setSavedFlash(kind);
+    setTimeout(() => setSavedFlash((cur) => (cur === kind ? null : cur)), 2400);
+  }
 
   // Reset local state if the underlying detail changes (e.g. after save
   // we invalidate the query and a fresh detail flows in).
@@ -1312,6 +1351,7 @@ function IdentitySection({
 
   async function saveProfile() {
     setBusyKind("profile");
+    setProfileErrors({});
     try {
       const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
         method: "PATCH",
@@ -1322,12 +1362,16 @@ function IdentitySection({
         }),
       });
       if (!r.ok) {
-        const err = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Save failed");
+        const { message, fields } = await parseApiError(r);
+        setProfileErrors({
+          top: fields["twitchUsername"] || fields["steamUsername"] ? undefined : message,
+          twitchUsername: fields["twitchUsername"],
+          steamUsername: fields["steamUsername"],
+        });
+        return;
       }
+      flashSaved("profile");
       onSaved();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKind(null);
     }
@@ -1336,6 +1380,7 @@ function IdentitySection({
   async function saveEmail() {
     if (!email.trim()) return;
     setBusyKind("email");
+    setEmailError(null);
     try {
       const r = await authedFetch(`/api/admin/users/${detail.user.id}/email`, {
         method: "POST",
@@ -1343,12 +1388,12 @@ function IdentitySection({
         body: JSON.stringify({ email: email.trim() }),
       });
       if (!r.ok) {
-        const err = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Email change failed");
+        const { message, fields } = await parseApiError(r);
+        setEmailError(fields["email"] ?? message);
+        return;
       }
+      flashSaved("email");
       onSaved();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKind(null);
     }
@@ -1356,28 +1401,26 @@ function IdentitySection({
 
   async function markEmailVerified() {
     setBusyKind("verify");
+    setVerifyError(null);
     try {
       const r = await authedFetch(`/api/admin/users/${detail.user.id}/email/verify`, {
         method: "POST",
       });
       if (!r.ok) {
-        const err = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Verify failed");
+        const { message } = await parseApiError(r);
+        setVerifyError(message);
+        return;
       }
+      flashSaved("verify");
       onSaved();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKind(null);
     }
   }
 
   async function savePassword() {
-    if (password.length < 8) {
-      onError("Password must be at least 8 characters");
-      return;
-    }
     setBusyKind("password");
+    setPasswordError(null);
     try {
       const r = await authedFetch(`/api/admin/users/${detail.user.id}/password`, {
         method: "POST",
@@ -1385,13 +1428,13 @@ function IdentitySection({
         body: JSON.stringify({ password }),
       });
       if (!r.ok) {
-        const err = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Password reset failed");
+        const { message, fields } = await parseApiError(r);
+        setPasswordError(fields["password"] ?? message);
+        return;
       }
       setPassword("");
+      flashSaved("password");
       onSaved();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKind(null);
     }
@@ -1402,35 +1445,75 @@ function IdentitySection({
       <Card>
         <CardContent className="p-4 space-y-3">
           <h3 className="font-semibold text-sm">Profile</h3>
+          {profileErrors.top && (
+            <p
+              className="text-xs text-destructive flex items-center gap-1.5"
+              role="alert"
+              data-testid="error-profile-top"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {profileErrors.top}
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="admin-twitch-username">Twitch username</Label>
               <Input
                 id="admin-twitch-username"
                 value={twitchUsername}
-                onChange={(e) => setTwitchUsername(e.target.value)}
+                onChange={(e) => {
+                  setTwitchUsername(e.target.value);
+                  if (profileErrors.twitchUsername) {
+                    setProfileErrors((p) => ({ ...p, twitchUsername: undefined }));
+                  }
+                }}
                 placeholder="goblinl00t"
+                aria-invalid={!!profileErrors.twitchUsername}
                 data-testid="input-edit-twitch-username"
               />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Lowercased on save. The bot rejoins this channel on next restart.
-              </p>
+              {profileErrors.twitchUsername ? (
+                <p className="text-[11px] text-destructive mt-1" data-testid="error-edit-twitch-username">
+                  {profileErrors.twitchUsername}
+                </p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Lowercased on save. Letters, numbers, underscore. Re-linking Twitch overwrites this.
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="admin-steam-username">Steam username</Label>
               <Input
                 id="admin-steam-username"
                 value={steamUsername}
-                onChange={(e) => setSteamUsername(e.target.value)}
+                onChange={(e) => {
+                  setSteamUsername(e.target.value);
+                  if (profileErrors.steamUsername) {
+                    setProfileErrors((p) => ({ ...p, steamUsername: undefined }));
+                  }
+                }}
                 placeholder="(optional)"
+                aria-invalid={!!profileErrors.steamUsername}
                 data-testid="input-edit-steam-username"
               />
+              {profileErrors.steamUsername && (
+                <p className="text-[11px] text-destructive mt-1" data-testid="error-edit-steam-username">
+                  {profileErrors.steamUsername}
+                </p>
+              )}
             </div>
           </div>
-          <Button onClick={saveProfile} disabled={busyKind === "profile"} data-testid="button-save-profile">
-            {busyKind === "profile" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
-            Save profile
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button onClick={saveProfile} disabled={busyKind === "profile"} data-testid="button-save-profile">
+              {busyKind === "profile" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Save profile
+            </Button>
+            {savedFlash === "profile" && (
+              <span className="text-xs text-emerald-300 flex items-center gap-1" data-testid="flash-profile-saved">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -1484,6 +1567,21 @@ function IdentitySection({
               Skips Clerk's verification round-trip. Use for dev/test accounts where the mailbox is fake.
             </p>
           )}
+          {verifyError && (
+            <p
+              className="text-xs text-destructive flex items-center gap-1.5"
+              role="alert"
+              data-testid="error-verify-email"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {verifyError}
+            </p>
+          )}
+          {savedFlash === "verify" && (
+            <p className="text-xs text-emerald-300 flex items-center gap-1" data-testid="flash-verify-saved">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Marked verified
+            </p>
+          )}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
               <Label htmlFor="admin-email">Primary email</Label>
@@ -1491,17 +1589,32 @@ function IdentitySection({
                 id="admin-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
+                aria-invalid={!!emailError}
                 data-testid="input-edit-email"
               />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Saved as a verified primary email in Clerk. Old addresses are removed.
-              </p>
+              {emailError ? (
+                <p className="text-[11px] text-destructive mt-1" data-testid="error-edit-email">
+                  {emailError}
+                </p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Saved as a verified primary email in Clerk. Old addresses are removed.
+                </p>
+              )}
             </div>
             <Button onClick={saveEmail} disabled={busyKind === "email" || !email.trim()} data-testid="button-save-email">
               {busyKind === "email" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
               Update email
             </Button>
+            {savedFlash === "email" && (
+              <span className="text-xs text-emerald-300 flex items-center gap-1 pb-2" data-testid="flash-email-saved">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+              </span>
+            )}
           </div>
           {detail.clerk && (
             <div className="text-[11px] text-muted-foreground font-mono space-y-0.5">
@@ -1549,18 +1662,33 @@ function IdentitySection({
                 id="admin-pw"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min 8 characters"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
+                placeholder="Any length — admin override"
+                aria-invalid={!!passwordError}
                 data-testid="input-edit-password"
               />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Forces sign-out of all other sessions. Share over a secure channel.
-              </p>
+              {passwordError ? (
+                <p className="text-[11px] text-destructive mt-1" data-testid="error-edit-password">
+                  {passwordError}
+                </p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Forces sign-out of all other sessions. Share over a secure channel.
+                </p>
+              )}
             </div>
-            <Button onClick={savePassword} disabled={busyKind === "password" || password.length < 8} data-testid="button-save-password">
+            <Button onClick={savePassword} disabled={busyKind === "password" || password.length === 0} data-testid="button-save-password">
               {busyKind === "password" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
               Set password
             </Button>
+            {savedFlash === "password" && (
+              <span className="text-xs text-emerald-300 flex items-center gap-1 pb-2" data-testid="flash-password-saved">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1574,18 +1702,19 @@ function SubscriptionSection({
   detail,
   authedFetch,
   onChanged,
-  onError,
 }: {
   detail: AdminUserDetail;
   authedFetch: ReturnType<typeof useAuthedFetch>;
   onChanged: () => void;
-  onError: (m: string) => void;
 }) {
   const [tier, setTier] = useState<Tier>(detail.user.subscriptionTier);
   const [isAdmin, setIsAdmin] = useState(detail.user.isAdmin);
   const [isDev, setIsDev] = useState(detail.user.isDev);
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [savedFlash, setSavedFlash] = useState(false);
 
   useEffect(() => {
     setTier(detail.user.subscriptionTier);
@@ -1595,6 +1724,7 @@ function SubscriptionSection({
 
   async function save() {
     setBusy(true);
+    setSaveError(null);
     try {
       const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
         method: "PATCH",
@@ -1602,12 +1732,13 @@ function SubscriptionSection({
         body: JSON.stringify({ subscriptionTier: tier, isAdmin, isDev }),
       });
       if (!r.ok) {
-        const err = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Save failed");
+        const { message } = await parseApiError(r);
+        setSaveError(message);
+        return;
       }
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2400);
       onChanged();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -1615,17 +1746,17 @@ function SubscriptionSection({
 
   async function cancelSub() {
     setCancelling(true);
+    setCancelError(null);
     try {
       const r = await authedFetch(`/api/admin/users/${detail.user.id}/subscription/cancel`, {
         method: "POST",
       });
       if (!r.ok) {
-        const err = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Cancel failed");
+        const { message } = await parseApiError(r);
+        setCancelError(message);
+        return;
       }
       onChanged();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
     } finally {
       setCancelling(false);
     }
@@ -1685,10 +1816,27 @@ function SubscriptionSection({
               </span>
             </div>
           </div>
-          <Button onClick={save} disabled={busy} data-testid="button-save-subscription">
-            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
-            Save
-          </Button>
+          {saveError && (
+            <p
+              className="text-xs text-destructive flex items-center gap-1.5"
+              role="alert"
+              data-testid="error-subscription-save"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {saveError}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <Button onClick={save} disabled={busy} data-testid="button-save-subscription">
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Save
+            </Button>
+            {savedFlash && (
+              <span className="text-xs text-emerald-300 flex items-center gap-1" data-testid="flash-subscription-saved">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -1716,6 +1864,16 @@ function SubscriptionSection({
                 {cancelling ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
                 Cancel subscription now
               </Button>
+              {cancelError && (
+                <p
+                  className="text-xs text-destructive flex items-center gap-1.5"
+                  role="alert"
+                  data-testid="error-subscription-cancel"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  {cancelError}
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No active Stripe subscription.</p>
