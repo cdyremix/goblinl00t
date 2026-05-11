@@ -599,6 +599,68 @@ const EmailBody = z.object({
 });
 
 /**
+ * POST /admin/users/:id/email/verify — force-mark every email address
+ * on a Clerk user as verified. Use case: legacy dev/admin accounts
+ * created before auto-verify-on-create existed, or any account whose
+ * mailbox is fake (e.g. `test@test.com`) and can't actually receive a
+ * Clerk verification code. Idempotent — re-verifying a verified
+ * address is a no-op on Clerk's side.
+ *
+ * Locked behind `requireAdmin` since manually flipping verification
+ * on a real user's account would let an admin hijack a sign-in flow.
+ */
+router.post("/admin/users/:id/email/verify", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  try {
+    const cu = await clerkClient.users.getUser(user.clerkUserId);
+    let verifiedCount = 0;
+    let failedCount = 0;
+    for (const addr of cu.emailAddresses) {
+      // Skip already-verified addresses to avoid noise in the count;
+      // Clerk would no-op anyway but we want an honest "verified N" total.
+      if (addr.verification?.status === "verified") {
+        verifiedCount += 1;
+        continue;
+      }
+      try {
+        await clerkClient.emailAddresses.updateEmailAddress(addr.id, { verified: true });
+        verifiedCount += 1;
+      } catch (verifyErr) {
+        failedCount += 1;
+        const verifyMsg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+        req.log.warn(
+          { verifyMsg, clerkUserId: user.clerkUserId, emailId: addr.id, adminId: ctx.user.id },
+          "admin: manual email verify failed for one address",
+        );
+      }
+    }
+    if (verifiedCount === 0 && failedCount > 0) {
+      res.status(500).json({ error: "Failed to verify any email address" });
+      return;
+    }
+    res.json({ ok: true, verified: verifiedCount, failed: failedCount });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage, userId: id, adminId: ctx.user.id }, "admin: email verify failed");
+    res.status(500).json({ error: "Failed to verify email", detail: errMessage });
+  }
+});
+
+/**
  * POST /admin/users/:id/email — admin-set primary email via Clerk.
  * Clerk requires us to (1) create a new email-address record on the
  * user, (2) flip it to `primary: true`, then (3) optionally remove the

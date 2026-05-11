@@ -1157,7 +1157,7 @@ function IdentitySection({
   const [steamUsername, setSteamUsername] = useState(detail.user.steamUsername ?? "");
   const [email, setEmail] = useState(detail.clerk?.email ?? "");
   const [password, setPassword] = useState("");
-  const [busyKind, setBusyKind] = useState<"profile" | "email" | "password" | null>(null);
+  const [busyKind, setBusyKind] = useState<"profile" | "email" | "password" | "verify" | null>(null);
 
   // Reset local state if the underlying detail changes (e.g. after save
   // we invalidate the query and a fresh detail flows in).
@@ -1202,6 +1202,24 @@ function IdentitySection({
       if (!r.ok) {
         const err = (await r.json().catch(() => ({}))) as { error?: string };
         throw new Error(err.error ?? "Email change failed");
+      }
+      onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyKind(null);
+    }
+  }
+
+  async function markEmailVerified() {
+    setBusyKind("verify");
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}/email/verify`, {
+        method: "POST",
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Verify failed");
       }
       onSaved();
     } catch (err) {
@@ -1300,7 +1318,29 @@ function IdentitySection({
                 Status unknown
               </Badge>
             ) : null}
+            {detail.clerk?.emailVerified === false && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto h-7 text-xs"
+                onClick={markEmailVerified}
+                disabled={busyKind === "verify"}
+                data-testid="button-mark-email-verified"
+              >
+                {busyKind === "verify" ? (
+                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                ) : (
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                )}
+                Mark verified
+              </Button>
+            )}
           </h3>
+          {detail.clerk?.emailVerified === false && (
+            <p className="text-[11px] text-amber-300/80 -mt-1">
+              Skips Clerk's verification round-trip. Use for dev/test accounts where the mailbox is fake.
+            </p>
+          )}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
               <Label htmlFor="admin-email">Primary email</Label>
