@@ -183,7 +183,14 @@ router.get("/auth/twitch/callback", async (req, res) => {
 const DevSignInBody = z.object({ email: z.string().trim().min(1).max(254) });
 
 router.post("/auth/dev-sign-in", async (req, res) => {
-  if (process.env.NODE_ENV === "production") {
+  // Defense-in-depth: BOTH gates must hold. NODE_ENV alone is fragile if a
+  // production host is ever misconfigured to run in dev mode (architect
+  // review caveat) — `ENABLE_DEV_SIGN_IN` must be explicitly opted-in too.
+  // Default-closed: any other value (unset, "false", "0", etc.) → 404.
+  const devEnabled =
+    process.env.NODE_ENV !== "production" &&
+    process.env.ENABLE_DEV_SIGN_IN === "true";
+  if (!devEnabled) {
     res.status(404).json({ error: "Not found" });
     return;
   }
