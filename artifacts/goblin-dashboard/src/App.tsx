@@ -180,27 +180,12 @@ function SignInPage() {
   if (!isLoaded) return <AuthLoader />;
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 dark">
-      <div className="flex flex-col items-center gap-3">
-        <SignIn
-          routing="path"
-          path={`${basePath}/sign-in`}
-          signUpUrl={`${basePath}/sign-up`}
-          fallbackRedirectUrl={`${basePath}/dashboard`}
-        />
-        {/* Dev-only escape hatch — Clerk's `424242` universal code does NOT
-            cover the new-device verification challenge, so during dev/QA we
-            offer a one-click bypass that mints a sign-in token via
-            `POST /api/auth/dev-sign-in` (which 404s in production). */}
-        {import.meta.env.DEV && (
-          <a
-            href={`${basePath}/dev-sign-in`}
-            className="text-xs text-amber-500/80 underline-offset-4 hover:underline"
-            data-testid="link-dev-sign-in"
-          >
-            Dev: skip email verification →
-          </a>
-        )}
-      </div>
+      <SignIn
+        routing="path"
+        path={`${basePath}/sign-in`}
+        signUpUrl={`${basePath}/sign-up`}
+        fallbackRedirectUrl={`${basePath}/dashboard`}
+      />
     </div>
   );
 }
