@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -26,9 +26,15 @@ export const usersTable = pgTable("users", {
   wheelMode: text("wheel_mode").notNull().default("auto"),
   // Animation pacing: 'slow' | 'medium' | 'fast'.
   wheelSpeed: text("wheel_speed").notNull().default("medium"),
-  // When the streamer marks a stream as live (Operations -> Start Stream).
-  // Drives the "this stream" filter on dashboard stats + live loot feed.
-  // null = no active session; clear by calling /stream/end.
+  // Deprecated — kept for back-compat with existing data. Operations now
+  // shows a passive "current stream" window (last 6h) instead of a manual
+  // start/end stamp. Reads still consult this column when set so legacy
+  // sessions don't disappear, but no UI writes to it anymore.
   streamStartedAt: timestamp("stream_started_at"),
+  // Per-channel overrides for built-in command responses. Keyed by canonical
+  // command name (with leading `!`). Values are message templates that may
+  // include tokens like {user}, {balance}, {target} — see BUILT_IN_COMMANDS
+  // in bot-service.ts for which tokens each command supports.
+  commandResponses: jsonb("command_responses").$type<Record<string, string>>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

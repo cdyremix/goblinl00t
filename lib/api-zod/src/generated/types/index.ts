@@ -9,6 +9,7 @@
 export * from "./adjustCoinsRequest";
 export * from "./adjustCoinsResponse";
 export * from "./botCommand";
+export * from "./botCommandTheme";
 export * from "./botSettings";
 export * from "./botSettingsBotTheme";
 export * from "./botSettingsWheelMode";
@@ -75,6 +76,7 @@ export * from "./updateBotSettings";
 export * from "./updateBotSettingsBotTheme";
 export * from "./updateBotSettingsWheelMode";
 export * from "./updateBotSettingsWheelSpeed";
+export * from "./updateCommandResponse";
 export * from "./updateTradeFulfillment";
 export * from "./updateTradeFulfillmentStatus";
 export * from "./useItemResult";

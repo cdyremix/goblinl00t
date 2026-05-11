@@ -5,10 +5,28 @@
  * Goblin L00t API - Twitch bot + giveaway dashboard
  * OpenAPI spec version: 0.1.0
  */
+import type { BotCommandTheme } from "./botCommandTheme";
 
 export interface BotCommand {
   name: string;
   description: string;
   enabled: boolean;
   cooldownSeconds: number;
+  theme?: BotCommandTheme;
+  aliases?: string[];
+  isCustom?: boolean;
+  /** When true, the streamer can override the chat reply via PUT /commands/{name}/response. */
+  customizable?: boolean;
+  /** Template tokens this command supports (e.g. user, balance). */
+  availableTokens?: string[];
+  /**
+   * Sample default reply, shown next to the customization textarea.
+   * @nullable
+   */
+  defaultResponse?: string | null;
+  /**
+   * Streamer's saved override, or null if using the default.
+   * @nullable
+   */
+  customResponse?: string | null;
 }

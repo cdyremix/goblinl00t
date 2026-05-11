@@ -20,6 +20,7 @@ import {
   INVENTORY_CAP,
 } from "./inventory";
 import { startGoblinEvents, setGoblinEventSink, trackChatter } from "./goblin-events";
+import { getCustomResponseFor, renderTemplate } from "./command-responses";
 
 export type CommandTheme = "goblin" | "cs2" | "both";
 
@@ -34,6 +35,17 @@ interface BuiltInCommand {
    * below already routes both names to the same logic.
    */
   aliasOf?: string;
+  /**
+   * If true, the streamer can override the chat reply via
+   * PUT /commands/:name/response. The handler must call
+   * `getCustomResponseFor(channel, canonical)` and fall back to the built-in
+   * default when null. Templates may reference any token listed in
+   * `availableTokens`.
+   */
+  customizable?: boolean;
+  availableTokens?: readonly string[];
+  /** Sample/default text shown next to the textarea on the Spells page. */
+  defaultResponse?: string;
 }
 
 const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
@@ -43,10 +55,46 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
   "!inventory":  { description: "List your loot inventory slots",           cooldownSeconds: 15, theme: "both"   },
   "!sell":       { description: "Sell an inventory item — !sell <slot> or !sell all", cooldownSeconds: 5, theme: "both" },
   "!use":        { description: "Activate a buff item from your inventory — !use <slot>", cooldownSeconds: 5, theme: "both" },
-  "!goblin":     { description: "Summon the bot for a themed taunt (alias: !skin)",  cooldownSeconds: 10, theme: "goblin" },
-  "!steal":      { description: "Attempt to mug another viewer (alias: !scam)",     cooldownSeconds: 20, theme: "goblin" },
-  "!hoard":      { description: "Check your coin balance (alias: !stash)",          cooldownSeconds: 15, theme: "goblin" },
-  "!feedgoblin": { description: "Feed the bot a snack (alias: !case)",              cooldownSeconds: 10, theme: "goblin" },
+  "!help":       {
+    description: "Show a short list of available commands for the active theme",
+    cooldownSeconds: 30,
+    theme: "both",
+    customizable: true,
+    availableTokens: ["user", "commands", "theme"],
+    defaultResponse: "{user}: Try {commands} — full guide in the dashboard.",
+  },
+  "!goblin":     {
+    description: "Summon the bot for a themed taunt (alias: !skin)",
+    cooldownSeconds: 10,
+    theme: "goblin",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "HEHEHE! {user} summoned the goblin!",
+  },
+  "!steal":      {
+    description: "Attempt to mug another viewer (alias: !scam)",
+    cooldownSeconds: 20,
+    theme: "goblin",
+    customizable: true,
+    availableTokens: ["user", "target"],
+    defaultResponse: "{user} sneaks up on {target} and runs off with their loot!",
+  },
+  "!hoard":      {
+    description: "Check your coin balance (alias: !stash)",
+    cooldownSeconds: 15,
+    theme: "goblin",
+    customizable: true,
+    availableTokens: ["user", "balance", "earned"],
+    defaultResponse: "🪙 {user}: {balance} coins in your hoard ({earned} earned all-time).",
+  },
+  "!feedgoblin": {
+    description: "Feed the bot a snack (alias: !case)",
+    cooldownSeconds: 10,
+    theme: "goblin",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "🍖 {user} fed the goblin! YUM!",
+  },
   // CS2 flavor commands — pure aliases of the goblin set; share toggle/cooldown.
   "!skin":       { description: "Alias of !goblin", cooldownSeconds: 10, theme: "cs2", aliasOf: "!goblin" },
   "!scam":       { description: "Alias of !steal", cooldownSeconds: 20, theme: "cs2", aliasOf: "!steal" },
@@ -54,9 +102,29 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
   "!case":       { description: "Alias of !feedgoblin", cooldownSeconds: 10, theme: "cs2", aliasOf: "!feedgoblin" },
   "!tradeurl":   { description: "Submit your Steam trade URL after winning a skin", cooldownSeconds: 10, theme: "cs2" },
   "!redeem":     { description: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", cooldownSeconds: 5, theme: "both" },
-  "!points":     { description: "Check your coin balance (alias: !coins)", cooldownSeconds: 10, theme: "both" },
+  "!points":     {
+    description: "Check your coin balance (alias: !coins)",
+    cooldownSeconds: 10,
+    theme: "both",
+    customizable: true,
+    availableTokens: ["user", "balance", "entries", "cost"],
+    defaultResponse: "💰 {user}: You have {balance} coins (worth {entries} extra giveaway entries at {cost} coins each).",
+  },
   "!coins":      { description: "Alias of !points", cooldownSeconds: 10, theme: "both", aliasOf: "!points" },
 };
+
+/** Build the !help reply: short, theme-aware command list. */
+function buildHelpCommandList(activeTheme: BotTheme): string {
+  const enabledCanonicals = Object.entries(BUILT_IN_COMMANDS)
+    .filter(([name, meta]) =>
+      !meta.aliasOf
+      && (meta.theme === "both" || meta.theme === activeTheme)
+      && (COMMAND_ENABLED[name] ?? true),
+    )
+    .map(([name]) => name);
+  // Cap to keep chat short; the dashboard /help has the full table.
+  return enabledCanonicals.slice(0, 10).join(" ");
+}
 
 /** Reverse map canonical → aliases. */
 const COMMAND_ALIASES: Record<string, string[]> = {};
@@ -373,8 +441,23 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       void client?.say(channel, `${phrase}${suffix}`);
     }
 
+    if (command === "!help") {
+      const ch = channel.replace(/^#/, "");
+      const list = buildHelpCommandList(getActiveTheme());
+      const custom = await getCustomResponseFor(ch, "!help");
+      const reply = custom
+        ? renderTemplate(custom, { user: `@${username}`, commands: list, theme: getActiveTheme() })
+        : `${username}: ${list} — full guide in the dashboard.`;
+      void client?.say(channel, reply);
+    }
+
     if (command === "!goblin" || command === "!skin") {
-      void client?.say(channel, pickRandom(phrases.goblinResponses));
+      const ch = channel.replace(/^#/, "");
+      const custom = await getCustomResponseFor(ch, "!goblin");
+      const reply = custom
+        ? renderTemplate(custom, { user: `@${username}` })
+        : pickRandom(phrases.goblinResponses);
+      void client?.say(channel, reply);
     }
 
     if (command === "!steal" || command === "!scam") {
@@ -383,13 +466,21 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         void client?.say(channel, phrases.stealNoTarget);
         return;
       }
-      const phrase = formatMessage(pickRandom(phrases.stealResponses), { target });
-      void client?.say(channel, phrase);
+      const ch = channel.replace(/^#/, "");
+      const custom = await getCustomResponseFor(ch, "!steal");
+      const reply = custom
+        ? renderTemplate(custom, { user: `@${username}`, target })
+        : formatMessage(pickRandom(phrases.stealResponses), { target });
+      void client?.say(channel, reply);
     }
 
     if (command === "!hoard" || command === "!stash") {
       const { balance, earned } = await getPointsBalance(username);
-      if (earned === 0) {
+      const ch = channel.replace(/^#/, "");
+      const custom = await getCustomResponseFor(ch, "!hoard");
+      if (custom) {
+        void client?.say(channel, renderTemplate(custom, { user: `@${username}`, balance, earned }));
+      } else if (earned === 0) {
         void client?.say(channel, phrases.hoardEmpty(username));
       } else {
         void client?.say(channel, `🪙 ${username}: ${balance} coins in your hoard (${earned} earned all-time).`);
@@ -397,7 +488,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     }
 
     if (command === "!feedgoblin" || command === "!case") {
-      void client?.say(channel, pickRandom(phrases.feedResponses));
+      const ch = channel.replace(/^#/, "");
+      const custom = await getCustomResponseFor(ch, "!feedgoblin");
+      const reply = custom
+        ? renderTemplate(custom, { user: `@${username}` })
+        : pickRandom(phrases.feedResponses);
+      void client?.say(channel, reply);
     }
 
     if (command === "!tradeurl") {
@@ -434,7 +530,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     if (command === "!points" || command === "!coins") {
       const { balance } = await getPointsBalance(username);
       const entries = Math.floor(balance / REDEEM_COST_PER_ENTRY);
-      void client?.say(channel, `💰 ${username}: You have ${balance} coins (worth ${entries} extra giveaway ${entries === 1 ? "entry" : "entries"} at ${REDEEM_COST_PER_ENTRY} coins each).`);
+      const ch = channel.replace(/^#/, "");
+      const custom = await getCustomResponseFor(ch, "!points");
+      const reply = custom
+        ? renderTemplate(custom, { user: `@${username}`, balance, entries, cost: REDEEM_COST_PER_ENTRY })
+        : `💰 ${username}: You have ${balance} coins (worth ${entries} extra giveaway ${entries === 1 ? "entry" : "entries"} at ${REDEEM_COST_PER_ENTRY} coins each).`;
+      void client?.say(channel, reply);
     }
 
     if (command === "!redeem") {
@@ -540,21 +641,32 @@ export function getBotState(): BotState {
   return { ...botState };
 }
 
-export function getCommandConfig() {
+export async function getCommandConfig(opts: { channel?: string } = {}) {
   // Hide alias entries — they share enabled/cooldown with their canonical and
   // toggling them via the Spells page would be confusing. The canonical's
   // description already mentions the alias in parens.
-  const builtIns = Object.entries(BUILT_IN_COMMANDS)
-    .filter(([, meta]) => !meta.aliasOf)
-    .map(([name, meta]) => ({
-      name,
-      description: meta.description,
-      enabled: COMMAND_ENABLED[name] ?? true,
-      cooldownSeconds: COMMAND_COOLDOWN_SECONDS[name] ?? 10,
-      theme: meta.theme,
-      aliases: COMMAND_ALIASES[name] ?? [],
-      isCustom: false as const,
-    }));
+  const builtIns = await Promise.all(
+    Object.entries(BUILT_IN_COMMANDS)
+      .filter(([, meta]) => !meta.aliasOf)
+      .map(async ([name, meta]) => {
+        const customResponse = meta.customizable && opts.channel
+          ? await getCustomResponseFor(opts.channel, name)
+          : null;
+        return {
+          name,
+          description: meta.description,
+          enabled: COMMAND_ENABLED[name] ?? true,
+          cooldownSeconds: COMMAND_COOLDOWN_SECONDS[name] ?? 10,
+          theme: meta.theme,
+          aliases: COMMAND_ALIASES[name] ?? [],
+          isCustom: false as const,
+          customizable: Boolean(meta.customizable),
+          availableTokens: [...(meta.availableTokens ?? [])],
+          defaultResponse: meta.defaultResponse ?? null,
+          customResponse,
+        };
+      }),
+  );
   const customs = Array.from(CUSTOM_COMMANDS.entries()).map(([name, c]) => ({
     id: c.id,
     name,
@@ -591,6 +703,18 @@ export function toggleCommandEnabled(name: string): boolean {
 
 export function isBuiltInCommand(name: string): boolean {
   return name in BUILT_IN_COMMANDS;
+}
+
+/** Resolve canonical name (handling aliases). Returns null if unknown. */
+export function resolveCanonical(name: string): string | null {
+  const meta = BUILT_IN_COMMANDS[name];
+  if (!meta) return null;
+  return meta.aliasOf ?? name;
+}
+
+/** True iff the canonical command supports streamer-customized responses. */
+export function isCommandCustomizable(canonical: string): boolean {
+  return Boolean(BUILT_IN_COMMANDS[canonical]?.customizable);
 }
 
 export function getCustomCommandCache() {

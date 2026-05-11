@@ -210,11 +210,45 @@ export interface UserStat {
   bestRarity: string;
 }
 
+export type BotCommandTheme =
+  (typeof BotCommandTheme)[keyof typeof BotCommandTheme];
+
+export const BotCommandTheme = {
+  goblin: "goblin",
+  cs2: "cs2",
+  both: "both",
+} as const;
+
 export interface BotCommand {
   name: string;
   description: string;
   enabled: boolean;
   cooldownSeconds: number;
+  theme?: BotCommandTheme;
+  aliases?: string[];
+  isCustom?: boolean;
+  /** When true, the streamer can override the chat reply via PUT /commands/{name}/response. */
+  customizable?: boolean;
+  /** Template tokens this command supports (e.g. user, balance). */
+  availableTokens?: string[];
+  /**
+   * Sample default reply, shown next to the customization textarea.
+   * @nullable
+   */
+  defaultResponse?: string | null;
+  /**
+   * Streamer's saved override, or null if using the default.
+   * @nullable
+   */
+  customResponse?: string | null;
+}
+
+export interface UpdateCommandResponse {
+  /**
+   * Override template; pass an empty string to clear and revert to the default.
+   * @maxLength 400
+   */
+  response: string;
 }
 
 export type BotSettingsBotTheme =

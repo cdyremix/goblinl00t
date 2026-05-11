@@ -698,6 +698,29 @@ export const ListCommandsResponseItem = zod.object({
   description: zod.string(),
   enabled: zod.boolean(),
   cooldownSeconds: zod.number(),
+  theme: zod.enum(["goblin", "cs2", "both"]).optional(),
+  aliases: zod.array(zod.string()).optional(),
+  isCustom: zod.boolean().optional(),
+  customizable: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the streamer can override the chat reply via PUT \/commands\/{name}\/response.",
+    ),
+  availableTokens: zod
+    .array(zod.string())
+    .optional()
+    .describe("Template tokens this command supports (e.g. user, balance)."),
+  defaultResponse: zod
+    .string()
+    .nullish()
+    .describe(
+      "Sample default reply, shown next to the customization textarea.",
+    ),
+  customResponse: zod
+    .string()
+    .nullish()
+    .describe("Streamer's saved override, or null if using the default."),
 });
 export const ListCommandsResponse = zod.array(ListCommandsResponseItem);
 
@@ -900,4 +923,75 @@ export const ToggleCommandResponse = zod.object({
   description: zod.string(),
   enabled: zod.boolean(),
   cooldownSeconds: zod.number(),
+  theme: zod.enum(["goblin", "cs2", "both"]).optional(),
+  aliases: zod.array(zod.string()).optional(),
+  isCustom: zod.boolean().optional(),
+  customizable: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the streamer can override the chat reply via PUT \/commands\/{name}\/response.",
+    ),
+  availableTokens: zod
+    .array(zod.string())
+    .optional()
+    .describe("Template tokens this command supports (e.g. user, balance)."),
+  defaultResponse: zod
+    .string()
+    .nullish()
+    .describe(
+      "Sample default reply, shown next to the customization textarea.",
+    ),
+  customResponse: zod
+    .string()
+    .nullish()
+    .describe("Streamer's saved override, or null if using the default."),
+});
+
+/**
+ * @summary Set or clear the streamer's custom response template for a built-in command
+ */
+export const UpdateCommandResponseParams = zod.object({
+  name: zod.coerce.string(),
+});
+
+export const updateCommandResponseBodyResponseMax = 400;
+
+export const UpdateCommandResponseBody = zod.object({
+  response: zod
+    .string()
+    .max(updateCommandResponseBodyResponseMax)
+    .describe(
+      "Override template; pass an empty string to clear and revert to the default.",
+    ),
+});
+
+export const UpdateCommandResponseResponse = zod.object({
+  name: zod.string(),
+  description: zod.string(),
+  enabled: zod.boolean(),
+  cooldownSeconds: zod.number(),
+  theme: zod.enum(["goblin", "cs2", "both"]).optional(),
+  aliases: zod.array(zod.string()).optional(),
+  isCustom: zod.boolean().optional(),
+  customizable: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the streamer can override the chat reply via PUT \/commands\/{name}\/response.",
+    ),
+  availableTokens: zod
+    .array(zod.string())
+    .optional()
+    .describe("Template tokens this command supports (e.g. user, balance)."),
+  defaultResponse: zod
+    .string()
+    .nullish()
+    .describe(
+      "Sample default reply, shown next to the customization textarea.",
+    ),
+  customResponse: zod
+    .string()
+    .nullish()
+    .describe("Streamer's saved override, or null if using the default."),
 });

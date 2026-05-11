@@ -625,6 +625,10 @@ interface BotCommand {
   cooldownSeconds: number;
   theme: CommandTheme;
   isCustom: boolean;
+  customizable?: boolean;
+  availableTokens?: string[];
+  defaultResponse?: string | null;
+  customResponse?: string | null;
 }
 
 function useCommands() {
@@ -688,11 +692,28 @@ function useCommands() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["commands"] }),
   });
 
-  return { query, toggle, createCustom, remove };
+  const setResponse = useMutation<BotCommand, Error, { name: string; response: string }>({
+    mutationFn: async ({ name, response }) => {
+      const token = await getToken();
+      const res = await fetch(`/api/commands/${encodeURIComponent(name.replace(/^!/, ""))}/response`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ response }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to save response");
+      }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["commands"] }),
+  });
+
+  return { query, toggle, createCustom, remove, setResponse };
 }
 
 function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
-  const { query, toggle, createCustom, remove } = useCommands();
+  const { query, toggle, createCustom, remove, setResponse } = useCommands();
   const [showForm, setShowForm] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -757,24 +778,13 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
                 <div className="p-6 text-sm text-muted-foreground text-center">No general commands.</div>
               ) : (
                 generalBuiltIns.map((cmd) => (
-                  <div key={cmd.name} className={`flex items-center justify-between px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
-                    <div className="flex-1 min-w-0 pr-3">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-                          <Clock className="w-2.5 h-2.5" />
-                          {cmd.cooldownSeconds}s
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-snug">{cmd.description}</p>
-                    </div>
-                    <Switch
-                      checked={cmd.enabled}
-                      onCheckedChange={() => toggle.mutate(cmd.name)}
-                      disabled={toggle.isPending}
-                      aria-label={`Toggle ${cmd.name}`}
-                    />
-                  </div>
+                  <BuiltInCommandRow
+                    key={cmd.name}
+                    cmd={cmd}
+                    onToggle={() => toggle.mutate(cmd.name)}
+                    toggling={toggle.isPending}
+                    onSaveResponse={(response) => setResponse.mutateAsync({ name: cmd.name, response })}
+                  />
                 ))
               )}
             </div>
@@ -794,24 +804,13 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
                 </div>
               ) : (
                 themedBuiltIns.map((cmd) => (
-                  <div key={cmd.name} className={`flex items-center justify-between px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
-                    <div className="flex-1 min-w-0 pr-3">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-                          <Clock className="w-2.5 h-2.5" />
-                          {cmd.cooldownSeconds}s
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-snug">{cmd.description}</p>
-                    </div>
-                    <Switch
-                      checked={cmd.enabled}
-                      onCheckedChange={() => toggle.mutate(cmd.name)}
-                      disabled={toggle.isPending}
-                      aria-label={`Toggle ${cmd.name}`}
-                    />
-                  </div>
+                  <BuiltInCommandRow
+                    key={cmd.name}
+                    cmd={cmd}
+                    onToggle={() => toggle.mutate(cmd.name)}
+                    toggling={toggle.isPending}
+                    onSaveResponse={(response) => setResponse.mutateAsync({ name: cmd.name, response })}
+                  />
                 ))
               )}
             </div>
@@ -892,6 +891,151 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
         </CollapsibleContent>
       </section>
     </Collapsible>
+  );
+}
+
+function BuiltInCommandRow({
+  cmd,
+  onToggle,
+  toggling,
+  onSaveResponse,
+}: {
+  cmd: BotCommand;
+  onToggle: () => void;
+  toggling: boolean;
+  onSaveResponse: (response: string) => Promise<unknown>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(cmd.customResponse ?? "");
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const customizable = Boolean(cmd.customizable);
+  const hasCustom = typeof cmd.customResponse === "string" && cmd.customResponse.length > 0;
+  const tokens = cmd.availableTokens ?? [];
+
+  function startEditing() {
+    setDraft(cmd.customResponse ?? "");
+    setSaveErr(null);
+    setEditing(true);
+  }
+
+  async function save(value: string) {
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      await onSaveResponse(value);
+      setEditing(false);
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={`px-4 py-3 ${cmd.enabled ? "" : "opacity-60"}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0 pr-3">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+            <code className="font-mono font-bold text-sm text-foreground">{cmd.name}</code>
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+              <Clock className="w-2.5 h-2.5" />
+              {cmd.cooldownSeconds}s
+            </span>
+            {hasCustom && (
+              <span className="text-[10px] uppercase tracking-wide text-primary font-semibold bg-primary/10 px-1.5 py-0.5 rounded">
+                custom reply
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground leading-snug">{cmd.description}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {customizable && !editing && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7 px-2"
+              onClick={startEditing}
+              data-testid={`button-edit-response-${cmd.name.replace(/^!/, "")}`}
+            >
+              {hasCustom ? "Edit reply" : "Customize reply"}
+            </Button>
+          )}
+          <Switch
+            checked={cmd.enabled}
+            onCheckedChange={onToggle}
+            disabled={toggling}
+            aria-label={`Toggle ${cmd.name}`}
+          />
+        </div>
+      </div>
+
+      {customizable && editing && (
+        <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+          <Label htmlFor={`resp-${cmd.name}`} className="text-xs font-semibold">
+            Custom reply for <code className="font-mono">{cmd.name}</code>
+          </Label>
+          <Textarea
+            id={`resp-${cmd.name}`}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={cmd.defaultResponse ?? "Your custom chat reply…"}
+            maxLength={400}
+            rows={2}
+            className="text-sm"
+          />
+          {tokens.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] text-muted-foreground">Tokens:</span>
+              {tokens.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setDraft((d) => `${d}${d && !d.endsWith(" ") ? " " : ""}{${t}}`)}
+                  className="font-mono text-[11px] bg-muted hover:bg-muted/70 text-foreground px-1.5 py-0.5 rounded border border-border"
+                >
+                  {`{${t}}`}
+                </button>
+              ))}
+            </div>
+          )}
+          {cmd.defaultResponse && (
+            <p className="text-[11px] text-muted-foreground">
+              Default: <span className="italic">{cmd.defaultResponse}</span>
+            </p>
+          )}
+          {saveErr && (
+            <p className="text-[11px] text-destructive flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {saveErr}
+            </p>
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              size="sm"
+              disabled={saving || draft.trim().length === 0}
+              onClick={() => save(draft.trim())}
+            >
+              {saving ? "Saving…" : "Save reply"}
+            </Button>
+            {hasCustom && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={saving}
+                onClick={() => save("")}
+              >
+                Reset to default
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

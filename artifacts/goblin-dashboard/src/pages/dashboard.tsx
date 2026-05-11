@@ -3,72 +3,32 @@ import {
   useGetStatsOverview,
   useGetRecentLoot,
   useGetCurrentGiveaway,
-  useGetStreamStatus,
-  useStartStreamSession,
-  useEndStreamSession,
-  getGetStreamStatusQueryKey,
-  getGetStatsOverviewQueryKey,
-  getGetRecentLootQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AlertCircle, Sparkles, Gem, ArrowRight, Activity, Users, Zap, Radio, Square } from "lucide-react";
+import { AlertCircle, Sparkles, Gem, ArrowRight, Activity, Users, Zap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
 import { ChatUsers } from "@/pages/chat-users";
 
 /**
  * Operations Center.
  *
- * Two tabs: Overview (stats + active giveaway + live loot, all scoped to the
- * current stream session) and Chat Users (formerly its own page).
- *
- * Stream session = the time window since the streamer last hit "Start Stream".
- * Stats and the live loot feed both pass `range=stream` / `since=stream`,
- * which the API resolves to `usersTable.streamStartedAt` (falling back to
- * the last 12 hours when no session is open so the panel isn't empty).
+ * Two tabs: Overview (stats + active giveaway + live loot) and Chat Users.
+ * The Overview is scoped passively to "the current stream" — server-side
+ * `range=stream` / `since=stream` resolve to the last 12 hours, so the panel
+ * tracks whatever's been happening in chat without needing a manual
+ * Start Stream toggle.
  */
 export function Dashboard() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: botStatus, isLoading: botLoading } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: currentGiveaway, isLoading: giveawayLoading } = useGetCurrentGiveaway({ query: { refetchInterval: 10000 } as any });
-  const { data: streamStatus } = useGetStreamStatus();
 
   const { data: stats, isLoading: statsLoading } = useGetStatsOverview({ range: "stream" });
   const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 10, since: "stream" });
-
-  const startMutation = useStartStreamSession();
-  const endMutation = useEndStreamSession();
-
-  function refreshAll() {
-    queryClient.invalidateQueries({ queryKey: getGetStreamStatusQueryKey() });
-    queryClient.invalidateQueries({ queryKey: getGetStatsOverviewQueryKey({ range: "stream" }) });
-    queryClient.invalidateQueries({ queryKey: getGetRecentLootQueryKey({ limit: 10, since: "stream" }) });
-  }
-
-  function handleStart() {
-    startMutation.mutate(undefined, {
-      onSuccess: () => { toast({ title: "Stream session started", description: "Operations is now scoped to this stream." }); refreshAll(); },
-      onError: () => toast({ title: "Couldn't start session", variant: "destructive" }),
-    });
-  }
-  function handleEnd() {
-    endMutation.mutate(undefined, {
-      onSuccess: () => { toast({ title: "Stream ended", description: "Stats will fall back to the last 12 hours." }); refreshAll(); },
-      onError: () => toast({ title: "Couldn't end session", variant: "destructive" }),
-    });
-  }
-
-  const isLive = Boolean(streamStatus?.isLive);
-  const startedAt = streamStatus?.streamStartedAt ? new Date(streamStatus.streamStartedAt) : null;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -79,30 +39,6 @@ export function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Stream session control */}
-          {isLive ? (
-            <Button
-              variant="outline"
-              onClick={handleEnd}
-              disabled={endMutation.isPending}
-              className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/10"
-              data-testid="button-end-stream"
-            >
-              <Square className="w-4 h-4" />
-              End Stream
-            </Button>
-          ) : (
-            <Button
-              onClick={handleStart}
-              disabled={startMutation.isPending}
-              className="gap-2"
-              data-testid="button-start-stream"
-            >
-              <Radio className="w-4 h-4" />
-              Start Stream
-            </Button>
-          )}
-
           {/* Bot status pill */}
           <div className="flex items-center gap-3 bg-card px-4 py-2 rounded-full border border-border">
             <Activity className="w-5 h-5 text-muted-foreground" />
@@ -129,19 +65,13 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Stream session banner */}
-      <div className={`flex items-center justify-between gap-3 px-4 py-2 rounded-md border text-sm ${
-        isLive
-          ? "bg-primary/5 border-primary/30 text-primary"
-          : "bg-muted/30 border-border text-muted-foreground"
-      }`}>
+      {/* Passive stream-window banner */}
+      <div className="flex items-center justify-between gap-3 px-4 py-2 rounded-md border bg-muted/30 border-border text-muted-foreground text-sm">
         <span className="flex items-center gap-2 font-medium">
-          <span className={`w-2 h-2 rounded-full ${isLive ? "bg-primary animate-pulse" : "bg-muted-foreground/40"}`} />
-          {isLive
-            ? `Live since ${startedAt?.toLocaleTimeString() ?? "—"}`
-            : "No stream session — showing the last 12 hours"}
+          <span className="w-2 h-2 rounded-full bg-primary/60 animate-pulse" />
+          Showing this stream's activity (last 12 hours)
         </span>
-        <span className="text-xs">Stats & loot feed below are scoped to this window.</span>
+        <span className="text-xs">Stats &amp; loot feed below are scoped to this window.</span>
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
@@ -184,26 +114,34 @@ export function Dashboard() {
                       <Skeleton className="h-4 w-1/2" />
                     </div>
                   ) : currentGiveaway?.giveaway ? (
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                      <div>
-                        <h3 className="text-3xl font-bold text-foreground mb-2">{currentGiveaway.giveaway.title}</h3>
-                        <p className="text-xl text-primary font-medium mb-4">Prize: {currentGiveaway.giveaway.prize}</p>
-                        <div className="flex items-center gap-4 text-sm">
-                          <div className="bg-muted px-3 py-1.5 rounded-md border border-border">
-                            <span className="text-muted-foreground">Keyword: </span>
-                            <span className="font-mono text-foreground font-bold">{currentGiveaway.giveaway.keyword}</span>
+                    <Link
+                      href={`/giveaway/${currentGiveaway.giveaway.id}`}
+                      className="block rounded-md -m-2 p-2 hover:bg-primary/5 focus-visible:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors cursor-pointer"
+                      data-testid="link-active-giveaway"
+                      aria-label={`Open ${currentGiveaway.giveaway.title} — manage entries and spin the wheel`}
+                    >
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div>
+                          <h3 className="text-3xl font-bold text-foreground mb-2">{currentGiveaway.giveaway.title}</h3>
+                          <p className="text-xl text-primary font-medium mb-4">Prize: {currentGiveaway.giveaway.prize}</p>
+                          <div className="flex items-center gap-4 text-sm">
+                            <div className="bg-muted px-3 py-1.5 rounded-md border border-border">
+                              <span className="text-muted-foreground">Keyword: </span>
+                              <span className="font-mono text-foreground font-bold">{currentGiveaway.giveaway.keyword}</span>
+                            </div>
+                            <div className="bg-muted px-3 py-1.5 rounded-md border border-border">
+                              <span className="text-muted-foreground">Entries: </span>
+                              <span className="font-mono text-foreground font-bold">{currentGiveaway.giveaway.entryCount}</span>
+                            </div>
                           </div>
-                          <div className="bg-muted px-3 py-1.5 rounded-md border border-border">
-                            <span className="text-muted-foreground">Entries: </span>
-                            <span className="font-mono text-foreground font-bold">{currentGiveaway.giveaway.entryCount}</span>
-                          </div>
+                          <p className="text-xs text-muted-foreground mt-3 italic">Click anywhere to open the spin wheel &amp; options →</p>
                         </div>
+                        <span className="group flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,180,0,0.3)]">
+                          Spin Wheel
+                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        </span>
                       </div>
-                      <Link href={`/giveaway/${currentGiveaway.giveaway.id}`} className="group flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-lg font-bold hover:brightness-110 transition-all shadow-[0_0_20px_rgba(255,180,0,0.3)]">
-                        Manage Run
-                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                      </Link>
-                    </div>
+                    </Link>
                   ) : (
                     <div className="text-center py-12">
                       <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4 border border-border/50">

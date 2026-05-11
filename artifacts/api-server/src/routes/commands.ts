@@ -8,8 +8,11 @@ import {
   toggleCommandEnabled,
   reloadCustomCommands,
   isBuiltInCommand,
+  resolveCanonical,
+  isCommandCustomizable,
   type CommandTheme,
 } from "../bot/bot-service";
+import { invalidateCommandResponses } from "../bot/command-responses";
 
 const router: IRouter = Router();
 
@@ -49,8 +52,10 @@ async function getUserOrThrow(req: any) {
   return user ?? null;
 }
 
-router.get("/commands", (_req, res) => {
-  res.json(getCommandConfig());
+router.get("/commands", async (req, res) => {
+  const user = await getUserOrThrow(req);
+  const channel = user?.twitchUsername ?? undefined;
+  res.json(await getCommandConfig({ channel }));
 });
 
 router.post("/commands/:name/toggle", async (req, res) => {
@@ -59,11 +64,46 @@ router.post("/commands/:name/toggle", async (req, res) => {
   const name = normalizeName(req.params["name"] ?? "");
   try {
     const enabled = toggleCommandEnabled(name);
-    const config = getCommandConfig().find((c) => c.name === name);
+    const all = await getCommandConfig({ channel: user.twitchUsername ?? undefined });
+    const config = all.find((c) => c.name === name);
     res.json(config ?? { name, description: "", enabled, cooldownSeconds: 10, theme: "both", isCustom: false });
   } catch {
     res.status(404).json({ error: "Command not found" });
   }
+});
+
+const ResponseInput = z.object({
+  // Empty/whitespace clears the override and falls back to the default.
+  response: z.string().max(400),
+});
+
+router.put("/commands/:name/response", async (req, res) => {
+  const user = await getUserOrThrow(req);
+  if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const name = normalizeName(req.params["name"] ?? "");
+  const canonical = resolveCanonical(name);
+  if (!canonical || !isCommandCustomizable(canonical)) {
+    res.status(400).json({ error: `${name} cannot be customized` });
+    return;
+  }
+  const parsed = ResponseInput.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  const trimmed = parsed.data.response.trim();
+  const current: Record<string, string> = (user.commandResponses ?? {}) as Record<string, string>;
+  const next = { ...current };
+  if (trimmed.length === 0) {
+    delete next[canonical];
+  } else {
+    next[canonical] = trimmed;
+  }
+  await db.update(usersTable).set({ commandResponses: next }).where(eq(usersTable.id, user.id));
+  if (user.twitchUsername) invalidateCommandResponses(user.twitchUsername);
+  const all = await getCommandConfig({ channel: user.twitchUsername ?? undefined });
+  const config = all.find((c) => c.name === canonical);
+  res.json(config ?? { name: canonical, customResponse: trimmed || null });
 });
 
 // ---- Custom commands ----

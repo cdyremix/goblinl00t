@@ -25,7 +25,8 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 ## Where things live
 
 - `lib/db/src/schema/` — DB schema (giveaways, giveaway_entries, loot_drops, command_logs, user_inventory, goblin_events, users, giveaway_presets)
-  - `usersTable.streamStartedAt` (nullable timestamp) — set by `POST /stream/start`, cleared by `POST /stream/end`. Read by `routes/stats.ts` (range=stream) and `routes/loot.ts` (since=stream); fallback window when null is the last 12h.
+  - `usersTable.streamStartedAt` (nullable timestamp) — **deprecated** (the manual Start/End Stream UI was removed). Still read by `routes/stats.ts` (range=stream) and `routes/loot.ts` (since=stream) when present; falls back to the last 12h otherwise. Safe to ignore from new code.
+  - `usersTable.commandResponses` (jsonb, default `{}`) — per-channel custom reply templates keyed by canonical command name (e.g. `{"!help": "...", "!hoard": "..."}`). Empty string clears. Cached by `bot/command-responses.ts`; **all writes must call `invalidateCommandResponses(channel)`**. Tokens are rendered by `renderTemplate(template, vars)` (e.g. `{user}` → `@username`, `{balance}`, `{commands}`, `{theme}`).
   - `giveaway_presets` — saved giveaway templates per streamer (title, description, prize, prizeKind, prizeBotCoins, prizeBotRarity, keyword, requireFollower, subscriberOnly, minSubTier).
 - `lib/api-spec/openapi.yaml` — OpenAPI source of truth for all endpoints
 - `lib/api-client-react/src/generated/` — generated React Query hooks (do not edit)
@@ -53,7 +54,7 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 ## Product
 
 - **Home page** (`/`): Public landing page with feature overview and chat command reference.
-- **Dashboard / Operations** (`/dashboard`): Two tabs — **Overview** (bot status, stats, active giveaway, live loot feed, all scoped to the current stream session) and **Chat Users** (full coin/inventory roster, formerly `/users`). The Operations header has a **Start Stream / End Stream** button: `Start` stamps `usersTable.streamStartedAt = now()` (via `POST /stream/start`); `End` clears it. Stats and the live loot feed pass `range=stream` / `since=stream`, which the API resolves to `streamStartedAt` (falling back to the last 12h when no session is active so the dashboard isn't empty before the streamer hits Start). The standalone `/users` route still works for deep links — Chat Users is just no longer in the sidebar.
+- **Dashboard / Operations** (`/dashboard`): Two tabs — **Overview** (bot status, stats, active giveaway, live loot feed, scoped to the current stream window) and **Chat Users** (full coin/inventory roster, formerly `/users`). Stats and the live loot feed pass `range=stream` / `since=stream`, which the API resolves to `usersTable.streamStartedAt` if present, else the last 12 hours. The Start/End Stream control was removed — the panel passively shows the stream window with a banner. The active-giveaway card on Overview is fully clickable (entire card → `/giveaway/:id`) and shows a "Spin Wheel" CTA so the streamer can jump straight into the elimination wheel from the home dashboard. The standalone `/users` route still works for deep links.
 - **Loot Hoard** (`/giveaway`): Create giveaways, filter list by status, click through to detail. Includes a **Saved Presets** panel: hit "Save Preset" next to the create button to snapshot the current form into `giveaway_presets`; the panel lists saved templates with one-click **Launch** (creates a fresh `giveaways` row in `pending` status — streamer still hits Start manually) and **Delete**. Presets are templates, not auto-schedulers.
 - **Giveaway Detail** (`/giveaway/:id`): Start, end (pick winner), reroll. Shows winner banner and full entry list.
 - **Ledger** (`/stats`): Day / Week / Month / Year / All-time range tabs that filter overview cards, top looters, and command usage. Includes an **Engagement Tips** card driven by `GET /stats/engagement` — lightweight heuristics (no giveaways in window, low command usage, few unique chatters, no loot drops, healthy) that surface 0–5 actionable suggestions, never auto-actions.
@@ -69,11 +70,14 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 
 Canonical commands (the Spells page lists only these — aliases share toggle, cooldown, and handler with their canonical):
 - `!loot`, `!enter`, `!inventory`, `!sell <slot|all>`, `!use <slot>`, `!giveaway`, `!redeem`, `!tradeurl`
-- `!points` (alias: `!coins`) — show your coin balance
-- `!goblin` (alias: `!skin`) — random themed taunt
+- `!help` — short, theme-aware list of currently-enabled commands (customizable; tokens: `{user}`, `{commands}`, `{theme}`)
+- `!points` (alias: `!coins`) — show your coin balance (customizable; tokens: `{user}`, `{balance}`)
+- `!goblin` (alias: `!skin`) — random themed taunt (customizable; tokens: `{user}`, `{theme}`)
 - `!steal` (alias: `!scam`) — try to mug another viewer
-- `!hoard` (alias: `!stash`) — show your coin balance
-- `!feedgoblin` (alias: `!case`) — feed / open-case flavor response
+- `!hoard` (alias: `!stash`) — show your coin balance (customizable; tokens: `{user}`, `{balance}`)
+- `!feedgoblin` (alias: `!case`) — feed / open-case flavor response (customizable; tokens: `{user}`, `{theme}`)
+
+**Customizable command responses** (Forge → Chat Commands): each `BUILT_IN_COMMANDS[name]` entry can opt in via `customizable: true`, `availableTokens: string[]`, and `defaultResponse: string`. The Spells/Forge UI renders an inline textarea + token-chip palette for those rows; the streamer's override is persisted to `usersTable.commandResponses` (jsonb) via `PUT /commands/:name/response` (empty body string clears). `getCommandConfig({channel})` is async and resolves the canonical name + the streamer's override; the bot calls `getCustomResponseFor(channel, canonical)` and renders with `renderTemplate(template, vars)`. `routes/commands.ts` MUST call `invalidateCommandResponses(channel)` after writes — the bot reads from the cache on every chat message. Adding a new customizable command: tag it in `BUILT_IN_COMMANDS`, swap the handler's hardcoded reply for `renderTemplate(getCustomResponseFor(channel, name) ?? DEFAULT, vars)`, and document the available tokens here.
 
 `bot/bot-service.ts` defines aliases via `BUILT_IN_COMMANDS[name].aliasOf`. `getCommandConfig()` filters them out (only canonicals show up in the API + Spells page) and emits `aliases: string[]` on the canonical so the UI can hint them. `toggleCommandEnabled()` resolves to the canonical and propagates the new state to every alias so the bot's `command in COMMAND_ENABLED` check always sees a consistent value regardless of which name was typed.
 

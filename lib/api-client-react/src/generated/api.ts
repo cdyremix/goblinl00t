@@ -55,6 +55,7 @@ import type {
   StreamStatus,
   TradeFulfillment,
   UpdateBotSettings,
+  UpdateCommandResponse,
   UpdateTradeFulfillment,
   UseItemResult,
   UserInventory,
@@ -3397,4 +3398,91 @@ export const useToggleCommand = <
   TContext
 > => {
   return useMutation(getToggleCommandMutationOptions(options));
+};
+
+/**
+ * @summary Set or clear the streamer's custom response template for a built-in command
+ */
+export const getUpdateCommandResponseUrl = (name: string) => {
+  return `/api/commands/${name}/response`;
+};
+
+export const updateCommandResponse = async (
+  name: string,
+  updateCommandResponse: UpdateCommandResponse,
+  options?: RequestInit,
+): Promise<BotCommand> => {
+  return customFetch<BotCommand>(getUpdateCommandResponseUrl(name), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateCommandResponse),
+  });
+};
+
+export const getUpdateCommandResponseMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCommandResponse>>,
+    TError,
+    { name: string; data: BodyType<UpdateCommandResponse> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCommandResponse>>,
+  TError,
+  { name: string; data: BodyType<UpdateCommandResponse> },
+  TContext
+> => {
+  const mutationKey = ["updateCommandResponse"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCommandResponse>>,
+    { name: string; data: BodyType<UpdateCommandResponse> }
+  > = (props) => {
+    const { name, data } = props ?? {};
+
+    return updateCommandResponse(name, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateCommandResponseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateCommandResponse>>
+>;
+export type UpdateCommandResponseMutationBody = BodyType<UpdateCommandResponse>;
+export type UpdateCommandResponseMutationError = ErrorType<void>;
+
+/**
+ * @summary Set or clear the streamer's custom response template for a built-in command
+ */
+export const useUpdateCommandResponse = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCommandResponse>>,
+    TError,
+    { name: string; data: BodyType<UpdateCommandResponse> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateCommandResponse>>,
+  TError,
+  { name: string; data: BodyType<UpdateCommandResponse> },
+  TContext
+> => {
+  return useMutation(getUpdateCommandResponseMutationOptions(options));
 };
