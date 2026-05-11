@@ -516,6 +516,29 @@ paths:
         "502":
           description: Steam API error
 
+  /loot-hoard/drop:
+    post:
+      operationId: manualLootDrop
+      tags: [loot-hoard]
+      summary: Streamer-initiated manual prize drop (coins or random item) to a viewer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualDropRequest"
+      responses:
+        "200":
+          description: Drop result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualDropResponse"
+        "400":
+          description: Invalid input
+        "401":
+          description: Unauthorized
+
   /settings:
     get:
       operationId: getBotSettings
@@ -872,6 +895,18 @@ components:
           type: ["string", "null"]
         goblinEventsEnabled:
           type: boolean
+        lootDropsEnabled:
+          type: boolean
+        coinRedemptionEnabled:
+          type: boolean
+        coinCap:
+          type: ["integer", "null"]
+        wheelMode:
+          type: string
+          enum: [auto, manual]
+        wheelSpeed:
+          type: string
+          enum: [slow, medium, fast]
       required:
         - botTheme
         - botName
@@ -879,6 +914,11 @@ components:
         - steamId64
         - steamUsername
         - goblinEventsEnabled
+        - lootDropsEnabled
+        - coinRedemptionEnabled
+        - coinCap
+        - wheelMode
+        - wheelSpeed
 
     UpdateBotSettings:
       type: object
@@ -896,6 +936,62 @@ components:
           type: ["string", "null"]
         goblinEventsEnabled:
           type: boolean
+        lootDropsEnabled:
+          type: boolean
+        coinRedemptionEnabled:
+          type: boolean
+        coinCap:
+          type: ["integer", "null"]
+        wheelMode:
+          type: string
+          enum: [auto, manual]
+        wheelSpeed:
+          type: string
+          enum: [slow, medium, fast]
+
+    ManualDropRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        kind:
+          type: string
+          enum: [coins, item]
+        coins:
+          type: integer
+        rarity:
+          type: string
+          enum: [common, uncommon, rare, epic, legendary]
+      required:
+        - username
+        - kind
+
+    ManualDropResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        kind:
+          type: string
+          enum: [coins, item]
+        username:
+          type: string
+        coinsAwarded:
+          type: ["integer", "null"]
+        itemAwarded:
+          type: ["string", "null"]
+        rarity:
+          type: ["string", "null"]
+        inventoryFull:
+          type: boolean
+      required:
+        - ok
+        - kind
+        - username
+        - coinsAwarded
+        - itemAwarded
+        - rarity
+        - inventoryFull
 
     TradeFulfillment:
       type: object
@@ -1002,6 +1098,8 @@ components:
           type: integer
         balance:
           type: integer
+        cap:
+          type: ["integer", "null"]
         costPerEntry:
           type: integer
       required:

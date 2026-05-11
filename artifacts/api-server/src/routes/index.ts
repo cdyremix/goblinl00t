@@ -12,6 +12,7 @@ import steamRouter from "./steam";
 import tradeFulfillmentsRouter from "./trade-fulfillments";
 import pointsRouter from "./points";
 import inventoryRouter from "./inventory";
+import lootHoardRouter from "./loot-hoard";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(steamRouter);
 router.use(tradeFulfillmentsRouter);
 router.use(pointsRouter);
 router.use(inventoryRouter);
+router.use(lootHoardRouter);
 
 export default router;

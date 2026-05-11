@@ -225,6 +225,23 @@ export const BotSettingsBotTheme = {
   cs2: "cs2",
 } as const;
 
+export type BotSettingsWheelMode =
+  (typeof BotSettingsWheelMode)[keyof typeof BotSettingsWheelMode];
+
+export const BotSettingsWheelMode = {
+  auto: "auto",
+  manual: "manual",
+} as const;
+
+export type BotSettingsWheelSpeed =
+  (typeof BotSettingsWheelSpeed)[keyof typeof BotSettingsWheelSpeed];
+
+export const BotSettingsWheelSpeed = {
+  slow: "slow",
+  medium: "medium",
+  fast: "fast",
+} as const;
+
 export interface BotSettings {
   botTheme: BotSettingsBotTheme;
   botName: string;
@@ -235,6 +252,12 @@ export interface BotSettings {
   /** @nullable */
   steamUsername: string | null;
   goblinEventsEnabled: boolean;
+  lootDropsEnabled: boolean;
+  coinRedemptionEnabled: boolean;
+  /** @nullable */
+  coinCap: number | null;
+  wheelMode: BotSettingsWheelMode;
+  wheelSpeed: BotSettingsWheelSpeed;
 }
 
 export type UpdateBotSettingsBotTheme =
@@ -243,6 +266,23 @@ export type UpdateBotSettingsBotTheme =
 export const UpdateBotSettingsBotTheme = {
   goblin: "goblin",
   cs2: "cs2",
+} as const;
+
+export type UpdateBotSettingsWheelMode =
+  (typeof UpdateBotSettingsWheelMode)[keyof typeof UpdateBotSettingsWheelMode];
+
+export const UpdateBotSettingsWheelMode = {
+  auto: "auto",
+  manual: "manual",
+} as const;
+
+export type UpdateBotSettingsWheelSpeed =
+  (typeof UpdateBotSettingsWheelSpeed)[keyof typeof UpdateBotSettingsWheelSpeed];
+
+export const UpdateBotSettingsWheelSpeed = {
+  slow: "slow",
+  medium: "medium",
+  fast: "fast",
 } as const;
 
 export interface UpdateBotSettings {
@@ -255,6 +295,59 @@ export interface UpdateBotSettings {
   /** @nullable */
   steamUsername?: string | null;
   goblinEventsEnabled?: boolean;
+  lootDropsEnabled?: boolean;
+  coinRedemptionEnabled?: boolean;
+  /** @nullable */
+  coinCap?: number | null;
+  wheelMode?: UpdateBotSettingsWheelMode;
+  wheelSpeed?: UpdateBotSettingsWheelSpeed;
+}
+
+export type ManualDropRequestKind =
+  (typeof ManualDropRequestKind)[keyof typeof ManualDropRequestKind];
+
+export const ManualDropRequestKind = {
+  coins: "coins",
+  item: "item",
+} as const;
+
+export type ManualDropRequestRarity =
+  (typeof ManualDropRequestRarity)[keyof typeof ManualDropRequestRarity];
+
+export const ManualDropRequestRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
+export interface ManualDropRequest {
+  username: string;
+  kind: ManualDropRequestKind;
+  coins?: number;
+  rarity?: ManualDropRequestRarity;
+}
+
+export type ManualDropResponseKind =
+  (typeof ManualDropResponseKind)[keyof typeof ManualDropResponseKind];
+
+export const ManualDropResponseKind = {
+  coins: "coins",
+  item: "item",
+} as const;
+
+export interface ManualDropResponse {
+  ok: boolean;
+  kind: ManualDropResponseKind;
+  username: string;
+  /** @nullable */
+  coinsAwarded: number | null;
+  /** @nullable */
+  itemAwarded: string | null;
+  /** @nullable */
+  rarity: string | null;
+  inventoryFull: boolean;
 }
 
 export type TradeFulfillmentStatus =
@@ -326,6 +419,8 @@ export interface PointsBalance {
   earned: number;
   redeemed: number;
   balance: number;
+  /** @nullable */
+  cap?: number | null;
   costPerEntry: number;
 }
 

@@ -11,5 +11,7 @@ export interface PointsBalance {
   earned: number;
   redeemed: number;
   balance: number;
+  /** @nullable */
+  cap?: number | null;
   costPerEntry: number;
 }

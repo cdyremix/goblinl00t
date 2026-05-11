@@ -56,15 +56,19 @@ function upgradeRarity(r: Rarity): Rarity {
 
 export interface RollOptions {
   luckBuffActive: boolean;
+  /** When false (settings: lootDropsEnabled), suppress buff/special-item rolls. */
+  allowBuffs?: boolean;
 }
 
 /**
- * Roll a loot drop. With a small probability, roll a buff item instead of a
- * plain sellable item. With the luck buff active, has a 50% chance to bump
- * the rarity one tier up (and re-pick from that tier's pool).
+ * Roll a loot drop. With a small probability (and only when `allowBuffs` is
+ * not explicitly false), roll a buff item instead of a plain sellable item.
+ * With the luck buff active, has a 50% chance to bump the rarity one tier up
+ * (and re-pick from that tier's pool).
  */
 export function rollLootDrop(opts: RollOptions): RolledLoot {
-  if (Math.random() < BUFF_DROP_CHANCE) {
+  const allowBuffs = opts.allowBuffs !== false;
+  if (allowBuffs && Math.random() < BUFF_DROP_CHANCE) {
     const buff = BUFF_TABLE[Math.floor(Math.random() * BUFF_TABLE.length)]!;
     return {
       item: buff.item,

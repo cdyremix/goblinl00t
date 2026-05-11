@@ -4,10 +4,13 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { setActiveTheme, type BotTheme } from "../bot/bot-themes";
 import { setActiveBotName } from "../bot/bot-service";
+import { invalidateChannelSettings } from "../bot/channel-settings";
 
 const router = Router();
 
 const VALID_THEMES: BotTheme[] = ["goblin", "cs2"];
+const VALID_WHEEL_MODES = ["auto", "manual"] as const;
+const VALID_WHEEL_SPEEDS = ["slow", "medium", "fast"] as const;
 
 async function getOrCreateUser(clerkUserId: string) {
   const [existing] = await db
@@ -31,6 +34,15 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
     steamId64: user.steamId64 ?? null,
     steamUsername: user.steamUsername ?? null,
     goblinEventsEnabled: user.goblinEventsEnabled,
+    lootDropsEnabled: user.lootDropsEnabled,
+    coinRedemptionEnabled: user.coinRedemptionEnabled,
+    coinCap: user.coinCap,
+    wheelMode: (user.wheelMode === "manual" ? "manual" : "auto") as "auto" | "manual",
+    wheelSpeed:
+      (user.wheelSpeed === "slow" || user.wheelSpeed === "fast" ? user.wheelSpeed : "medium") as
+        | "slow"
+        | "medium"
+        | "fast",
   };
 }
 
@@ -52,6 +64,11 @@ router.put("/settings", async (req, res) => {
     steamId64?: string | null;
     steamUsername?: string | null;
     goblinEventsEnabled?: boolean;
+    lootDropsEnabled?: boolean;
+    coinRedemptionEnabled?: boolean;
+    coinCap?: number | null;
+    wheelMode?: string;
+    wheelSpeed?: string;
   };
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
@@ -79,13 +96,43 @@ router.put("/settings", async (req, res) => {
   if ("steamId64" in body) updates.steamId64 = body.steamId64 ?? null;
   if ("steamUsername" in body) updates.steamUsername = body.steamUsername ?? null;
   if (typeof body.goblinEventsEnabled === "boolean") updates.goblinEventsEnabled = body.goblinEventsEnabled;
+  if (typeof body.lootDropsEnabled === "boolean") updates.lootDropsEnabled = body.lootDropsEnabled;
+  if (typeof body.coinRedemptionEnabled === "boolean") updates.coinRedemptionEnabled = body.coinRedemptionEnabled;
+  if ("coinCap" in body) {
+    if (body.coinCap === null || body.coinCap === undefined) {
+      updates.coinCap = null;
+    } else if (Number.isFinite(body.coinCap) && body.coinCap >= 0) {
+      updates.coinCap = Math.floor(body.coinCap);
+    } else {
+      res.status(400).json({ error: "coinCap must be a non-negative integer or null" });
+      return;
+    }
+  }
+  if (body.wheelMode !== undefined) {
+    if (!VALID_WHEEL_MODES.includes(body.wheelMode as (typeof VALID_WHEEL_MODES)[number])) {
+      res.status(400).json({ error: "wheelMode must be 'auto' or 'manual'" });
+      return;
+    }
+    updates.wheelMode = body.wheelMode;
+  }
+  if (body.wheelSpeed !== undefined) {
+    if (!VALID_WHEEL_SPEEDS.includes(body.wheelSpeed as (typeof VALID_WHEEL_SPEEDS)[number])) {
+      res.status(400).json({ error: "wheelSpeed must be 'slow', 'medium', or 'fast'" });
+      return;
+    }
+    updates.wheelSpeed = body.wheelSpeed;
+  }
 
-  await getOrCreateUser(userId);
+  const before = await getOrCreateUser(userId);
   const [updated] = await db
     .update(usersTable)
     .set(updates)
     .where(eq(usersTable.clerkUserId, userId))
     .returning();
+
+  // Invalidate channel cache for the linked twitch username so chat sees changes.
+  const ch = updated?.twitchUsername ?? before.twitchUsername;
+  if (ch) invalidateChannelSettings(ch);
 
   res.json(serializeSettings(updated!));
 });

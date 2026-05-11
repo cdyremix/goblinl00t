@@ -407,6 +407,7 @@ export const GetMyPointsResponse = zod.object({
   earned: zod.number(),
   redeemed: zod.number(),
   balance: zod.number(),
+  cap: zod.number().nullish(),
   costPerEntry: zod.number(),
 });
 
@@ -632,6 +633,28 @@ export const GetSteamInventoryResponse = zod.object({
 });
 
 /**
+ * @summary Streamer-initiated manual prize drop (coins or random item) to a viewer
+ */
+export const ManualLootDropBody = zod.object({
+  username: zod.string(),
+  kind: zod.enum(["coins", "item"]),
+  coins: zod.number().optional(),
+  rarity: zod
+    .enum(["common", "uncommon", "rare", "epic", "legendary"])
+    .optional(),
+});
+
+export const ManualLootDropResponse = zod.object({
+  ok: zod.boolean(),
+  kind: zod.enum(["coins", "item"]),
+  username: zod.string(),
+  coinsAwarded: zod.number().nullable(),
+  itemAwarded: zod.string().nullable(),
+  rarity: zod.string().nullable(),
+  inventoryFull: zod.boolean(),
+});
+
+/**
  * @summary Get current user bot settings
  */
 export const GetBotSettingsResponse = zod.object({
@@ -641,6 +664,11 @@ export const GetBotSettingsResponse = zod.object({
   steamId64: zod.string().nullable(),
   steamUsername: zod.string().nullable(),
   goblinEventsEnabled: zod.boolean(),
+  lootDropsEnabled: zod.boolean(),
+  coinRedemptionEnabled: zod.boolean(),
+  coinCap: zod.number().nullable(),
+  wheelMode: zod.enum(["auto", "manual"]),
+  wheelSpeed: zod.enum(["slow", "medium", "fast"]),
 });
 
 /**
@@ -653,6 +681,11 @@ export const UpdateBotSettingsBody = zod.object({
   steamId64: zod.string().nullish(),
   steamUsername: zod.string().nullish(),
   goblinEventsEnabled: zod.boolean().optional(),
+  lootDropsEnabled: zod.boolean().optional(),
+  coinRedemptionEnabled: zod.boolean().optional(),
+  coinCap: zod.number().nullish(),
+  wheelMode: zod.enum(["auto", "manual"]).optional(),
+  wheelSpeed: zod.enum(["slow", "medium", "fast"]).optional(),
 });
 
 export const UpdateBotSettingsResponse = zod.object({
@@ -662,6 +695,11 @@ export const UpdateBotSettingsResponse = zod.object({
   steamId64: zod.string().nullable(),
   steamUsername: zod.string().nullable(),
   goblinEventsEnabled: zod.boolean(),
+  lootDropsEnabled: zod.boolean(),
+  coinRedemptionEnabled: zod.boolean(),
+  coinCap: zod.number().nullable(),
+  wheelMode: zod.enum(["auto", "manual"]),
+  wheelSpeed: zod.enum(["slow", "medium", "fast"]),
 });
 
 /**

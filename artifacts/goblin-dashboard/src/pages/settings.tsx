@@ -25,6 +25,11 @@ interface BotSettings {
   steamId64: string | null;
   steamUsername: string | null;
   goblinEventsEnabled: boolean;
+  lootDropsEnabled: boolean;
+  coinRedemptionEnabled: boolean;
+  coinCap: number | null;
+  wheelMode: "auto" | "manual";
+  wheelSpeed: "slow" | "medium" | "fast";
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -290,25 +295,133 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Random Goblin Events */}
-      <section className="space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 max-w-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">👺</span>
-              <Label htmlFor="goblin-events" className="text-base font-semibold text-foreground">Random Goblin Events</Label>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-              Every 5–15 minutes, the goblin pops into chat to drop a fistful of coins on a recent chatter — or steal some! Off by default if you'd rather keep things quiet.
-            </p>
-          </div>
-          <Switch
-            id="goblin-events"
-            checked={settings?.goblinEventsEnabled ?? true}
-            disabled={mutation.isPending}
-            onCheckedChange={(v) => mutation.mutate({ goblinEventsEnabled: v })}
-            data-testid="switch-goblin-events"
+      {/* Economy & Loot */}
+      <section className="space-y-4 max-w-2xl">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">💰</span>
+          <h2 className="text-lg font-semibold text-foreground">Economy &amp; Loot</h2>
+          <Hint
+            text="Controls coin earning, redemption, and special-item drops. These rules apply globally to chat — toggling them off takes effect immediately."
+            side="right"
           />
+        </div>
+
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👺</span>
+                <Label htmlFor="goblin-events" className="text-base font-semibold text-foreground">Random Goblin Events</Label>
+                <Hint text="Every 5–15 minutes the goblin pops into chat to drop coins on a recent chatter — or steal some. Requires viewers to have spoken since the bot started." side="right" />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                Surprise drops &amp; steals on recent chatters at random intervals.
+              </p>
+            </div>
+            <Switch
+              id="goblin-events"
+              checked={settings?.goblinEventsEnabled ?? true}
+              disabled={mutation.isPending}
+              onCheckedChange={(v) => mutation.mutate({ goblinEventsEnabled: v })}
+              data-testid="switch-goblin-events"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-5 space-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✨</span>
+                <Label htmlFor="loot-drops" className="text-base font-semibold text-foreground">Special-Item Loot Drops</Label>
+                <Hint text="When ON, !loot occasionally drops buff items (Lucky Charm, Goblin Blessing, Hoard Magnet, Trickster's Die) instead of plain sellable items. Turn OFF to make !loot only roll regular items." side="right" />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                Allow buff items (Lucky Charm, Goblin Blessing, etc.) to roll from !loot.
+              </p>
+            </div>
+            <Switch
+              id="loot-drops"
+              checked={settings?.lootDropsEnabled ?? true}
+              disabled={mutation.isPending}
+              onCheckedChange={(v) => mutation.mutate({ lootDropsEnabled: v })}
+              data-testid="switch-loot-drops"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 space-y-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎟️</span>
+                <Label htmlFor="coin-redemption" className="text-base font-semibold text-foreground">Coin Redemption</Label>
+                <Hint text="When ON, viewers can spend coins for extra giveaway tickets via !redeem (and the dashboard redeem button). Turn OFF to disable both paths." side="right" />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                Let viewers spend coins for extra giveaway entries (100 coins = 1 entry).
+              </p>
+            </div>
+            <Switch
+              id="coin-redemption"
+              checked={settings?.coinRedemptionEnabled ?? true}
+              disabled={mutation.isPending}
+              onCheckedChange={(v) => mutation.mutate({ coinRedemptionEnabled: v })}
+              data-testid="switch-coin-redemption"
+            />
+          </div>
+        </div>
+
+        <CoinCapSection
+          value={settings?.coinCap ?? null}
+          saving={mutation.isPending}
+          onSave={(v) => mutation.mutate({ coinCap: v })}
+        />
+      </section>
+
+      {/* Elimination Wheel */}
+      <section className="space-y-4 max-w-2xl">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🎡</span>
+          <h2 className="text-lg font-semibold text-foreground">Elimination Wheel</h2>
+          <Hint text="When you end a giveaway, the wheel spins through entries and eliminates one per round until a winner remains. Configure how it runs here." side="right" />
+        </div>
+
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="wheel-mode" className="text-sm font-semibold">Spin Mode</Label>
+              <Hint text="Auto: the wheel spins through every elimination by itself. Manual: the streamer clicks Spin between each elimination — great for hype." side="right" />
+            </div>
+            <Select
+              value={settings?.wheelMode ?? "auto"}
+              onValueChange={(v) => mutation.mutate({ wheelMode: v as "auto" | "manual" })}
+            >
+              <SelectTrigger id="wheel-mode" data-testid="select-wheel-mode"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto — spin through automatically</SelectItem>
+                <SelectItem value="manual">Manual — click to spin each round</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="wheel-speed" className="text-sm font-semibold">Spin Speed</Label>
+              <Hint text="Animation pacing. Slow = more dramatic, Fast = quick reveals." side="right" />
+            </div>
+            <Select
+              value={settings?.wheelSpeed ?? "medium"}
+              onValueChange={(v) => mutation.mutate({ wheelSpeed: v as "slow" | "medium" | "fast" })}
+            >
+              <SelectTrigger id="wheel-speed" data-testid="select-wheel-speed"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="slow">Slow — dramatic build-up</SelectItem>
+                <SelectItem value="medium">Medium — balanced</SelectItem>
+                <SelectItem value="fast">Fast — rapid-fire</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </section>
 
@@ -430,6 +543,64 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Coin cap subsection — local draft so the user can type freely before saving
+// =====================================================================
+
+function CoinCapSection({
+  value,
+  saving,
+  onSave,
+}: {
+  value: number | null;
+  saving: boolean;
+  onSave: (v: number | null) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? (value === null ? "" : String(value));
+  const trimmed = display.trim();
+  const parsed = trimmed === "" ? null : Math.floor(Number(trimmed));
+  const valid = trimmed === "" || (Number.isFinite(parsed) && parsed! >= 0);
+  const changed = (parsed ?? null) !== value;
+
+  function handleSave() {
+    if (!valid || !changed) return;
+    onSave(parsed);
+    setDraft(null);
+  }
+
+  return (
+    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-lg">🪙</span>
+        <Label htmlFor="coin-cap" className="text-base font-semibold text-foreground">Coin Balance Cap</Label>
+        <Hint
+          text="Maximum displayed coin balance per viewer. New earnings still record in the ledger, but !coins, the leaderboard, and redemption checks all clip to this number. Leave blank for no cap."
+          side="right"
+        />
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Maximum displayed coin balance per viewer. Leave blank for no cap.
+      </p>
+      <div className="flex gap-2 items-start">
+        <Input
+          id="coin-cap"
+          inputMode="numeric"
+          value={display}
+          onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
+          placeholder="No cap"
+          className={`max-w-[200px] ${!valid ? "border-destructive" : ""}`}
+          data-testid="input-coin-cap"
+        />
+        <Button size="sm" disabled={!valid || !changed || saving} onClick={handleSave}>
+          <Save className="w-3.5 h-3.5 mr-1" />
+          Save
+        </Button>
+      </div>
     </div>
   );
 }

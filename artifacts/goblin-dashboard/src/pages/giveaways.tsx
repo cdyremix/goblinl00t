@@ -12,12 +12,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
 import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { InventoryPicker, type PickedItem } from "@/components/inventory-picker";
+import { Hint } from "@/components/hint";
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -455,6 +457,7 @@ export function Giveaways() {
 
         {/* List */}
         <div className="lg:col-span-2 space-y-6">
+          <QuickPrizePanel />
           <div className="flex items-center gap-2 pb-4 border-b border-border/50 overflow-x-auto">
             <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>All Loot</FilterButton>
             <FilterButton active={filter === "active"} onClick={() => setFilter("active")}>Active</FilterButton>
@@ -563,6 +566,164 @@ function FilterButton({ active, onClick, children }: { active: boolean; onClick:
     >
       {children}
     </button>
+  );
+}
+
+// =====================================================================
+// Quick Prize panel — manual streamer drop of coins or a random item
+// =====================================================================
+
+function QuickPrizePanel() {
+  const { getToken } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [username, setUsername] = useState("");
+  const [kind, setKind] = useState<"coins" | "item">("coins");
+  const [coins, setCoins] = useState("100");
+  const [rarity, setRarity] = useState<"" | "common" | "uncommon" | "rare" | "epic" | "legendary">("");
+
+  const drop = useMutation<
+    {
+      ok: boolean;
+      kind: "coins" | "item";
+      username: string;
+      coinsAwarded: number | null;
+      itemAwarded: string | null;
+      rarity: string | null;
+      inventoryFull: boolean;
+    },
+    Error,
+    { username: string; kind: "coins" | "item"; coins?: number; rarity?: string }
+  >({
+    mutationFn: async (body) => {
+      const token = await getToken();
+      const res = await fetch("/api/loot-hoard/drop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to drop prize");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate loot/points/leaderboard so the drop appears immediately.
+      queryClient.invalidateQueries({ queryKey: ["recent-loot"] });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["points-balance"] });
+      const desc =
+        data.kind === "coins"
+          ? `+${data.coinsAwarded} coins to @${data.username}`
+          : data.inventoryFull
+            ? `Pouch was full — credited ${data.coinsAwarded} coins to @${data.username} instead.`
+            : `${data.itemAwarded} (${data.rarity}) → @${data.username}`;
+      toast({ title: "🎁 Prize dropped!", description: desc });
+    },
+    onError: (err) => toast({ title: "Drop failed", description: err.message, variant: "destructive" }),
+  });
+
+  const usernameValid = /^[a-zA-Z0-9_]{1,30}$/.test(username.trim());
+  const coinsNum = Math.floor(Number(coins));
+  const coinsValid = kind !== "coins" || (Number.isFinite(coinsNum) && coinsNum > 0);
+  const canSubmit = usernameValid && coinsValid && !drop.isPending;
+
+  function handleDrop(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    drop.mutate({
+      username: username.trim().toLowerCase(),
+      kind,
+      coins: kind === "coins" ? coinsNum : undefined,
+      rarity: kind === "item" && rarity ? rarity : undefined,
+    });
+  }
+
+  return (
+    <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-purple-500/5">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Coins className="w-4 h-4 text-amber-400" />
+          Quick Prize Drop
+          <Hint
+            text="Manually drop coins or a random item to a viewer — perfect for shoutouts, mod rewards, or apologies. Coins post to the leaderboard; items roll into the viewer's pouch (falls back to coins if their pouch is full)."
+            side="right"
+          />
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Hand a viewer a fistful of coins or a random item, no giveaway needed.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleDrop} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+            <Input
+              placeholder="twitch_username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              maxLength={30}
+              data-testid="input-quick-prize-username"
+              className={!usernameValid && username.length > 0 ? "border-destructive" : ""}
+            />
+            <div className="flex rounded-md border border-input overflow-hidden text-xs">
+              <button
+                type="button"
+                onClick={() => setKind("coins")}
+                className={`px-3 py-2 font-medium ${kind === "coins" ? "bg-amber-500/20 text-amber-300" : "text-muted-foreground hover:bg-muted/50"}`}
+                data-testid="tab-quick-prize-coins"
+              >
+                🪙 Coins
+              </button>
+              <button
+                type="button"
+                onClick={() => setKind("item")}
+                className={`px-3 py-2 font-medium ${kind === "item" ? "bg-purple-500/20 text-purple-300" : "text-muted-foreground hover:bg-muted/50"}`}
+                data-testid="tab-quick-prize-item"
+              >
+                ✨ Item
+              </button>
+            </div>
+          </div>
+
+          {kind === "coins" ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="100"
+                value={coins}
+                onChange={(e) => setCoins(e.target.value.replace(/[^\d]/g, ""))}
+                className="max-w-[140px]"
+                data-testid="input-quick-prize-coins"
+              />
+              <span className="text-xs text-muted-foreground">coins to drop</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <select
+                value={rarity}
+                onChange={(e) => setRarity(e.target.value as typeof rarity)}
+                className="rounded-md border border-input bg-background text-sm px-3 py-2"
+                data-testid="select-quick-prize-rarity"
+              >
+                <option value="">Random rarity</option>
+                <option value="common">Common</option>
+                <option value="uncommon">Uncommon</option>
+                <option value="rare">Rare</option>
+                <option value="epic">Epic</option>
+                <option value="legendary">Legendary</option>
+              </select>
+              <span className="text-xs text-muted-foreground">item from the loot table</span>
+            </div>
+          )}
+
+          <Button type="submit" disabled={!canSubmit} className="w-full font-bold gap-2" data-testid="button-quick-prize-drop">
+            {drop.isPending ? "Dropping…" : <>🎁 Drop Prize</>}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 

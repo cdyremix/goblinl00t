@@ -1,10 +1,14 @@
 import { useParams, useLocation } from "wouter";
+import { useState } from "react";
+import { useAuth } from "@clerk/react";
 import {
   useGetGiveaway,
   useGetGiveawayEntries,
   useStartGiveaway,
   useEndGiveaway,
   useRerollGiveaway,
+  useGetBotSettings,
+  getGetBotSettingsQueryKey,
   getGetGiveawayQueryKey,
   getGetGiveawayEntriesQueryKey,
   getGetCurrentGiveawayQueryKey,
@@ -18,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Trophy, Users, Hash, Calendar, Play, Square, RefreshCw, ArrowLeft, Crown } from "lucide-react";
 import { Link } from "wouter";
+import { EliminationWheel } from "@/components/elimination-wheel";
 
 function getRarityClass(rarity?: string) {
   switch (rarity) {
@@ -46,6 +51,20 @@ export function GiveawayDetail() {
   const startMutation = useStartGiveaway();
   const endMutation = useEndGiveaway();
   const rerollMutation = useRerollGiveaway();
+  // Wheel settings come from /api/settings; this hook is Clerk-authed via the global fetcher.
+  const { isSignedIn } = useAuth();
+  const { data: botSettings } = useGetBotSettings({
+    query: { enabled: !!isSignedIn, queryKey: getGetBotSettingsQueryKey() },
+  });
+  const wheelMode = (botSettings?.wheelMode === "manual" ? "manual" : "auto") as "auto" | "manual";
+  const wheelSpeed = (
+    botSettings?.wheelSpeed === "slow" || botSettings?.wheelSpeed === "fast"
+      ? botSettings.wheelSpeed
+      : "medium"
+  ) as "slow" | "medium" | "fast";
+
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const [wheelWinner, setWheelWinner] = useState<string | null>(null);
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: getGetGiveawayQueryKey(id) });
@@ -67,14 +86,22 @@ export function GiveawayDetail() {
   function handleEnd() {
     endMutation.mutate({ id }, {
       onSuccess: (result) => {
-        toast({ title: `Winner: ${result.winner.username}`, description: "The goblin picked a winner in chat!" });
-        invalidateAll();
+        // Open the elimination wheel BEFORE invalidating, so the entries list
+        // we already loaded is still the full pre-end roster for the animation.
+        setWheelWinner(result.winner.username);
+        setWheelOpen(true);
+        toast({ title: `Winner: ${result.winner.username}`, description: "Spin the wheel to reveal!" });
       },
       onError: (err: unknown) => {
         const msg = err instanceof Error ? err.message : "No entries to draw from";
         toast({ title: "Failed to end", description: msg, variant: "destructive" });
       },
     });
+  }
+
+  function handleWheelClose() {
+    setWheelOpen(false);
+    invalidateAll();
   }
 
   function handleReroll() {
@@ -171,6 +198,15 @@ export function GiveawayDetail() {
           </div>
         </div>
       </div>
+
+      <EliminationWheel
+        open={wheelOpen}
+        onClose={handleWheelClose}
+        entries={(entries ?? []).map((e) => ({ id: e.id, username: e.username, tickets: e.tickets }))}
+        winner={wheelWinner}
+        mode={wheelMode}
+        speed={wheelSpeed}
+      />
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

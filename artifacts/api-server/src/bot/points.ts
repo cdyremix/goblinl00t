@@ -1,9 +1,24 @@
-import { db, lootDropsTable, pointRedemptionsTable, giveawayEntriesTable, giveawaysTable } from "@workspace/db";
+import { db, lootDropsTable, pointRedemptionsTable, giveawayEntriesTable, giveawaysTable, usersTable } from "@workspace/db";
 import { eq, sum, sql } from "drizzle-orm";
 
 export const REDEEM_COST_PER_ENTRY = 100;
 
-export async function getPointsBalance(username: string): Promise<{ earned: number; redeemed: number; balance: number }> {
+/**
+ * Resolve the configured coin cap (max balance) for the channel that owns
+ * `username`. Today the bot runs against a single channel, so the cap is
+ * read off the user row whose `twitchUsername` matches. Returns `null` for
+ * "no cap configured".
+ */
+async function getCoinCapFor(username: string): Promise<number | null> {
+  const [row] = await db
+    .select({ coinCap: usersTable.coinCap })
+    .from(usersTable)
+    .where(eq(usersTable.twitchUsername, username.toLowerCase()))
+    .limit(1);
+  return row?.coinCap ?? null;
+}
+
+export async function getPointsBalance(username: string): Promise<{ earned: number; redeemed: number; balance: number; cap: number | null }> {
   const [earnedRow] = await db
     .select({ total: sum(lootDropsTable.points) })
     .from(lootDropsTable)
@@ -15,7 +30,13 @@ export async function getPointsBalance(username: string): Promise<{ earned: numb
 
   const earned = Number(earnedRow?.total ?? 0);
   const redeemed = Number(redeemedRow?.total ?? 0);
-  return { earned, redeemed, balance: earned - redeemed };
+  const raw = earned - redeemed;
+  const cap = await getCoinCapFor(username);
+  // Cap is informational/displayed: clip the visible balance so the leaderboard
+  // and !coins both honor the configured ceiling. New earnings still write to
+  // loot_drops (we don't drop them on the floor) — the cap just clamps display.
+  const balance = cap !== null ? Math.min(raw, cap) : raw;
+  return { earned, redeemed, balance, cap };
 }
 
 export type RedeemResult =

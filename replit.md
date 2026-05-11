@@ -54,8 +54,10 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 - **Giveaway Detail** (`/giveaway/:id`): Start, end (pick winner), reroll. Shows winner banner and full entry list.
 - **Ledger** (`/stats`): Top looters leaderboard with rarity bars, command usage chart.
 - **Spells** (`/commands`): Toggle individual chat commands on/off with live cooldown display.
-- **Forge** (`/settings`): Bot display name, theme picker (goblin/cs2), Steam trade URL, Steam ID 64 with CS2 inventory grid.
+- **Forge** (`/settings`): Bot display name, theme picker (goblin/cs2), Economy & Loot toggles (Random Goblin Events, Special-Item Loot Drops, Coin Redemption, Coin Balance Cap), Elimination Wheel mode/speed, Steam trade URL, Steam ID 64 with CS2 inventory grid.
 - **Trade Office** (`/trade-office`): Manage CS2 skin delivery to giveaway winners — track trade URLs, mark trade-locked items, add notes, update status (pending → sent).
+- **Loot Hoard Quick Prize panel**: streamer-only manual drop (coins or random item) on `/giveaway` page, no giveaway needed. Items roll into the viewer's pouch via `addInventoryItem`; falls back to a coin credit equal to the item's value if the pouch is full.
+- **Elimination Wheel**: when ending a giveaway, opens a modal that animates through entries and eliminates one per round until the server-chosen winner remains. Settings: `wheelMode` (auto/manual) and `wheelSpeed` (slow/medium/fast).
 
 ## Bot Commands
 
@@ -86,6 +88,11 @@ Without them, the API and dashboard work fully; the bot just won't connect to Tw
 - Ticket buff (`!enter`) is consumed only after the entry insert lands. The insert uses `onConflictDoNothing` on `(giveaway_id, username)` so a concurrent duplicate entry won't burn the buff either.
 - New chat-driven inventory paths normalize username via `tags.username` (lowercase). Historical `loot_drops` / `point_redemptions` rows may be mixed-case, so balance lookups can split across casings until backfilled — known limitation, not a regression.
 - `Random Goblin Events` (settings toggle, default ON) picks from an in-memory `RECENT_CHATTERS` map per channel, so it activates only after viewers have spoken since the bot started. Steals are silently skipped when balance ≤ 0; events are logged in `goblin_events`.
+- Per-channel runtime settings (`lootDropsEnabled`, `coinRedemptionEnabled`, `coinCap`, `goblinEventsEnabled`, `wheelMode`, `wheelSpeed`) live on `usersTable` and are cached in-memory by `bot/channel-settings.ts`. The settings PUT handler MUST call `invalidateChannelSettings(twitchUsername)` after writing — the bot reads the cache on every chat command.
+- `coinCap` is a **display clip**, not a hard write block: new earnings still write to `loot_drops`, but `getPointsBalance()` clamps the returned `balance` so `!coins`, the leaderboard, and redemption checks all honor the ceiling. `getPointsBalance()` now returns `{earned, redeemed, balance, cap}`; existing callers destructure only `{balance}` so adding `cap` is backwards-compatible.
+- `!loot` and the manual `/loot-hoard/drop` route both pass `allowBuffs: false` to `rollLootDrop()` when `lootDropsEnabled` is OFF (or for streamer manual drops, since buffs would be confusing as a "Quick Prize"). Quick Prize items honor an optional rarity hint and re-pick from the matching tier of `LOOT_TABLE`.
+- `!redeem` (chat) and `POST /giveaway/:id/redeem` (dashboard) both gate on `coinRedemptionEnabled` before reaching `redeemEntriesForUser()`. Disable both paths from a single toggle.
+- Elimination wheel (`components/elimination-wheel.tsx`) is purely cosmetic: the server still picks the winner via `useEndGiveaway`. The modal pre-shuffles losers client-side and places the server's winner last. `wheelMode === "manual"` requires the streamer to click "Spin" between rounds; "auto" paces itself with `speedMs = {slow:1500, medium:900, fast:450}`. The "final two" phase always pauses for dramatic effect regardless of mode.
 
 ## User preferences
 

@@ -6,6 +6,7 @@ import { getRarityEmoji } from "./loot-tables";
 import { pickRandom, formatMessage } from "./goblin-phrases";
 import { getThemePhrases, setActiveTheme, getActiveTheme, type BotTheme } from "./bot-themes";
 import { getPointsBalance, REDEEM_COST_PER_ENTRY, redeemEntriesForUser } from "./points";
+import { getChannelSettings } from "./channel-settings";
 import { checkGating, type Gateable } from "./gating";
 import {
   rollLootDrop,
@@ -166,7 +167,11 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     if (command === "!loot") {
       const ch = channel.replace(/^#/, "");
       const luckActive = await hasActiveBuff(ch, username, "luck");
-      const loot = rollLootDrop({ luckBuffActive: luckActive });
+      const settings = await getChannelSettings(ch);
+      const loot = rollLootDrop({
+        luckBuffActive: luckActive,
+        allowBuffs: settings.lootDropsEnabled,
+      });
       // Charge consumption is atomic with the insert — a "full" result will
       // not burn the buff (see addInventoryItem).
       const result = await addInventoryItem(ch, username, loot, {
@@ -412,6 +417,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     }
 
     if (command === "!redeem") {
+      const ch = channel.replace(/^#/, "");
+      const settings = await getChannelSettings(ch);
+      if (!settings.coinRedemptionEnabled) {
+        void client?.say(channel, `${username}: The goblin isn't trading coins for tickets right now.`);
+        return;
+      }
       const requested = Math.max(1, Math.floor(Number(parts[1] ?? 1)));
       const [active] = await db
         .select()

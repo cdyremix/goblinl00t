@@ -33,6 +33,8 @@ import type {
   HealthStatus,
   ListGiveawaysParams,
   LootDrop,
+  ManualDropRequest,
+  ManualDropResponse,
   PointsBalance,
   RedeemEntriesInput,
   RedemptionResult,
@@ -2184,6 +2186,92 @@ export function useGetSteamInventory<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Streamer-initiated manual prize drop (coins or random item) to a viewer
+ */
+export const getManualLootDropUrl = () => {
+  return `/api/loot-hoard/drop`;
+};
+
+export const manualLootDrop = async (
+  manualDropRequest: ManualDropRequest,
+  options?: RequestInit,
+): Promise<ManualDropResponse> => {
+  return customFetch<ManualDropResponse>(getManualLootDropUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(manualDropRequest),
+  });
+};
+
+export const getManualLootDropMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof manualLootDrop>>,
+    TError,
+    { data: BodyType<ManualDropRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof manualLootDrop>>,
+  TError,
+  { data: BodyType<ManualDropRequest> },
+  TContext
+> => {
+  const mutationKey = ["manualLootDrop"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof manualLootDrop>>,
+    { data: BodyType<ManualDropRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return manualLootDrop(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ManualLootDropMutationResult = NonNullable<
+  Awaited<ReturnType<typeof manualLootDrop>>
+>;
+export type ManualLootDropMutationBody = BodyType<ManualDropRequest>;
+export type ManualLootDropMutationError = ErrorType<void>;
+
+/**
+ * @summary Streamer-initiated manual prize drop (coins or random item) to a viewer
+ */
+export const useManualLootDrop = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof manualLootDrop>>,
+    TError,
+    { data: BodyType<ManualDropRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof manualLootDrop>>,
+  TError,
+  { data: BodyType<ManualDropRequest> },
+  TContext
+> => {
+  return useMutation(getManualLootDropMutationOptions(options));
+};
 
 /**
  * @summary Get current user bot settings

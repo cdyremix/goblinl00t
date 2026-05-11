@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -15,5 +15,16 @@ export const usersTable = pgTable("users", {
   steamUsername: text("steam_username"),
   avatarPreset: text("avatar_preset"),
   goblinEventsEnabled: boolean("goblin_events_enabled").notNull().default(true),
+  // When false, !loot will not roll buff items (only plain sellable items).
+  lootDropsEnabled: boolean("loot_drops_enabled").notNull().default(true),
+  // When false, viewers cannot redeem coins for giveaway entries (!redeem & POST /redeem).
+  coinRedemptionEnabled: boolean("coin_redemption_enabled").notNull().default(true),
+  // Per-user max coin balance. null = no cap.
+  coinCap: integer("coin_cap"),
+  // Elimination wheel config: 'auto' spins through all eliminations on its own,
+  // 'manual' requires the streamer to click "Spin" between rounds.
+  wheelMode: text("wheel_mode").notNull().default("auto"),
+  // Animation pacing: 'slow' | 'medium' | 'fast'.
+  wheelSpeed: text("wheel_speed").notNull().default("medium"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

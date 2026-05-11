@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UpdateBotSettingsBotTheme } from "./updateBotSettingsBotTheme";
+import type { UpdateBotSettingsWheelMode } from "./updateBotSettingsWheelMode";
+import type { UpdateBotSettingsWheelSpeed } from "./updateBotSettingsWheelSpeed";
 
 export interface UpdateBotSettings {
   botTheme?: UpdateBotSettingsBotTheme;
@@ -17,4 +19,10 @@ export interface UpdateBotSettings {
   /** @nullable */
   steamUsername?: string | null;
   goblinEventsEnabled?: boolean;
+  lootDropsEnabled?: boolean;
+  coinRedemptionEnabled?: boolean;
+  /** @nullable */
+  coinCap?: number | null;
+  wheelMode?: UpdateBotSettingsWheelMode;
+  wheelSpeed?: UpdateBotSettingsWheelSpeed;
 }
