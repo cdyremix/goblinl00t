@@ -28,7 +28,10 @@ router.get("/points/me", async (req, res) => {
     res.status(401).json({ error: "Sign in and link your Twitch username in settings to view points." });
     return;
   }
-  const balance = await getPointsBalance(username);
+  // The dashboard's "my points" view is the streamer looking at their own
+  // balance in their own channel — channel == their twitchUsername. This
+  // also resolves the cap correctly (cap is per-streamer-row).
+  const balance = await getPointsBalance(username, username);
   res.json({ username, ...balance, costPerEntry: REDEEM_COST_PER_ENTRY });
 });
 

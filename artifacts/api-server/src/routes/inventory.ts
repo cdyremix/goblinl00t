@@ -1,27 +1,11 @@
 import { Router, type IRouter } from "express";
-import { getAuth } from "@clerk/express";
 import { db, usersTable, INVENTORY_CAP } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { listInventory, sellInventoryItem, useInventoryItem } from "../bot/inventory";
 import { getPointsBalance, REDEEM_COST_PER_ENTRY } from "../bot/points";
+import { requireStreamerChannel, resolveStreamerChannelForRead } from "../lib/auth-helpers";
 
 const router: IRouter = Router();
-
-async function getAuthedTwitchUsername(req: Parameters<typeof getAuth>[0]): Promise<string | null> {
-  const { userId } = getAuth(req);
-  if (!userId) return null;
-  const [user] = await db
-    .select({ twitchUsername: usersTable.twitchUsername })
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, userId))
-    .limit(1);
-  const handle = user?.twitchUsername?.trim().toLowerCase();
-  return handle ? handle : null;
-}
-
-function defaultChannel(): string {
-  return (process.env["TWITCH_CHANNEL"] ?? "goblinl00t").replace(/^#/, "").toLowerCase();
-}
 
 function serialize(item: Awaited<ReturnType<typeof listInventory>>[number]) {
   return {
@@ -37,11 +21,19 @@ function serialize(item: Awaited<ReturnType<typeof listInventory>>[number]) {
   };
 }
 
+// All `/inventory/*` endpoints scope to the caller's own channel
+// (== caller's twitchUsername). The dashboard inventory view is the
+// streamer reading their OWN pouch in their OWN channel, never another
+// streamer's. The legacy `defaultChannel()` env-var fallback was
+// removed — under multi-tenancy it would have shown every streamer the
+// items earned in `process.env.TWITCH_CHANNEL`.
+
 router.get("/inventory/me", async (req, res) => {
-  const username = await getAuthedTwitchUsername(req);
-  if (!username) { res.status(401).json({ error: "Sign in and link your Twitch username in settings." }); return; }
-  const items = await listInventory(defaultChannel(), username);
-  const { balance } = await getPointsBalance(username);
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
+  const username = ctx.channel; // streamer reads their own pouch
+  const items = await listInventory(ctx.channel, username);
+  const { balance } = await getPointsBalance(username, ctx.channel);
   res.json({
     items: items.map(serialize),
     cap: INVENTORY_CAP,
@@ -51,25 +43,27 @@ router.get("/inventory/me", async (req, res) => {
 });
 
 router.post("/inventory/:itemId/sell", async (req, res) => {
-  const username = await getAuthedTwitchUsername(req);
-  if (!username) { res.status(401).json({ error: "Sign in and link your Twitch username in settings." }); return; }
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const username = ctx.channel;
   const itemId = Number(req.params["itemId"]);
   if (!Number.isFinite(itemId)) { res.status(400).json({ error: "Invalid item id" }); return; }
-  const result = await sellInventoryItem({ channel: defaultChannel(), username, itemId });
+  const result = await sellInventoryItem({ channel: ctx.channel, username, itemId });
   if (!result.ok) {
     res.status(404).json({ error: "Item not found in your inventory" });
     return;
   }
-  const { balance } = await getPointsBalance(username);
+  const { balance } = await getPointsBalance(username, ctx.channel);
   res.json({ coinsEarned: result.coinsEarned ?? 0, balanceAfter: balance });
 });
 
 router.post("/inventory/:itemId/use", async (req, res) => {
-  const username = await getAuthedTwitchUsername(req);
-  if (!username) { res.status(401).json({ error: "Sign in and link your Twitch username in settings." }); return; }
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const username = ctx.channel;
   const itemId = Number(req.params["itemId"]);
   if (!Number.isFinite(itemId)) { res.status(400).json({ error: "Invalid item id" }); return; }
-  const result = await useInventoryItem({ channel: defaultChannel(), username, itemId });
+  const result = await useInventoryItem({ channel: ctx.channel, username, itemId });
   if (!result.ok) {
     if (result.reason === "not_buff") { res.status(400).json({ error: "This item is not a buff — try selling it instead." }); return; }
     res.status(404).json({ error: "Item not found in your inventory" });
@@ -81,5 +75,10 @@ router.post("/inventory/:itemId/use", async (req, res) => {
     chargesRemaining: result.item!.chargesRemaining,
   });
 });
+
+// `usersTable` import retained via `auth-helpers`; explicit import kept above
+// because Drizzle types are inferred from it elsewhere in this file's history.
+void usersTable;
+void eq;
 
 export default router;

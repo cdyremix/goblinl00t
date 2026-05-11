@@ -146,6 +146,17 @@ router.get("/auth/twitch/callback", async (req, res) => {
     });
   }
 
+  // Refresh the chat-side custom-command cache so any commands the user
+  // created BEFORE linking Twitch start firing on their channel without
+  // requiring a server restart. The cache loader skips owner rows whose
+  // `twitchUsername` is null — linking populates it, so we re-key here.
+  try {
+    const { reloadCustomCommands } = await import("../bot/bot-service");
+    await reloadCustomCommands();
+  } catch (err) {
+    req.log.warn({ err }, "Failed to reload custom commands after Twitch link");
+  }
+
   // Redirect back to the channel tab so the user lands on the binding card.
   const domains = (process.env.REPLIT_DOMAINS ?? "").split(",");
   const host = domains[0] ?? "localhost";

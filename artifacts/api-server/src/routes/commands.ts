@@ -5,7 +5,6 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   getCommandConfig,
-  toggleCommandEnabled,
   reloadCustomCommands,
   isBuiltInCommand,
   resolveCanonical,
@@ -13,6 +12,7 @@ import {
   type CommandTheme,
 } from "../bot/bot-service";
 import { invalidateCommandResponses } from "../bot/command-responses";
+import { invalidateCommandToggles } from "../bot/command-toggles";
 import { userHasFeature } from "../lib/tier-helpers";
 
 const router: IRouter = Router();
@@ -56,21 +56,60 @@ async function getUserOrThrow(req: any) {
 router.get("/commands", async (req, res) => {
   const user = await getUserOrThrow(req);
   const channel = user?.twitchUsername ?? undefined;
-  res.json(await getCommandConfig({ channel }));
+  res.json(await getCommandConfig({ channel, userId: user?.id }));
 });
 
+/**
+ * Toggle a command on/off for the calling streamer's channel.
+ *
+ * - Built-in commands: the override is persisted in the streamer's
+ *   `usersTable.commandToggles` JSONB (one entry per canonical name).
+ *   Aliases share the canonical's toggle automatically because the bot
+ *   chat handler resolves the canonical before consulting the toggle.
+ *   The cache is invalidated so the next chat message sees the new state
+ *   without a server restart.
+ * - Custom commands: the streamer's row in `customCommandsTable` is
+ *   updated (gated by `userId` so streamer A can never toggle streamer
+ *   B's command). The chat-side cache is rebuilt via `reloadCustomCommands`.
+ *
+ * Requires a linked Twitch account because the toggle is keyed by channel.
+ */
 router.post("/commands/:name/toggle", async (req, res) => {
   const user = await getUserOrThrow(req);
   if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const channel = user.twitchUsername?.trim().toLowerCase();
+  if (!channel) { res.status(403).json({ error: "Connect your Twitch account first." }); return; }
   const name = normalizeName(req.params["name"] ?? "");
-  try {
-    const enabled = toggleCommandEnabled(name);
-    const all = await getCommandConfig({ channel: user.twitchUsername ?? undefined });
-    const config = all.find((c) => c.name === name);
-    res.json(config ?? { name, description: "", enabled, cooldownSeconds: 10, theme: "both", isCustom: false });
-  } catch {
-    res.status(404).json({ error: "Command not found" });
+
+  // Built-in path
+  if (isBuiltInCommand(name)) {
+    const canonical = resolveCanonical(name) ?? name;
+    const current = (user.commandToggles ?? {}) as Record<string, boolean>;
+    const wasEnabled = typeof current[canonical] === "boolean" ? current[canonical]! : true;
+    const next = { ...current, [canonical]: !wasEnabled };
+    await db.update(usersTable).set({ commandToggles: next }).where(eq(usersTable.id, user.id));
+    invalidateCommandToggles(channel);
+    const all = await getCommandConfig({ channel, userId: user.id });
+    const config = all.find((c) => c.name === canonical);
+    res.json(config ?? { name: canonical, enabled: !wasEnabled, isCustom: false });
+    return;
   }
+
+  // Custom path — find by (userId, name) so cross-tenant toggles are impossible.
+  const [row] = await db
+    .select()
+    .from(customCommandsTable)
+    .where(and(eq(customCommandsTable.userId, user.id), eq(customCommandsTable.name, name)))
+    .limit(1);
+  if (!row) { res.status(404).json({ error: "Command not found" }); return; }
+  await db
+    .update(customCommandsTable)
+    .set({ enabled: !row.enabled })
+    .where(eq(customCommandsTable.id, row.id));
+  await reloadCustomCommands();
+  const all = await getCommandConfig({ channel, userId: user.id });
+  const config = all.find((c) => c.name === name);
+  res.json(config ?? { name, enabled: !row.enabled, isCustom: true });
 });
 
 const ResponseInput = z.object({
@@ -109,7 +148,7 @@ router.put("/commands/:name/response", async (req, res) => {
   }
   await db.update(usersTable).set({ commandResponses: next }).where(eq(usersTable.id, user.id));
   if (user.twitchUsername) invalidateCommandResponses(user.twitchUsername);
-  const all = await getCommandConfig({ channel: user.twitchUsername ?? undefined });
+  const all = await getCommandConfig({ channel: user.twitchUsername ?? undefined, userId: user.id });
   const config = all.find((c) => c.name === canonical);
   res.json(config ?? { name: canonical, customResponse: trimmed || null });
 });

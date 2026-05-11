@@ -153,14 +153,18 @@ export async function redeemEntriesForUser(opts: {
       return { ok: false, code: "not_active", message: "Giveaway is not active" } as const;
     }
 
+    // Channel-scope the balance to `giveaway.channel` — coins earned in
+    // streamer A's channel must NOT be spendable inside streamer B's
+    // giveaway. Without this filter a multi-tenant DB lets viewers cross
+    // the wires (HIGH-severity tenancy break flagged by code review).
     const [earnedRow] = await tx
       .select({ total: sum(lootDropsTable.points) })
       .from(lootDropsTable)
-      .where(eq(lootDropsTable.username, username));
+      .where(and(eq(lootDropsTable.username, username), eq(lootDropsTable.channel, giveaway.channel)));
     const [redeemedRow] = await tx
       .select({ total: sum(pointRedemptionsTable.points) })
       .from(pointRedemptionsTable)
-      .where(eq(pointRedemptionsTable.username, username));
+      .where(and(eq(pointRedemptionsTable.username, username), eq(pointRedemptionsTable.channel, giveaway.channel)));
     const balance = Number(earnedRow?.total ?? 0) - Number(redeemedRow?.total ?? 0);
 
     if (balance < cost) {

@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, usersTable } from "@workspace/db";
-import { eq, desc, count, sum, sql, and, gte } from "drizzle-orm";
+import { eq, desc, count, sum, sql, and, gte, inArray } from "drizzle-orm";
 import { GetTopLootersQueryParams } from "@workspace/api-zod";
-import { requireStreamerChannel } from "../lib/auth-helpers";
+import { requireStreamerChannel, resolveStreamerChannelForRead } from "../lib/auth-helpers";
 import { userHasFeature } from "../lib/tier-helpers";
 
 const router: IRouter = Router();
@@ -47,39 +47,58 @@ function parseRange(raw: unknown): RangeKey {
   return "all";
 }
 
+// All aggregate stats endpoints scope to the caller's own channel via
+// `resolveStreamerChannelForRead` (dev fallback to `goblinl00t` for
+// not-yet-Twitch-linked accounts; production requires a linked Twitch).
+// The legacy global aggregate behaviour leaked totals across streamers
+// once a second tenant signed up.
+
 router.get("/stats/overview", async (req, res) => {
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
   const range = parseRange(req.query["range"]);
   const since = await resolveSince(req, range);
 
-  const lootWhere = since ? gte(lootDropsTable.droppedAt, since) : undefined;
-  const cmdWhere = since ? gte(commandLogsTable.executedAt, since) : undefined;
-  const givWhere = since ? gte(giveawaysTable.createdAt, since) : undefined;
-  const entryWhere = since ? gte(giveawayEntriesTable.enteredAt, since) : undefined;
+  const lootChan = eq(lootDropsTable.channel, ctx.channel);
+  const cmdChan = eq(commandLogsTable.channel, ctx.channel);
+  const givChan = eq(giveawaysTable.channel, ctx.channel);
 
-  const [totalGiveawaysRow] = givWhere
-    ? await db.select({ count: count() }).from(giveawaysTable).where(givWhere)
-    : await db.select({ count: count() }).from(giveawaysTable);
+  const lootWhere = since ? and(lootChan, gte(lootDropsTable.droppedAt, since)) : lootChan;
+  const cmdWhere = since ? and(cmdChan, gte(commandLogsTable.executedAt, since)) : cmdChan;
+  const givWhere = since ? and(givChan, gte(giveawaysTable.createdAt, since)) : givChan;
+
+  const [totalGiveawaysRow] = await db.select({ count: count() }).from(giveawaysTable).where(givWhere);
   const [activeGiveawayRow] = await db
     .select({ count: count() })
     .from(giveawaysTable)
-    .where(eq(giveawaysTable.status, "active"));
-  const [totalLootRow] = lootWhere
-    ? await db.select({ count: count() }).from(lootDropsTable).where(lootWhere)
-    : await db.select({ count: count() }).from(lootDropsTable);
-  const [totalCommandsRow] = cmdWhere
-    ? await db.select({ count: count() }).from(commandLogsTable).where(cmdWhere)
-    : await db.select({ count: count() }).from(commandLogsTable);
-  const [uniqueUsersRow] = lootWhere
-    ? await db
-        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
-        .from(lootDropsTable)
-        .where(lootWhere)
-    : await db
-        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
-        .from(lootDropsTable);
-  const [recentEntriesRow] = entryWhere
-    ? await db.select({ count: count() }).from(giveawayEntriesTable).where(entryWhere)
-    : await db.select({ count: count() }).from(giveawayEntriesTable);
+    .where(and(givChan, eq(giveawaysTable.status, "active")));
+  const [totalLootRow] = await db.select({ count: count() }).from(lootDropsTable).where(lootWhere);
+  const [totalCommandsRow] = await db.select({ count: count() }).from(commandLogsTable).where(cmdWhere);
+  const [uniqueUsersRow] = await db
+    .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
+    .from(lootDropsTable)
+    .where(lootWhere);
+
+  // Recent entries are scoped to giveaways belonging to this channel —
+  // join via `inArray` over the channel's giveaway ids in the window.
+  const channelGivWhere = since
+    ? and(givChan, gte(giveawaysTable.createdAt, since))
+    : givChan;
+  const channelGivIds = await db
+    .select({ id: giveawaysTable.id })
+    .from(giveawaysTable)
+    .where(channelGivWhere);
+  const ids = channelGivIds.map((r) => r.id);
+  const recentEntriesCount = ids.length
+    ? Number(
+        (
+          await db
+            .select({ count: count() })
+            .from(giveawayEntriesTable)
+            .where(inArray(giveawayEntriesTable.giveawayId, ids))
+        )[0]?.count ?? 0,
+      )
+    : 0;
 
   res.json({
     totalGiveaways: Number(totalGiveawaysRow?.count ?? 0),
@@ -87,33 +106,31 @@ router.get("/stats/overview", async (req, res) => {
     totalLootDrops: Number(totalLootRow?.count ?? 0),
     totalCommandsUsed: Number(totalCommandsRow?.count ?? 0),
     uniqueUsers: Number(uniqueUsersRow?.count ?? 0),
-    recentEntries: Number(recentEntriesRow?.count ?? 0),
+    recentEntries: recentEntriesCount,
     range,
     since: since?.toISOString() ?? null,
   });
 });
 
 router.get("/stats/commands", async (req, res) => {
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
   const range = parseRange(req.query["range"]);
   const since = await resolveSince(req, range);
 
-  const baseSelect = {
-    command: commandLogsTable.command,
-    usageCount: count(),
-    lastUsedAt: sql<string>`max(${commandLogsTable.executedAt})`,
-  };
-  const rows = since
-    ? await db
-        .select(baseSelect)
-        .from(commandLogsTable)
-        .where(gte(commandLogsTable.executedAt, since))
-        .groupBy(commandLogsTable.command)
-        .orderBy(desc(count()))
-    : await db
-        .select(baseSelect)
-        .from(commandLogsTable)
-        .groupBy(commandLogsTable.command)
-        .orderBy(desc(count()));
+  const channelFilter = eq(commandLogsTable.channel, ctx.channel);
+  const where = since ? and(channelFilter, gte(commandLogsTable.executedAt, since)) : channelFilter;
+
+  const rows = await db
+    .select({
+      command: commandLogsTable.command,
+      usageCount: count(),
+      lastUsedAt: sql<string>`max(${commandLogsTable.executedAt})`,
+    })
+    .from(commandLogsTable)
+    .where(where)
+    .groupBy(commandLogsTable.command)
+    .orderBy(desc(count()));
 
   res.json(
     rows.map((r) => ({
@@ -125,39 +142,36 @@ router.get("/stats/commands", async (req, res) => {
 });
 
 router.get("/stats/top-looters", async (req, res) => {
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
   const query = GetTopLootersQueryParams.safeParse(req.query);
   const limit = query.success ? (query.data.limit ?? 10) : 10;
   const range = parseRange(req.query["range"]);
   const since = await resolveSince(req, range);
 
-  const baseSelect = {
-    username: lootDropsTable.username,
-    lootCount: count(),
-    totalPoints: sum(lootDropsTable.points),
-    bestRarity: sql<string>`
-      CASE
-        WHEN bool_or(${lootDropsTable.rarity} = 'legendary') THEN 'legendary'
-        WHEN bool_or(${lootDropsTable.rarity} = 'epic') THEN 'epic'
-        WHEN bool_or(${lootDropsTable.rarity} = 'rare') THEN 'rare'
-        WHEN bool_or(${lootDropsTable.rarity} = 'uncommon') THEN 'uncommon'
-        ELSE 'common'
-      END
-    `,
-  };
-  const rows = since
-    ? await db
-        .select(baseSelect)
-        .from(lootDropsTable)
-        .where(gte(lootDropsTable.droppedAt, since))
-        .groupBy(lootDropsTable.username)
-        .orderBy(desc(sum(lootDropsTable.points)))
-        .limit(limit)
-    : await db
-        .select(baseSelect)
-        .from(lootDropsTable)
-        .groupBy(lootDropsTable.username)
-        .orderBy(desc(sum(lootDropsTable.points)))
-        .limit(limit);
+  const channelFilter = eq(lootDropsTable.channel, ctx.channel);
+  const where = since ? and(channelFilter, gte(lootDropsTable.droppedAt, since)) : channelFilter;
+
+  const rows = await db
+    .select({
+      username: lootDropsTable.username,
+      lootCount: count(),
+      totalPoints: sum(lootDropsTable.points),
+      bestRarity: sql<string>`
+        CASE
+          WHEN bool_or(${lootDropsTable.rarity} = 'legendary') THEN 'legendary'
+          WHEN bool_or(${lootDropsTable.rarity} = 'epic') THEN 'epic'
+          WHEN bool_or(${lootDropsTable.rarity} = 'rare') THEN 'rare'
+          WHEN bool_or(${lootDropsTable.rarity} = 'uncommon') THEN 'uncommon'
+          ELSE 'common'
+        END
+      `,
+    })
+    .from(lootDropsTable)
+    .where(where)
+    .groupBy(lootDropsTable.username)
+    .orderBy(desc(sum(lootDropsTable.points)))
+    .limit(limit);
 
   res.json(
     rows.map((r) => ({
@@ -175,30 +189,25 @@ router.get("/stats/top-looters", async (req, res) => {
  * Does not prescribe — these are suggestions, not auto-actions.
  */
 router.get("/stats/engagement", async (req, res) => {
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
   const range = parseRange(req.query["range"]);
   const since = await resolveSince(req, range);
 
-  const lootWhere = since ? gte(lootDropsTable.droppedAt, since) : undefined;
-  const cmdWhere = since ? gte(commandLogsTable.executedAt, since) : undefined;
-  const givWhere = since ? gte(giveawaysTable.createdAt, since) : undefined;
+  const lootChan = eq(lootDropsTable.channel, ctx.channel);
+  const cmdChan = eq(commandLogsTable.channel, ctx.channel);
+  const givChan = eq(giveawaysTable.channel, ctx.channel);
+  const lootWhere = since ? and(lootChan, gte(lootDropsTable.droppedAt, since)) : lootChan;
+  const cmdWhere = since ? and(cmdChan, gte(commandLogsTable.executedAt, since)) : cmdChan;
+  const givWhere = since ? and(givChan, gte(giveawaysTable.createdAt, since)) : givChan;
 
-  const [lootCount] = lootWhere
-    ? await db.select({ count: count() }).from(lootDropsTable).where(lootWhere)
-    : await db.select({ count: count() }).from(lootDropsTable);
-  const [cmdCount] = cmdWhere
-    ? await db.select({ count: count() }).from(commandLogsTable).where(cmdWhere)
-    : await db.select({ count: count() }).from(commandLogsTable);
-  const [givCount] = givWhere
-    ? await db.select({ count: count() }).from(giveawaysTable).where(givWhere)
-    : await db.select({ count: count() }).from(giveawaysTable);
-  const [uniqueRow] = lootWhere
-    ? await db
-        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
-        .from(lootDropsTable)
-        .where(lootWhere)
-    : await db
-        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
-        .from(lootDropsTable);
+  const [lootCount] = await db.select({ count: count() }).from(lootDropsTable).where(lootWhere);
+  const [cmdCount] = await db.select({ count: count() }).from(commandLogsTable).where(cmdWhere);
+  const [givCount] = await db.select({ count: count() }).from(giveawaysTable).where(givWhere);
+  const [uniqueRow] = await db
+    .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
+    .from(lootDropsTable)
+    .where(lootWhere);
 
   const totalLoot = Number(lootCount?.count ?? 0);
   const totalCmds = Number(cmdCount?.count ?? 0);
@@ -260,9 +269,6 @@ router.get("/stats/engagement", async (req, res) => {
     tips,
   });
 });
-
-// Suppress unused-import warning for `and` (kept available for future joins).
-void and;
 
 /**
  * GET /stats/export?range=...&kind=loot|commands|giveaways

@@ -89,7 +89,10 @@ async function fireDrop(channel: string, target: string): Promise<void> {
 }
 
 async function fireSteal(channel: string, target: string): Promise<void> {
-  const { balance } = await getPointsBalance(target);
+  // Channel-scoped balance read: in a multi-tenant world we MUST only
+  // steal from what `target` earned in *this* streamer's channel — not
+  // from a global per-username pile.
+  const { balance } = await getPointsBalance(target, channel);
   if (balance <= 0) return; // nothing to steal — silently skip
   const amount = Math.min(balance, randomAmount());
   await db.insert(pointRedemptionsTable).values({

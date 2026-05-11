@@ -1,5 +1,5 @@
 import tmi from "tmi.js";
-import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable, customCommandsTable } from "@workspace/db";
+import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable, customCommandsTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { getRarityEmoji } from "./loot-tables";
@@ -21,6 +21,7 @@ import {
 } from "./inventory";
 import { startGoblinEvents, setGoblinEventSink, trackChatter } from "./goblin-events";
 import { getCustomResponseFor, renderTemplate } from "./command-responses";
+import { getToggleFor, getAllToggles } from "./command-toggles";
 
 export type CommandTheme = "goblin" | "cs2" | "both";
 
@@ -113,14 +114,16 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
   "!coins":      { description: "Alias of !points", cooldownSeconds: 10, theme: "both", aliasOf: "!points" },
 };
 
-/** Build the !help reply: short, theme-aware command list. */
-function buildHelpCommandList(activeTheme: BotTheme): string {
+/** Build the !help reply: short, theme-aware command list. Channel-scoped
+ *  so per-streamer disabled commands don't show up in another channel's reply. */
+async function buildHelpCommandList(channel: string, activeTheme: BotTheme): Promise<string> {
+  const toggles = await getAllToggles(channel);
   const enabledCanonicals = Object.entries(BUILT_IN_COMMANDS)
-    .filter(([name, meta]) =>
-      !meta.aliasOf
-      && (meta.theme === "both" || meta.theme === activeTheme)
-      && (COMMAND_ENABLED[name] ?? true),
-    )
+    .filter(([name, meta]) => {
+      if (meta.aliasOf) return false;
+      if (meta.theme !== "both" && meta.theme !== activeTheme) return false;
+      return typeof toggles[name] === "boolean" ? toggles[name]! : true;
+    })
     .map(([name]) => name);
   // Cap to keep chat short; the dashboard /help has the full table.
   return enabledCanonicals.slice(0, 10).join(" ");
@@ -142,16 +145,48 @@ interface CustomCommandCacheEntry {
   enabled: boolean;
   theme: CommandTheme;
 }
-const CUSTOM_COMMANDS = new Map<string, CustomCommandCacheEntry>();
+/**
+ * Custom-command lookup cache, RE-KEYED by channel for multi-tenant safety.
+ * Outer map: lowercase channel (== owner's `usersTable.twitchUsername`).
+ * Inner map: lowercase command name → entry.
+ *
+ * Bot chat-handler reads via `CUSTOM_COMMANDS.get(channel)?.get(name)` so a
+ * custom command created by streamer A can ONLY fire in streamer A's channel
+ * — never in streamer B's. The legacy flat map merged every streamer's
+ * customs into one global keyspace, which would have leaked cross-channel
+ * the moment a second streamer signed up.
+ */
+const CUSTOM_COMMANDS = new Map<string, Map<string, CustomCommandCacheEntry>>();
 
 export async function reloadCustomCommands(): Promise<void> {
   try {
-    const rows = await db.select().from(customCommandsTable);
+    // Join customCommandsTable → usersTable so each row carries its
+    // owner's `twitchUsername`, which is the channel key for the bot
+    // chat handler. Rows whose owner hasn't linked Twitch yet are
+    // skipped — their custom commands cannot fire on any channel until
+    // the link completes (and a subsequent reload picks them up).
+    const rows = await db
+      .select({
+        id: customCommandsTable.id,
+        userId: customCommandsTable.userId,
+        name: customCommandsTable.name,
+        responseText: customCommandsTable.responseText,
+        cooldownSeconds: customCommandsTable.cooldownSeconds,
+        enabled: customCommandsTable.enabled,
+        theme: customCommandsTable.theme,
+        twitchUsername: usersTable.twitchUsername,
+      })
+      .from(customCommandsTable)
+      .innerJoin(usersTable, eq(customCommandsTable.userId, usersTable.id));
     // Build the next snapshot fully before mutating the live cache so that
     // in-flight chat messages don't see a transiently-empty map.
-    const next = new Map<string, CustomCommandCacheEntry>();
+    const next = new Map<string, Map<string, CustomCommandCacheEntry>>();
     for (const row of rows) {
-      next.set(row.name.toLowerCase(), {
+      const ch = row.twitchUsername?.trim().toLowerCase();
+      if (!ch) continue;
+      let perChannel = next.get(ch);
+      if (!perChannel) { perChannel = new Map(); next.set(ch, perChannel); }
+      perChannel.set(row.name.toLowerCase(), {
         id: row.id,
         userId: row.userId,
         responseText: row.responseText,
@@ -161,7 +196,7 @@ export async function reloadCustomCommands(): Promise<void> {
       });
     }
     CUSTOM_COMMANDS.clear();
-    for (const [k, v] of next) CUSTOM_COMMANDS.set(k, v);
+    for (const [ch, m] of next) CUSTOM_COMMANDS.set(ch, m);
   } catch (err) {
     logger.error({ err }, "Failed to load custom commands");
   }
@@ -176,13 +211,16 @@ export interface BotState {
 }
 
 const COMMAND_COOLDOWNS = new Map<string, Map<string, number>>();
-const COMMAND_ENABLED: Record<string, boolean> = Object.fromEntries(
-  Object.keys(BUILT_IN_COMMANDS).map((k) => [k, true])
-);
 
 const COMMAND_COOLDOWN_SECONDS: Record<string, number> = Object.fromEntries(
   Object.entries(BUILT_IN_COMMANDS).map(([k, v]) => [k, v.cooldownSeconds])
 );
+
+// NOTE: per-channel on/off state for built-in commands lives in
+// `usersTable.commandToggles` (jsonb) and is read at request time via
+// `getToggleFor(channel, canonical, true)` from `bot/command-toggles.ts`.
+// The legacy module-global `COMMAND_ENABLED` map was removed because it
+// silently shared on/off state across every streamer the bot served.
 
 let client: tmi.Client | null = null;
 let botState: BotState = {
@@ -226,8 +264,11 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
   if (!command || !command.startsWith("!")) return;
 
-  // Custom commands
-  const custom = CUSTOM_COMMANDS.get(command);
+  // Custom commands — channel-scoped lookup so a custom from streamer A
+  // never fires in streamer B's channel.
+  const channelKey = channel.replace(/^#/, "").toLowerCase();
+  const channelCustoms = CUSTOM_COMMANDS.get(channelKey);
+  const custom = channelCustoms?.get(command);
   if (custom) {
     if (!custom.enabled) return;
     if (isOnCooldown(channel, username, command)) return;
@@ -241,8 +282,13 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     return;
   }
 
-  if (!(command in COMMAND_ENABLED)) return;
-  if (!COMMAND_ENABLED[command]) return;
+  // Built-in dispatch + per-channel enable/disable check. Resolving to the
+  // canonical name first so toggling "!hoard" off also disables "!stash"
+  // in the same channel (aliases share the toggle, as before).
+  if (!(command in BUILT_IN_COMMANDS)) return;
+  const canonical = BUILT_IN_COMMANDS[command]?.aliasOf ?? command;
+  const enabled = await getToggleFor(channelKey, canonical, true);
+  if (!enabled) return;
   if (isOnCooldown(channel, username, command)) return;
 
   setCooldown(channel, username, command);
@@ -375,10 +421,14 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     }
 
     if (command === "!enter") {
+      // Scope to the chat channel so a `!enter` in streamer A's chat can't
+      // accidentally bind to streamer B's active giveaway when both are
+      // running concurrently in the multi-tenant DB.
+      const chForGiveaway = channel.replace(/^#/, "").toLowerCase();
       const [active] = await db
         .select()
         .from(giveawaysTable)
-        .where(eq(giveawaysTable.status, "active"))
+        .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, chForGiveaway)))
         .limit(1);
 
       if (!active) {
@@ -443,7 +493,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
     if (command === "!help") {
       const ch = channel.replace(/^#/, "");
-      const list = buildHelpCommandList(getActiveTheme());
+      const list = await buildHelpCommandList(ch, getActiveTheme());
       const custom = await getCustomResponseFor(ch, "!help");
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}`, commands: list, theme: getActiveTheme() })
@@ -475,8 +525,8 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     }
 
     if (command === "!hoard" || command === "!stash") {
-      const { balance, earned } = await getPointsBalance(username);
       const ch = channel.replace(/^#/, "");
+      const { balance, earned } = await getPointsBalance(username, ch);
       const custom = await getCustomResponseFor(ch, "!hoard");
       if (custom) {
         void client?.say(channel, renderTemplate(custom, { user: `@${username}`, balance, earned }));
@@ -528,9 +578,9 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     }
 
     if (command === "!points" || command === "!coins") {
-      const { balance } = await getPointsBalance(username);
-      const entries = Math.floor(balance / REDEEM_COST_PER_ENTRY);
       const ch = channel.replace(/^#/, "");
+      const { balance } = await getPointsBalance(username, ch);
+      const entries = Math.floor(balance / REDEEM_COST_PER_ENTRY);
       const custom = await getCustomResponseFor(ch, "!points");
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}`, balance, entries, cost: REDEEM_COST_PER_ENTRY })
@@ -546,10 +596,13 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         return;
       }
       const requested = Math.max(1, Math.floor(Number(parts[1] ?? 1)));
+      // Channel-scope so coins earned in this channel are only spent into
+      // this channel's giveaway (matches the channel-scoped balance read
+      // inside `redeemEntriesForUser`).
       const [active] = await db
         .select()
         .from(giveawaysTable)
-        .where(eq(giveawaysTable.status, "active"))
+        .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, ch)))
         .limit(1);
       if (!active) {
         void client?.say(channel, `${username}: No active giveaway to redeem into right now.`);
@@ -582,10 +635,11 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     }
 
     if (command === "!giveaway") {
+      const ch = channel.replace(/^#/, "").toLowerCase();
       const [active] = await db
         .select()
         .from(giveawaysTable)
-        .where(eq(giveawaysTable.status, "active"))
+        .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, ch)))
         .limit(1);
 
       if (active) {
@@ -641,10 +695,19 @@ export function getBotState(): BotState {
   return { ...botState };
 }
 
-export async function getCommandConfig(opts: { channel?: string } = {}) {
-  // Hide alias entries — they share enabled/cooldown with their canonical and
-  // toggling them via the Spells page would be confusing. The canonical's
-  // description already mentions the alias in parens.
+/**
+ * Build the Spells-page command listing for one streamer's dashboard.
+ *
+ * - Built-in `enabled` flag is read from `usersTable.commandToggles` for
+ *   the supplied `channel` (falls back to true when no override exists).
+ * - Custom commands are listed for the supplied `userId` so an unlinked
+ *   streamer can still see/edit their own customs even though those
+ *   customs cannot fire on any channel until they link Twitch. Loading
+ *   from the DB on read keeps the per-channel chat cache as a pure
+ *   chat-handler optimization.
+ */
+export async function getCommandConfig(opts: { channel?: string; userId?: number } = {}) {
+  const toggles = opts.channel ? await getAllToggles(opts.channel) : {};
   const builtIns = await Promise.all(
     Object.entries(BUILT_IN_COMMANDS)
       .filter(([, meta]) => !meta.aliasOf)
@@ -652,10 +715,11 @@ export async function getCommandConfig(opts: { channel?: string } = {}) {
         const customResponse = meta.customizable && opts.channel
           ? await getCustomResponseFor(opts.channel, name)
           : null;
+        const enabled = typeof toggles[name] === "boolean" ? toggles[name]! : true;
         return {
           name,
           description: meta.description,
-          enabled: COMMAND_ENABLED[name] ?? true,
+          enabled,
           cooldownSeconds: COMMAND_COOLDOWN_SECONDS[name] ?? 10,
           theme: meta.theme,
           aliases: COMMAND_ALIASES[name] ?? [],
@@ -667,38 +731,33 @@ export async function getCommandConfig(opts: { channel?: string } = {}) {
         };
       }),
   );
-  const customs = Array.from(CUSTOM_COMMANDS.entries()).map(([name, c]) => ({
-    id: c.id,
-    name,
-    description: "Custom command",
-    responseText: c.responseText,
-    enabled: c.enabled,
-    cooldownSeconds: c.cooldownSeconds,
-    theme: c.theme,
-    isCustom: true as const,
-  }));
+  let customs: Array<{
+    id: number;
+    name: string;
+    description: string;
+    responseText: string;
+    enabled: boolean;
+    cooldownSeconds: number;
+    theme: CommandTheme;
+    isCustom: true;
+  }> = [];
+  if (opts.userId !== undefined) {
+    const rows = await db
+      .select()
+      .from(customCommandsTable)
+      .where(eq(customCommandsTable.userId, opts.userId));
+    customs = rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: "Custom command",
+      responseText: c.responseText,
+      enabled: c.enabled,
+      cooldownSeconds: c.cooldownSeconds,
+      theme: c.theme as CommandTheme,
+      isCustom: true as const,
+    }));
+  }
   return [...builtIns, ...customs];
-}
-
-export function toggleCommandEnabled(name: string): boolean {
-  const lower = name.toLowerCase();
-  const custom = CUSTOM_COMMANDS.get(lower);
-  if (custom) {
-    custom.enabled = !custom.enabled;
-    return custom.enabled;
-  }
-  if (!(name in COMMAND_ENABLED)) throw new Error(`Unknown command: ${name}`);
-  // Resolve to canonical if an alias was passed in (defensive — UI hides
-  // aliases, but direct API callers might still hit one).
-  const canonical = BUILT_IN_COMMANDS[name]?.aliasOf ?? name;
-  COMMAND_ENABLED[canonical] = !COMMAND_ENABLED[canonical];
-  // Propagate the new state to every alias so the bot's `command in COMMAND_ENABLED`
-  // checks see a consistent value regardless of which name was typed in chat.
-  const next = COMMAND_ENABLED[canonical]!;
-  for (const alias of COMMAND_ALIASES[canonical] ?? []) {
-    COMMAND_ENABLED[alias] = next;
-  }
-  return next;
 }
 
 export function isBuiltInCommand(name: string): boolean {
@@ -715,10 +774,6 @@ export function resolveCanonical(name: string): string | null {
 /** True iff the canonical command supports streamer-customized responses. */
 export function isCommandCustomizable(canonical: string): boolean {
   return Boolean(BUILT_IN_COMMANDS[canonical]?.customizable);
-}
-
-export function getCustomCommandCache() {
-  return CUSTOM_COMMANDS;
 }
 
 export { setActiveTheme, getActiveTheme };
