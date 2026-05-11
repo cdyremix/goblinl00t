@@ -186,22 +186,29 @@ export function Admin() {
             Super-user controls for the entire Goblin L00t roster.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => setCreatingUser(true)}
-            data-testid="button-admin-create-user"
-          >
-            <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Create user
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => qc.invalidateQueries({ queryKey: ["admin"] })}
-          >
-            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            // Use refetch (rather than invalidateQueries) so the button
+            // gets a real promise to await — that's what drives the
+            // spinner via isFetching, and it surfaces errors as toasts
+            // instead of silently failing.
+            try {
+              await Promise.all([usersQuery.refetch(), statsQuery.refetch()]);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Refresh failed";
+              toast({ title: "Refresh failed", description: msg, variant: "destructive" });
+            }
+          }}
+          disabled={usersQuery.isFetching || statsQuery.isFetching}
+          data-testid="button-admin-refresh"
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 mr-1.5 ${usersQuery.isFetching || statsQuery.isFetching ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -215,10 +222,19 @@ export function Admin() {
 
       <Card className="border-border/50">
         <CardHeader className="border-b border-border/50">
-          <CardTitle className="flex items-center gap-2 font-medieval text-xl">
-            <Shield className="w-5 h-5 text-primary" />
-            Streamers
-          </CardTitle>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <CardTitle className="flex items-center gap-2 font-medieval text-xl">
+              <Shield className="w-5 h-5 text-primary" />
+              Streamers
+            </CardTitle>
+            <Button
+              size="sm"
+              onClick={() => setCreatingUser(true)}
+              data-testid="button-admin-create-user"
+            >
+              <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Create user
+            </Button>
+          </div>
           <div className="relative max-w-sm">
             <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
             <Input
