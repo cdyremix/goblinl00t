@@ -85,7 +85,12 @@ export function TierSelectModal({ open, onPicked }: Props) {
     onSuccess: (data, tier) => {
       if (data.kind === "checkout") {
         // Top-level navigation so we escape the Replit preview iframe.
-        (window.top ?? window).location.assign(data.url);
+        // Use the current window's location, NOT window.top — accessing
+        // window.top.location across the Replit preview iframe boundary
+        // throws "permission denied to access property 'assign' on
+        // cross-origin object". Setting location.href on the current
+        // window still escapes to a full page navigation.
+        window.location.href = data.url;
         return;
       }
       queryClient.invalidateQueries({ queryKey: ["users", "me"] });

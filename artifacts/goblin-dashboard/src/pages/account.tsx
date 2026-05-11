@@ -70,7 +70,7 @@ export function Account() {
       // framed (X-Frame-Options DENY), so an in-frame redirect would just
       // show a blank pane and look like the button "did nothing." Walking
       // up to window.top forces a real top-level navigation.
-      (window.top ?? window).location.assign(url);
+      window.location.href = url;
     } catch {
       setTwitchConnecting(false);
       toast({ title: "Couldn't start Twitch sign-in", variant: "destructive" });
@@ -143,7 +143,7 @@ export function Account() {
     },
     onSuccess: (data) => {
       if (data.kind === "checkout" || data.kind === "portal") {
-        (window.top ?? window).location.assign(data.url);
+        window.location.href = data.url;
         return;
       }
       queryClient.invalidateQueries({ queryKey: ["users", "me"] });

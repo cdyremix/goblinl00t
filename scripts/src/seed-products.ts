@@ -19,14 +19,14 @@ const TIERS: TierSpec[] = [
     name: "Goblin L00t — Horde Master",
     description:
       "Unlimited giveaways, all bot themes, Trade Office for CS2 skin delivery, Discord webhooks, custom command responses, full Ledger.",
-    unitAmount: 999,
+    unitAmount: 499,
   },
   {
     tier: "pro",
     name: "Goblin L00t — Goblin King",
     description:
       "Everything in Horde Master plus unlimited Twitch channels, custom bot name, sponsorship-ready analytics, priority support.",
-    unitAmount: 2499,
+    unitAmount: 999,
   },
 ];
 
@@ -102,6 +102,28 @@ async function seed(): Promise<void> {
       console.log(
         `+ Created price tier=${spec.tier} @ $${(spec.unitAmount / 100).toFixed(2)}/mo: ${price.id}`,
       );
+    }
+
+    // Archive any OTHER active monthly prices on this product so the
+    // dashboard /api/stripe/prices endpoint only ever returns one active
+    // price per tier. Stripe prices are immutable, so changing the price
+    // amount means archiving the old one and creating a new one.
+    const allActive = await stripe.prices.list({
+      product: product.id,
+      active: true,
+      limit: 100,
+    });
+    for (const p of allActive.data) {
+      if (
+        p.unit_amount !== spec.unitAmount ||
+        p.currency !== "usd" ||
+        p.recurring?.interval !== "month"
+      ) {
+        await stripe.prices.update(p.id, { active: false });
+        console.log(
+          `- Archived stale price ${p.id} ($${((p.unit_amount ?? 0) / 100).toFixed(2)}/mo)`,
+        );
+      }
     }
   }
 

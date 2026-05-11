@@ -107,7 +107,7 @@ function useSteamConnection() {
       const { url } = (await res.json()) as { url: string };
       // Break out of the Replit preview iframe — Steam's OpenID page
       // refuses to be framed, so an in-frame redirect would silently fail.
-      (window.top ?? window).location.assign(url);
+      window.location.href = url;
       return { url };
     },
   });

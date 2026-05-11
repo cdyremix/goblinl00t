@@ -157,7 +157,7 @@ export function BillingSection() {
       return (await r.json()) as { url: string };
     },
     onSuccess: ({ url }) => {
-      (window.top ?? window).location.assign(url);
+      window.location.href = url;
     },
     onError: (err: Error) =>
       toast({

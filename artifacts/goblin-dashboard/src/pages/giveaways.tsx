@@ -61,9 +61,9 @@ export function Giveaways() {
   const [filter, setFilter] = useState<string>("all");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickedIcon, setPickedIcon] = useState<string | null>(null);
-  // Collapsed by default — the Spotlight card already surfaces the active
-  // giveaway flow up top, so the create form sits as a tucked-away "+ New".
-  const [createFormOpen, setCreateFormOpen] = useState(false);
+  // Expanded by default — the create form is the primary action on this
+  // page, so we show it up front rather than tucked behind a "+ New" toggle.
+  const [createFormOpen, setCreateFormOpen] = useState(true);
 
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
