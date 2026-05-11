@@ -47,3 +47,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Production secrets — NEVER commit
+deploy/.env
+*.env.local
+.env.production

@@ -1,0 +1,54 @@
+# Repo-root .dockerignore — applied when `docker build` is run with this
+# directory as context (e.g. `docker compose build` from deploy/).
+#
+# Keeps the build context small and prevents host-only state (node_modules
+# from a different OS, git history, log files) from being copied into the
+# image. Without this, the Dockerfile's `COPY artifacts ./artifacts` etc.
+# would drag in every dev machine's `node_modules` and break builds.
+
+# Dependencies — always installed inside the image
+**/node_modules
+**/.pnpm-store
+
+# Build outputs — re-built inside the image
+**/dist
+**/.next
+**/.cache
+**/.turbo
+**/.expo
+**/.expo-shared
+**/out-tsc
+**/*.tsbuildinfo
+
+# Replit-only state (workspaces, agent skills, local config)
+.local
+.cache
+.config
+.agents
+.replit
+.replitignore
+attached_assets
+
+# Git + IDE
+.git
+.gitignore
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Secrets — must NEVER ship inside the image
+**/.env
+**/.env.*
+!**/.env.example
+deploy/.env
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
