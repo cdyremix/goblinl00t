@@ -368,40 +368,12 @@ router.get("/steam/inventory", async (req, res) => {
   }
 });
 
-router.post("/steam/submit-trade-url", async (req, res) => {
-  const body = req.body as { twitchUsername: string; tradeUrl: string };
-  if (!body.twitchUsername || !body.tradeUrl) {
-    res.status(400).json({ error: "twitchUsername and tradeUrl required" });
-    return;
-  }
-  if (!body.tradeUrl.includes("steamcommunity.com/tradeoffer/new/")) {
-    res.status(400).json({ error: "Invalid Steam trade URL" });
-    return;
-  }
-
-  const [fulfillment] = await db
-    .select()
-    .from(tradeFulfillmentsTable)
-    .where(
-      and(
-        eq(tradeFulfillmentsTable.winnerTwitchUsername, body.twitchUsername),
-        eq(tradeFulfillmentsTable.status, "pending")
-      )
-    )
-    .limit(1);
-
-  if (!fulfillment) {
-    res.status(404).json({ error: "No pending trade found for this user" });
-    return;
-  }
-
-  const [updated] = await db
-    .update(tradeFulfillmentsTable)
-    .set({ steamTradeUrl: body.tradeUrl })
-    .where(eq(tradeFulfillmentsTable.id, fulfillment.id))
-    .returning();
-
-  res.json({ success: true, fulfillmentId: updated!.id });
-});
+// NOTE: `/steam/submit-trade-url` was REMOVED — it was an unauthenticated
+// HTTP endpoint that accepted any `twitchUsername` body and overwrote
+// the trade URL on a pending fulfillment, allowing CS2 prize-delivery
+// hijack. The supported path is the in-chat `!tradeurl <url>` command
+// in `bot/bot-service.ts`, which is bound to the chatter's verified
+// Twitch identity (`tags.username`). Do NOT reintroduce an HTTP
+// trade-URL submission without strict auth + ownership checks.
 
 export default router;
