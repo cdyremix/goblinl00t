@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Hint } from "@/components/hint";
 import { defaultBotNameFor } from "@/lib/cs2-agents";
 
@@ -189,7 +190,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-6 max-w-3xl">
       {/* Header */}
       <div>
         <h1 className="font-medieval text-3xl text-foreground flex items-center gap-3">
@@ -197,9 +198,21 @@ export default function SettingsPage() {
           Bot Settings
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Customize your bot's personality, name, and game-specific options.
+          Customize your bot's personality, behavior, and game-specific options.
         </p>
       </div>
+
+      <Tabs defaultValue="general" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3 max-w-md">
+          <TabsTrigger value="general" data-testid="tab-settings-general">General</TabsTrigger>
+          <TabsTrigger value="giveaway" data-testid="tab-settings-giveaway">Giveaway</TabsTrigger>
+          <TabsTrigger value="theme" data-testid="tab-settings-theme">Theme</TabsTrigger>
+        </TabsList>
+
+      {/* ============================================================ */}
+      {/* GENERAL TAB                                                  */}
+      {/* ============================================================ */}
+      <TabsContent value="general" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
 
       {/* Bot Name */}
       <section className="space-y-2 max-w-sm">
@@ -252,61 +265,9 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* Theme Selector */}
-      <section className="space-y-2 max-w-sm">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
-          <Hint
-            text="Controls the bot's language and personality in chat. Switch to CS2 mode for Counter-Strike flavored messages and skin giveaway support. Only commands relevant to the active theme will be available below."
-            side="right"
-          />
-        </div>
-        <Select value={activeTheme} onValueChange={(v) => handleThemeSelect(v as BotTheme)}>
-          <SelectTrigger id="bot-theme" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {THEME_OPTIONS.map((theme) => (
-              <SelectItem key={theme.id} value={theme.id}>
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{theme.emoji}</span>
-                  <span>{theme.name}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="pt-2">
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={handleSave}
-            disabled={!hasChanges || !allValid || mutation.isPending}
-          >
-            {mutation.isPending ? (
-              <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
-            ) : savedFeedback && themeChanged ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            ) : (
-              <Save className="w-3.5 h-3.5" />
-            )}
-            {themeChanged ? "Apply Theme" : "Apply"}
-          </Button>
-        </div>
-      </section>
-
-      {/* Economy & Loot */}
-      <section className="space-y-4 max-w-2xl">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">💰</span>
-          <h2 className="text-lg font-semibold text-foreground">Economy &amp; Loot</h2>
-          <Hint
-            text="Controls coin earning, redemption, and special-item drops. These rules apply globally to chat — toggling them off takes effect immediately."
-            side="right"
-          />
-        </div>
-
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-1">
+      {/* Random Goblin Events lives in General — it's a chat-behavior toggle. */}
+      <section className="space-y-3 max-w-2xl">
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2">
@@ -326,6 +287,25 @@ export default function SettingsPage() {
               data-testid="switch-goblin-events"
             />
           </div>
+        </div>
+      </section>
+
+      </TabsContent>
+
+      {/* ============================================================ */}
+      {/* GIVEAWAY TAB                                                 */}
+      {/* ============================================================ */}
+      <TabsContent value="giveaway" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
+
+      {/* Economy & Loot — Giveaway tab */}
+      <section className="space-y-4 max-w-2xl">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">💰</span>
+          <h2 className="text-lg font-semibold text-foreground">Economy &amp; Loot</h2>
+          <Hint
+            text="Controls coin earning, redemption, and special-item drops. These rules apply globally to chat — toggling them off takes effect immediately."
+            side="right"
+          />
         </div>
 
         <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-5 space-y-1">
@@ -422,6 +402,56 @@ export default function SettingsPage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </section>
+
+      </TabsContent>
+
+      {/* ============================================================ */}
+      {/* THEME TAB                                                    */}
+      {/* ============================================================ */}
+      <TabsContent value="theme" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
+
+      {/* Theme Selector */}
+      <section className="space-y-2 max-w-sm">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
+          <Hint
+            text="Controls the bot's language and personality in chat. Switch to CS2 mode for Counter-Strike flavored messages and skin giveaway support. Only commands relevant to the active theme will be available below."
+            side="right"
+          />
+        </div>
+        <Select value={activeTheme} onValueChange={(v) => handleThemeSelect(v as BotTheme)}>
+          <SelectTrigger id="bot-theme" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {THEME_OPTIONS.map((theme) => (
+              <SelectItem key={theme.id} value={theme.id}>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{theme.emoji}</span>
+                  <span>{theme.name}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="pt-2">
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={handleSave}
+            disabled={!hasChanges || !allValid || mutation.isPending}
+          >
+            {mutation.isPending ? (
+              <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
+            ) : savedFeedback && themeChanged ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            {themeChanged ? "Apply Theme" : "Apply"}
+          </Button>
         </div>
       </section>
 
@@ -543,6 +573,9 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }
