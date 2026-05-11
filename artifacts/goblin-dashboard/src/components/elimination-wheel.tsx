@@ -282,9 +282,18 @@ export function EliminationWheel({
       setHighlight(null);
       setIndex((prev) => prev + 1);
 
-      if (livingAfter <= 2) {
-        // Brief dramatic pause on "final two", then auto-trigger the
-        // pixel fight scene — no Final Spin button required.
+      if (livingAfter <= 1 || (livingAfter <= 2 && !opponentUsername)) {
+        // Edge case: the winner is the lone survivor (their multi-ticket
+        // stack is the only thing left). There IS no opponent for the
+        // pixel fight, so jumping to "final-two" would strand the footer
+        // CTA — neither Start Final Battle (needs opponent) nor Continue
+        // (needs revealed) would render. Skip straight to reveal.
+        setPhase("revealed");
+        if (flavorEnabled && winner) setFlavorText(pickVictoryFlavor(winner));
+        onComplete?.();
+      } else if (livingAfter <= 2) {
+        // Manual final-two pause. Streamer hits "Start Final Battle" in
+        // the footer to kick off the pixel showdown.
         setPhase("final-two");
         if (flavorEnabled && winner) {
           setFlavorText(pickFinalTwoFlavor([winner, opponentUsername ?? "???"]));
@@ -305,23 +314,28 @@ export function EliminationWheel({
     if (phase !== "spinning") return;
     if (index >= eliminationOrder.length) return;
     if (livingCount <= 2) {
-      setPhase("final-two");
+      // Same defensive branch as in eliminateOne's tail — if the lone
+      // survivor IS the winner there's no opponent for the fight, so
+      // skip the manual-pause phase and reveal immediately.
+      if (!finalOpponent) {
+        setPhase("revealed");
+        if (flavorEnabled && winner) setFlavorText(pickVictoryFlavor(winner));
+        onComplete?.();
+      } else {
+        setPhase("final-two");
+        if (flavorEnabled && winner) {
+          setFlavorText(pickFinalTwoFlavor([winner, finalOpponent]));
+        }
+      }
       return;
     }
     eliminateOne();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, index, open]);
 
-  // Auto-transition from final-two → fight after a dramatic pause so the
-  // streamer doesn't have to click anything. ~1.6s lets the flavor text
-  // land and the audience register the matchup before the swords come out.
-  useEffect(() => {
-    if (!open) return;
-    if (phase !== "final-two") return;
-    if (!winner || !finalOpponent) return;
-    const t = setTimeout(() => setPhase("fight"), 1600);
-    return () => clearTimeout(t);
-  }, [phase, open, winner, finalOpponent]);
+  // Final two → fight is now MANUAL. Streamer hits "Start Final Battle"
+  // in the footer to trigger the showdown; that gives them control over
+  // when to peak the stream's tension instead of an arbitrary 1.6s pause.
 
   /**
    * Single primary CTA. When no winner is drawn yet, fire the draw and
@@ -392,9 +406,15 @@ export function EliminationWheel({
 
   const isComplete = phase === "revealed";
 
-  // The single CTA is shown only at the very start. Once Start is
-  // clicked, the wheel runs end-to-end on its own.
+  // Footer CTA is single-button and phase-driven:
+  //   idle (no winner yet) → "Start Eliminations"
+  //   final-two            → "Start Final Battle"
+  //   revealed             → "Continue" (closes the modal)
+  // Spinning / shuffling / fight phases hide the button entirely so the
+  // streamer can't accidentally double-fire while animations play.
   const showStartCta = phase === "idle" && !winner && !!onDrawWinner;
+  const showFinalBattleCta = phase === "final-two" && !!winner && !!finalOpponent;
+  const showContinueCta = phase === "revealed";
   const startDisabled = !!drawingWinner || autoStartAfterDraw;
 
   // Screen-reader announcement.
@@ -559,10 +579,10 @@ export function EliminationWheel({
             })}
           </div>
 
-          {/* Pixel-art final showdown — replaces any separate winner
-              celebration overlay entirely. The fight scene plays out,
-              then we swap to a winner-reveal panel inside the SAME
-              overlay with a Continue button that closes the wheel. */}
+          {/* Pixel-art final showdown overlay. Fight plays out, then we
+              swap to a winner-reveal panel inside the SAME overlay. The
+              footer "Continue" button is the single source of truth for
+              closing — we no longer duplicate it inside the panel. */}
           {(phase === "fight" || phase === "revealed") && winner && finalOpponent && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg p-4">
               <div className="w-full max-w-3xl space-y-4">
@@ -586,18 +606,8 @@ export function EliminationWheel({
                       @{winner}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      has plundered the loot. Congratulations!
+                      has plundered the loot. Hit Continue to close the wheel.
                     </p>
-                    <div className="flex justify-center pt-2">
-                      <Button
-                        onClick={onClose}
-                        className="gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold"
-                        data-testid="button-wheel-continue"
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        Continue
-                      </Button>
-                    </div>
                   </div>
                 )}
               </div>
@@ -605,7 +615,7 @@ export function EliminationWheel({
           )}
 
           {/* Edge case: no opponent (single-user giveaway). Show a plain
-              reveal overlay with Continue so the wheel still closes. */}
+              reveal overlay; footer Continue still closes the wheel. */}
           {phase === "revealed" && winner && !finalOpponent && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg p-4">
               <div className="text-center space-y-4" data-testid="panel-winner-reveal">
@@ -619,25 +629,15 @@ export function EliminationWheel({
                 >
                   @{winner}
                 </div>
-                <div className="flex justify-center pt-2">
-                  <Button
-                    onClick={onClose}
-                    className="gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold"
-                    data-testid="button-wheel-continue"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    Continue
-                  </Button>
-                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer — the ONLY button shown is "Start Eliminations" while
-            the wheel is idle pre-draw. Once the streamer clicks it, the
-            wheel auto-runs every phase to completion; the Continue
-            button inside the reveal overlay is the only other CTA. */}
+        {/* Footer — single phase-driven CTA. The label rotates through
+            Start Eliminations → Start Final Battle → Continue as the
+            wheel progresses. Spinning / shuffling / fight phases hide
+            the button so the streamer can't accidentally re-fire it. */}
         <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/50">
           <div className="text-xs text-muted-foreground font-mono">
             {livingCount} / {userSlots.length} contenders
@@ -652,6 +652,26 @@ export function EliminationWheel({
               >
                 <Play className="w-4 h-4" />
                 {startDisabled ? "Drawing…" : "Start Eliminations"}
+              </Button>
+            )}
+            {showFinalBattleCta && (
+              <Button
+                onClick={() => setPhase("fight")}
+                className="gap-2 bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                data-testid="button-wheel-final-battle"
+              >
+                <Sparkles className="w-4 h-4" />
+                Start Final Battle
+              </Button>
+            )}
+            {showContinueCta && (
+              <Button
+                onClick={onClose}
+                className="gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold"
+                data-testid="button-wheel-continue"
+              >
+                <Sparkles className="w-4 h-4" />
+                Continue
               </Button>
             )}
           </div>

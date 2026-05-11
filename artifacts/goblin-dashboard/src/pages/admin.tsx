@@ -1,15 +1,27 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle } from "lucide-react";
+import {
+  Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
+  Pencil, Mail, Key, Receipt, ExternalLink, Loader2,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
 type Tier = "free" | "premium" | "pro";
@@ -36,13 +48,45 @@ interface AdminUser {
 }
 
 interface AdminStats {
-  total: number;
-  free: number;
-  premium: number;
-  pro: number;
-  twitchLinked: number;
-  steamLinked: number;
-  admins: number;
+  total: number; free: number; premium: number; pro: number;
+  twitchLinked: number; steamLinked: number; admins: number;
+}
+
+interface AdminUserDetail {
+  user: AdminUser;
+  clerk: {
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    createdAt: number | null;
+    lastSignInAt: number | null;
+  } | null;
+  subscription: {
+    id: string;
+    status: string;
+    currentPeriodEnd: number;
+    cancelAtPeriodEnd: boolean;
+    productName: string;
+    tier: string | null;
+    unitAmount: number | null;
+    currency: string;
+    interval: string | null;
+  } | null;
+}
+
+interface AdminInvoice {
+  id: string;
+  number: string | null;
+  status: string;
+  amountPaid: number;
+  amountDue: number;
+  amountRefunded: number;
+  currency: string;
+  createdAt: number;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+  chargeId: string | null;
+  refundable: boolean;
 }
 
 const TIER_BADGE: Record<Tier, { label: string; className: string; icon: React.ReactNode }> = {
@@ -51,19 +95,35 @@ const TIER_BADGE: Record<Tier, { label: string; className: string; icon: React.R
   pro: { label: "Pro", className: "bg-amber-500/15 text-amber-300 border-amber-500/40", icon: <Crown className="w-3 h-3" /> },
 };
 
-export function Admin() {
+// Shared authedFetch outside the component so the Edit dialog (which lives
+// in its own component tree) can reuse it without prop-drilling getToken.
+function useAuthedFetch() {
   const { getToken } = useAuth();
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [filter, setFilter] = useState("");
-
-  async function authedFetch(url: string, init: RequestInit = {}) {
+  return async (url: string, init: RequestInit = {}) => {
     const token = await getToken();
     return fetch(url, {
       ...init,
       headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
     });
+  };
+}
+
+function fmtMoney(amountCents: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase() })
+      .format(amountCents / 100);
+  } catch {
+    return `${(amountCents / 100).toFixed(2)} ${currency.toUpperCase()}`;
   }
+}
+
+export function Admin() {
+  const qc = useQueryClient();
+  const authedFetch = useAuthedFetch();
+  const [filter, setFilter] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  const { toast } = useToast();
 
   const usersQuery = useQuery<{ users: AdminUser[] }>({
     queryKey: ["admin", "users"],
@@ -83,26 +143,21 @@ export function Admin() {
     },
   });
 
-  const patchMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: number; body: Partial<AdminUser> }) => {
-      const r = await authedFetch(`/api/admin/users/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await authedFetch(`/api/admin/users/${id}`, { method: "DELETE" });
       if (!r.ok) {
         const err = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Update failed");
+        throw new Error(err.error ?? "Delete failed");
       }
       return r.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
-      qc.invalidateQueries({ queryKey: ["admin", "stats"] });
-      toast({ title: "User updated", description: "Changes saved." });
+      qc.invalidateQueries({ queryKey: ["admin"] });
+      toast({ title: "User deleted", description: "Account removed from Clerk and Stripe." });
     },
     onError: (err: Error) =>
-      toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const filtered = useMemo(() => {
@@ -133,9 +188,7 @@ export function Admin() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
-            qc.invalidateQueries({ queryKey: ["admin"] });
-          }}
+          onClick={() => qc.invalidateQueries({ queryKey: ["admin"] })}
         >
           <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
         </Button>
@@ -181,14 +234,54 @@ export function Admin() {
                 <UserRow
                   key={u.id}
                   user={u}
-                  saving={patchMutation.isPending}
-                  onPatch={(body) => patchMutation.mutate({ id: u.id, body })}
+                  onEdit={() => setEditingId(u.id)}
+                  onDelete={() => setDeletingUser(u)}
                 />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Edit dialog — fetches the enriched user detail on open. Mounted
+          here so opening it doesn't reset the filter / scroll position. */}
+      {editingId !== null && (
+        <EditUserDialog
+          userId={editingId}
+          onClose={() => setEditingId(null)}
+        />
+      )}
+
+      <AlertDialog
+        open={deletingUser !== null}
+        onOpenChange={(v) => !v && setDeletingUser(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes <span className="font-bold">{deletingUser?.twitchUsername ?? deletingUser?.clerkUserId}</span> from Clerk and the
+              Goblin L00t database, and cancels their Stripe subscription if one is
+              active. Chat history (loot, redemptions, leaderboards) is preserved
+              by channel name. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+              onClick={() => {
+                if (!deletingUser) return;
+                deleteMutation.mutate(deletingUser.id);
+                setDeletingUser(null);
+              }}
+            >
+              Delete account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -209,12 +302,12 @@ function StatCard({ label, value, icon }: { label: string; value: number | strin
 
 function UserRow({
   user,
-  saving,
-  onPatch,
+  onEdit,
+  onDelete,
 }: {
   user: AdminUser;
-  saving: boolean;
-  onPatch: (body: Partial<AdminUser>) => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const tier = (user.subscriptionTier in TIER_BADGE ? user.subscriptionTier : "free") as Tier;
   const badge = TIER_BADGE[tier];
@@ -222,7 +315,7 @@ function UserRow({
     <div className="px-5 py-4 flex flex-wrap items-center gap-4">
       <div className="flex-1 min-w-[200px]">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-bold text-foreground">
+          <p className="font-bold text-foreground" data-testid={`text-user-${user.id}`}>
             {user.twitchUsername ?? <span className="italic text-muted-foreground">unlinked</span>}
           </p>
           <Badge className={`gap-1 text-[10px] ${badge.className}`} variant="outline">
@@ -236,9 +329,7 @@ function UserRow({
             </Badge>
           )}
           {user.stripeSubscriptionId && (
-            <Badge variant="outline" className="text-[10px]">
-              Stripe sub
-            </Badge>
+            <Badge variant="outline" className="text-[10px]">Stripe sub</Badge>
           )}
         </div>
         <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
@@ -252,35 +343,659 @@ function UserRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] uppercase tracking-wide text-muted-foreground font-mono">Tier</label>
-          <Select
-            value={tier}
-            onValueChange={(value) => onPatch({ subscriptionTier: value as Tier })}
-            disabled={saving}
-          >
-            <SelectTrigger className="h-8 w-[120px] text-xs" data-testid={`select-tier-${user.id}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="free">Free</SelectItem>
-              <SelectItem value="premium">Premium</SelectItem>
-              <SelectItem value="pro">Pro</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1 items-center">
-          <label className="text-[10px] uppercase tracking-wide text-muted-foreground font-mono">Admin</label>
-          <Switch
-            checked={user.isAdmin}
-            disabled={saving}
-            onCheckedChange={(v) => onPatch({ isAdmin: v })}
-            aria-label="Toggle admin"
-            data-testid={`switch-admin-${user.id}`}
-          />
-        </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onEdit}
+          data-testid={`button-edit-${user.id}`}
+        >
+          <Pencil className="w-3.5 h-3.5 mr-1.5" />
+          Edit
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={onDelete}
+          data-testid={`button-delete-${user.id}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
       </div>
     </div>
+  );
+}
+
+/* ───────────────── Edit user dialog ───────────────── */
+
+function EditUserDialog({ userId, onClose }: { userId: number; onClose: () => void }) {
+  const qc = useQueryClient();
+  const authedFetch = useAuthedFetch();
+  const { toast } = useToast();
+
+  const detailQuery = useQuery<AdminUserDetail>({
+    queryKey: ["admin", "user", userId],
+    queryFn: async () => {
+      const r = await authedFetch(`/api/admin/users/${userId}`);
+      if (!r.ok) throw new Error(`Failed: ${r.status}`);
+      return r.json();
+    },
+  });
+
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: ["admin", "user", userId] });
+    qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    qc.invalidateQueries({ queryKey: ["admin", "stats"] });
+  }
+
+  const detail = detailQuery.data;
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="font-medieval text-2xl flex items-center gap-2">
+            <Pencil className="w-5 h-5 text-primary" />
+            Edit account
+          </DialogTitle>
+          <DialogDescription>
+            {detail ? (
+              <>
+                Editing <span className="font-bold">{detail.user.twitchUsername ?? detail.clerk?.email ?? detail.user.clerkUserId}</span>.
+                Changes apply immediately — be careful.
+              </>
+            ) : "Loading account…"}
+          </DialogDescription>
+        </DialogHeader>
+
+        {detailQuery.isLoading || !detail ? (
+          <div className="py-12 flex items-center justify-center text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        ) : (
+          <Tabs defaultValue="identity" className="w-full">
+            <TabsList className="grid grid-cols-4 w-full">
+              <TabsTrigger value="identity">Identity</TabsTrigger>
+              <TabsTrigger value="subscription">Subscription</TabsTrigger>
+              <TabsTrigger value="billing">
+                <Receipt className="w-3.5 h-3.5 mr-1.5" />
+                Billing
+              </TabsTrigger>
+              <TabsTrigger value="danger" className="text-destructive">Danger</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="identity" className="space-y-5 mt-4">
+              <IdentitySection
+                detail={detail}
+                authedFetch={authedFetch}
+                onSaved={() => { invalidate(); toast({ title: "Identity saved" }); }}
+                onError={(m) => toast({ title: "Save failed", description: m, variant: "destructive" })}
+              />
+            </TabsContent>
+
+            <TabsContent value="subscription" className="space-y-5 mt-4">
+              <SubscriptionSection
+                detail={detail}
+                authedFetch={authedFetch}
+                onChanged={() => { invalidate(); toast({ title: "Subscription updated" }); }}
+                onError={(m) => toast({ title: "Update failed", description: m, variant: "destructive" })}
+              />
+            </TabsContent>
+
+            <TabsContent value="billing" className="space-y-3 mt-4">
+              <BillingSection
+                userId={userId}
+                hasCustomer={!!detail.user.stripeCustomerId}
+                authedFetch={authedFetch}
+                onChanged={() => toast({ title: "Refund issued" })}
+                onError={(m) => toast({ title: "Refund failed", description: m, variant: "destructive" })}
+              />
+            </TabsContent>
+
+            <TabsContent value="danger" className="mt-4">
+              <DangerSection
+                detail={detail}
+                authedFetch={authedFetch}
+                onDeleted={() => { invalidate(); onClose(); toast({ title: "User deleted" }); }}
+                onError={(m) => toast({ title: "Action failed", description: m, variant: "destructive" })}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} data-testid="button-close-edit">Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ───────────────── Identity tab ───────────────── */
+
+function IdentitySection({
+  detail,
+  authedFetch,
+  onSaved,
+  onError,
+}: {
+  detail: AdminUserDetail;
+  authedFetch: ReturnType<typeof useAuthedFetch>;
+  onSaved: () => void;
+  onError: (m: string) => void;
+}) {
+  const [twitchUsername, setTwitchUsername] = useState(detail.user.twitchUsername ?? "");
+  const [steamUsername, setSteamUsername] = useState(detail.user.steamUsername ?? "");
+  const [email, setEmail] = useState(detail.clerk?.email ?? "");
+  const [password, setPassword] = useState("");
+  const [busyKind, setBusyKind] = useState<"profile" | "email" | "password" | null>(null);
+
+  // Reset local state if the underlying detail changes (e.g. after save
+  // we invalidate the query and a fresh detail flows in).
+  useEffect(() => {
+    setTwitchUsername(detail.user.twitchUsername ?? "");
+    setSteamUsername(detail.user.steamUsername ?? "");
+    setEmail(detail.clerk?.email ?? "");
+  }, [detail]);
+
+  async function saveProfile() {
+    setBusyKind("profile");
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          twitchUsername: twitchUsername.trim() || null,
+          steamUsername: steamUsername.trim() || null,
+        }),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Save failed");
+      }
+      onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyKind(null);
+    }
+  }
+
+  async function saveEmail() {
+    if (!email.trim()) return;
+    setBusyKind("email");
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Email change failed");
+      }
+      onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyKind(null);
+    }
+  }
+
+  async function savePassword() {
+    if (password.length < 8) {
+      onError("Password must be at least 8 characters");
+      return;
+    }
+    setBusyKind("password");
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}/password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Password reset failed");
+      }
+      setPassword("");
+      onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyKind(null);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Profile</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="admin-twitch-username">Twitch username</Label>
+              <Input
+                id="admin-twitch-username"
+                value={twitchUsername}
+                onChange={(e) => setTwitchUsername(e.target.value)}
+                placeholder="goblinl00t"
+                data-testid="input-edit-twitch-username"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Lowercased on save. The bot rejoins this channel on next restart.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="admin-steam-username">Steam username</Label>
+              <Input
+                id="admin-steam-username"
+                value={steamUsername}
+                onChange={(e) => setSteamUsername(e.target.value)}
+                placeholder="(optional)"
+                data-testid="input-edit-steam-username"
+              />
+            </div>
+          </div>
+          <Button onClick={saveProfile} disabled={busyKind === "profile"} data-testid="button-save-profile">
+            {busyKind === "profile" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+            Save profile
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h3 className="font-semibold text-sm flex items-center gap-1.5">
+            <Mail className="w-4 h-4" /> Email
+          </h3>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <Label htmlFor="admin-email">Primary email</Label>
+              <Input
+                id="admin-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                data-testid="input-edit-email"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Saved as a verified primary email in Clerk. Old addresses are removed.
+              </p>
+            </div>
+            <Button onClick={saveEmail} disabled={busyKind === "email" || !email.trim()} data-testid="button-save-email">
+              {busyKind === "email" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Update email
+            </Button>
+          </div>
+          {detail.clerk && (
+            <div className="text-[11px] text-muted-foreground font-mono space-y-0.5">
+              <div>Clerk ID: {detail.user.clerkUserId}</div>
+              {detail.clerk.lastSignInAt && <div>Last sign-in: {new Date(detail.clerk.lastSignInAt).toLocaleString()}</div>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h3 className="font-semibold text-sm flex items-center gap-1.5">
+            <Key className="w-4 h-4" /> Password
+          </h3>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <Label htmlFor="admin-pw">Set new password</Label>
+              <Input
+                id="admin-pw"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Min 8 characters"
+                data-testid="input-edit-password"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Forces sign-out of all other sessions. Share over a secure channel.
+              </p>
+            </div>
+            <Button onClick={savePassword} disabled={busyKind === "password" || password.length < 8} data-testid="button-save-password">
+              {busyKind === "password" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Set password
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ───────────────── Subscription tab ───────────────── */
+
+function SubscriptionSection({
+  detail,
+  authedFetch,
+  onChanged,
+  onError,
+}: {
+  detail: AdminUserDetail;
+  authedFetch: ReturnType<typeof useAuthedFetch>;
+  onChanged: () => void;
+  onError: (m: string) => void;
+}) {
+  const [tier, setTier] = useState<Tier>(detail.user.subscriptionTier);
+  const [isAdmin, setIsAdmin] = useState(detail.user.isAdmin);
+  const [busy, setBusy] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    setTier(detail.user.subscriptionTier);
+    setIsAdmin(detail.user.isAdmin);
+  }, [detail]);
+
+  async function save() {
+    setBusy(true);
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscriptionTier: tier, isAdmin }),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Save failed");
+      }
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelSub() {
+    setCancelling(true);
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}/subscription/cancel`, {
+        method: "POST",
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Cancel failed");
+      }
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Manual entitlement (DB override)</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <Label>Tier</Label>
+              <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
+                <SelectTrigger data-testid="select-edit-tier"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="premium">Premium</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Comp / partner override only. Active Stripe subs re-overwrite this on the next read.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Super-user</Label>
+              <div className="flex items-center gap-2 h-10">
+                <Switch
+                  checked={isAdmin}
+                  onCheckedChange={setIsAdmin}
+                  data-testid="switch-edit-admin"
+                />
+                <span className="text-sm text-muted-foreground">Bypass all feature gates</span>
+              </div>
+            </div>
+          </div>
+          <Button onClick={save} disabled={busy} data-testid="button-save-subscription">
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+            Save
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Active Stripe subscription</h3>
+          {detail.subscription ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex flex-wrap gap-x-6 gap-y-1">
+                <span><span className="text-muted-foreground">Plan:</span> <span className="font-bold">{detail.subscription.productName}</span></span>
+                <span><span className="text-muted-foreground">Status:</span> <Badge variant="outline" className="capitalize">{detail.subscription.status}</Badge></span>
+                <span><span className="text-muted-foreground">Renews:</span> {new Date(detail.subscription.currentPeriodEnd).toLocaleDateString()}</span>
+                {detail.subscription.cancelAtPeriodEnd && (
+                  <Badge variant="outline" className="border-amber-500/40 text-amber-300">Cancels at period end</Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground font-mono">{detail.subscription.id}</p>
+              <Button
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10"
+                onClick={cancelSub}
+                disabled={cancelling}
+                data-testid="button-cancel-subscription"
+              >
+                {cancelling ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                Cancel subscription now
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No active Stripe subscription.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ───────────────── Billing tab ───────────────── */
+
+function BillingSection({
+  userId,
+  hasCustomer,
+  authedFetch,
+  onChanged,
+  onError,
+}: {
+  userId: number;
+  hasCustomer: boolean;
+  authedFetch: ReturnType<typeof useAuthedFetch>;
+  onChanged: () => void;
+  onError: (m: string) => void;
+}) {
+  const qc = useQueryClient();
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+
+  const invoicesQuery = useQuery<{ invoices: AdminInvoice[] }>({
+    queryKey: ["admin", "user", userId, "invoices"],
+    queryFn: async () => {
+      const r = await authedFetch(`/api/admin/users/${userId}/invoices`);
+      if (!r.ok) throw new Error(`Failed: ${r.status}`);
+      return r.json();
+    },
+    enabled: hasCustomer,
+  });
+
+  async function refund(inv: AdminInvoice) {
+    if (!inv.chargeId) return;
+    setRefundingId(inv.chargeId);
+    try {
+      const r = await authedFetch(`/api/admin/users/${userId}/refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chargeId: inv.chargeId, reason: "requested_by_customer" }),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Refund failed");
+      }
+      qc.invalidateQueries({ queryKey: ["admin", "user", userId, "invoices"] });
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefundingId(null);
+    }
+  }
+
+  if (!hasCustomer) {
+    return <p className="text-sm text-muted-foreground p-2">User has no Stripe customer yet — no invoices to show.</p>;
+  }
+  if (invoicesQuery.isLoading) {
+    return <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  }
+  if (invoicesQuery.error) {
+    return <p className="text-sm text-destructive">Failed to load invoices.</p>;
+  }
+  const invoices = invoicesQuery.data?.invoices ?? [];
+  if (invoices.length === 0) {
+    return <p className="text-sm text-muted-foreground p-2">No invoices yet.</p>;
+  }
+
+  return (
+    <div className="border border-border/60 rounded-md overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="text-left px-3 py-2">Invoice</th>
+            <th className="text-left px-3 py-2">Date</th>
+            <th className="text-right px-3 py-2">Paid</th>
+            <th className="text-right px-3 py-2">Refunded</th>
+            <th className="text-left px-3 py-2">Status</th>
+            <th className="text-right px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/50">
+          {invoices.map((inv) => (
+            <tr key={inv.id} className="hover:bg-muted/20">
+              <td className="px-3 py-2 font-mono text-xs">{inv.number ?? inv.id}</td>
+              <td className="px-3 py-2 text-xs">{new Date(inv.createdAt).toLocaleDateString()}</td>
+              <td className="px-3 py-2 text-right">{fmtMoney(inv.amountPaid, inv.currency)}</td>
+              <td className="px-3 py-2 text-right text-rose-300">
+                {inv.amountRefunded > 0 ? fmtMoney(inv.amountRefunded, inv.currency) : "—"}
+              </td>
+              <td className="px-3 py-2">
+                <Badge variant="outline" className="capitalize text-[10px]">{inv.status}</Badge>
+              </td>
+              <td className="px-3 py-2 text-right space-x-1 whitespace-nowrap">
+                {inv.hostedInvoiceUrl && (
+                  <Button asChild variant="ghost" size="sm">
+                    <a href={inv.hostedInvoiceUrl} target="_blank" rel="noreferrer" data-testid={`link-invoice-${inv.id}`}>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refund(inv)}
+                  disabled={!inv.refundable || refundingId === inv.chargeId}
+                  data-testid={`button-refund-${inv.id}`}
+                >
+                  {refundingId === inv.chargeId ? <Loader2 className="w-3 h-3 animate-spin" /> : "Refund"}
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ───────────────── Danger zone tab ───────────────── */
+
+function DangerSection({
+  detail,
+  authedFetch,
+  onDeleted,
+  onError,
+}: {
+  detail: AdminUserDetail;
+  authedFetch: ReturnType<typeof useAuthedFetch>;
+  onDeleted: () => void;
+  onError: (m: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function doDelete() {
+    setBusy(true);
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}`, { method: "DELETE" });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Delete failed");
+      }
+      onDeleted();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <Card className="border-destructive/40">
+      <CardContent className="p-4 space-y-3">
+        <h3 className="font-semibold text-sm text-destructive flex items-center gap-1.5">
+          <AlertTriangle className="w-4 h-4" />
+          Delete account permanently
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Cancels the active Stripe subscription, deletes the Clerk user, and removes the database row
+          (cascading custom commands and giveaway presets). Channel-scoped chat history is preserved.
+        </p>
+        <Button
+          variant="destructive"
+          onClick={() => setConfirming(true)}
+          disabled={busy}
+          data-testid="button-open-delete"
+        >
+          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+          Delete this account
+        </Button>
+
+        <AlertDialog open={confirming} onOpenChange={(v) => !v && setConfirming(false)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Deleting <span className="font-bold">{detail.user.twitchUsername ?? detail.clerk?.email ?? detail.user.clerkUserId}</span> is
+                irreversible. The user will be signed out everywhere and unable to sign back in.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); doDelete(); }}
+                disabled={busy}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-delete-account"
+              >
+                {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                Delete forever
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
   );
 }

@@ -216,6 +216,64 @@ router.post("/stripe/checkout", async (req, res) => {
     // a forged Host header point Stripe redirects at a malicious origin).
     const base = getCanonicalAppBase();
 
+    // Pro-ration path: if the user already has an active sub, swap the
+    // line item in-place rather than creating a fresh checkout session.
+    // Stripe with `proration_behavior: 'always_invoice'` calculates the
+    // prorated credit/charge for the unused portion of the current
+    // period and invoices it immediately against the customer's saved
+    // payment method (collected on initial checkout). The DB tier is
+    // optimistically updated; the next /stripe/subscription read will
+    // re-reconcile from Stripe truth.
+    //
+    // Fall back to the regular Checkout flow on any error so the user
+    // can still pay even if the in-place upgrade probe fails.
+    if (user.stripeSubscriptionId) {
+      try {
+        const existing = await stripe.subscriptions.retrieve(
+          user.stripeSubscriptionId,
+        );
+        const upgradable =
+          existing.status === "active" ||
+          existing.status === "trialing" ||
+          existing.status === "past_due";
+        const itemId = existing.items?.data?.[0]?.id;
+        const currentPriceId = existing.items?.data?.[0]?.price?.id;
+        if (upgradable && itemId && currentPriceId !== priceRow.price_id) {
+          await stripe.subscriptions.update(user.stripeSubscriptionId, {
+            items: [{ id: itemId, price: priceRow.price_id }],
+            proration_behavior: "always_invoice",
+            payment_behavior: "default_incomplete",
+            metadata: { ...(existing.metadata ?? {}), tier },
+          });
+          await db
+            .update(usersTable)
+            .set({ subscriptionTier: tier })
+            .where(eq(usersTable.id, user.id));
+          res.json({
+            url: `${base}/account?tab=rank&checkout=upgraded`,
+            prorated: true,
+          });
+          return;
+        }
+        if (upgradable && currentPriceId === priceRow.price_id) {
+          // No-op: already on this tier. Send them to the portal so they
+          // can adjust payment method / cancel rather than re-checkout.
+          const portal = await stripe.billingPortal.sessions.create({
+            customer: customerId,
+            return_url: `${base}/account?tab=rank`,
+          });
+          res.json({ url: portal.url, alreadyOnTier: true });
+          return;
+        }
+      } catch (err) {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        req.log.warn(
+          { errMessage },
+          "in-place sub upgrade failed, falling back to new checkout",
+        );
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,

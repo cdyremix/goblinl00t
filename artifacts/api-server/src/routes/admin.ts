@@ -2,7 +2,9 @@ import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
+import { clerkClient } from "@clerk/express";
 import { requireAdmin } from "../lib/auth-helpers";
+import { getUncachableStripeClient } from "../lib/stripeClient";
 
 const router = Router();
 
@@ -53,10 +55,140 @@ router.get("/admin/users", async (req, res) => {
   res.json({ users: rows });
 });
 
+/**
+ * GET /admin/users/:id — single-user enriched view: DB row + Clerk
+ * profile (email, name, last sign-in) + active Stripe subscription.
+ * Used by the admin Edit dialog to populate fields.
+ */
+router.get("/admin/users/:id", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  // Best-effort Clerk fetch — Clerk's API can be flaky and we don't want
+  // a missing Clerk profile to block the rest of the dialog from loading.
+  let clerk: {
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    createdAt: number | null;
+    lastSignInAt: number | null;
+  } | null = null;
+  try {
+    const cu = await clerkClient.users.getUser(user.clerkUserId);
+    const primaryEmail =
+      cu.emailAddresses.find((e) => e.id === cu.primaryEmailAddressId)?.emailAddress ??
+      cu.emailAddresses[0]?.emailAddress ??
+      null;
+    clerk = {
+      email: primaryEmail,
+      firstName: cu.firstName ?? null,
+      lastName: cu.lastName ?? null,
+      createdAt: cu.createdAt ?? null,
+      lastSignInAt: cu.lastSignInAt ?? null,
+    };
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.warn({ errMessage, clerkUserId: user.clerkUserId }, "admin: clerk lookup failed");
+  }
+
+  // Active Stripe sub — same shape as /api/stripe/subscription returns
+  // for the user themselves, surfaced here so the admin sees real
+  // subscription state (not just the locally-cached tier).
+  let subscription: {
+    id: string;
+    status: string;
+    currentPeriodEnd: number;
+    cancelAtPeriodEnd: boolean;
+    productName: string;
+    tier: string | null;
+    unitAmount: number | null;
+    currency: string;
+    interval: string | null;
+  } | null = null;
+  if (user.stripeCustomerId) {
+    try {
+      const result = await db.execute<{
+        id: string;
+        status: string;
+        current_period_end: number;
+        cancel_at_period_end: boolean;
+        product_name: string;
+        tier: string | null;
+        unit_amount: number | null;
+        currency: string;
+        interval: string | null;
+      }>(sql`
+        SELECT
+          s.id,
+          s.status,
+          s.current_period_end::bigint AS current_period_end,
+          s.cancel_at_period_end,
+          p.name  AS product_name,
+          p.metadata->>'tier' AS tier,
+          pr.unit_amount,
+          pr.currency,
+          pr.recurring->>'interval' AS interval
+        FROM stripe.subscriptions s
+        JOIN stripe.prices   pr ON pr.id = s.plan
+        JOIN stripe.products p  ON p.id  = pr.product
+        WHERE s.customer = ${user.stripeCustomerId}
+          AND s.status IN ('active','trialing','past_due')
+        ORDER BY s.created DESC
+        LIMIT 1
+      `);
+      const row = result.rows[0];
+      if (row) {
+        subscription = {
+          id: row.id,
+          status: row.status,
+          currentPeriodEnd: Number(row.current_period_end) * 1000,
+          cancelAtPeriodEnd: row.cancel_at_period_end,
+          productName: row.product_name,
+          tier: row.tier,
+          unitAmount: row.unit_amount,
+          currency: row.currency,
+          interval: row.interval,
+        };
+      }
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      req.log.warn({ errMessage }, "admin: subscription lookup failed");
+    }
+  }
+
+  res.json({ user, clerk, subscription });
+});
+
 const PatchUserBody = z.object({
+  // Identity overrides — admins occasionally need to fix a Twitch handle
+  // (re-name, ban, manual override). These do NOT re-trigger any OAuth
+  // flow — they're purely a local DB rename. The bot will join the new
+  // channel on next restart / settings invalidation.
+  twitchUsername: z
+    .string()
+    .min(1)
+    .max(60)
+    .regex(/^[a-zA-Z0-9_]+$/, "Twitch usernames are alphanumeric + underscore")
+    .nullable()
+    .optional(),
+  steamUsername: z.string().min(1).max(120).nullable().optional(),
+  // Subscription / role.
   subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
   isAdmin: z.boolean().optional(),
   tierSelected: z.boolean().optional(),
+  // Bot config.
   botTheme: z.enum(["goblin", "cs2"]).optional(),
   botName: z.string().min(1).max(60).optional(),
   goblinEventsEnabled: z.boolean().optional(),
@@ -97,15 +229,19 @@ router.patch("/admin/users/:id", async (req, res) => {
 
   // Block self-demotion of admin so the project owner can't accidentally
   // strip their own super-user rights and lock themselves out.
-  if (
-    parsed.data.isAdmin === false &&
-    id === ctx.user.id
-  ) {
+  if (parsed.data.isAdmin === false && id === ctx.user.id) {
     res.status(400).json({ error: "Refusing to demote yourself." });
     return;
   }
 
+  // Normalize twitchUsername to lowercase so it matches `channel`
+  // strings used everywhere else (chat events normalize via tags.username
+  // .toLowerCase()). Otherwise the bot's settings cache would key on a
+  // mixed-case channel and silently miss updates.
   const updates: Partial<typeof usersTable.$inferInsert> = { ...parsed.data };
+  if (typeof updates.twitchUsername === "string") {
+    updates.twitchUsername = updates.twitchUsername.toLowerCase();
+  }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
     return;
@@ -121,6 +257,374 @@ router.patch("/admin/users/:id", async (req, res) => {
     return;
   }
   res.json({ user: updated });
+});
+
+const EmailBody = z.object({
+  email: z.string().email().max(254),
+});
+
+/**
+ * POST /admin/users/:id/email — admin-set primary email via Clerk.
+ * Clerk requires us to (1) create a new email-address record on the
+ * user, (2) flip it to `primary: true`, then (3) optionally remove the
+ * old emails. We mark the new address verified so the user isn't gated
+ * by email confirmation on next sign-in.
+ *
+ * If the new address already exists on this Clerk user we just promote
+ * it to primary — Clerk rejects duplicate creates with a 422.
+ */
+router.post("/admin/users/:id/email", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const parsed = EmailBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  try {
+    const cu = await clerkClient.users.getUser(user.clerkUserId);
+    const target = parsed.data.email.toLowerCase();
+    let emailId = cu.emailAddresses.find(
+      (e) => e.emailAddress.toLowerCase() === target,
+    )?.id;
+    if (!emailId) {
+      const created = await clerkClient.emailAddresses.createEmailAddress({
+        userId: user.clerkUserId,
+        emailAddress: target,
+        verified: true,
+        primary: true,
+      });
+      emailId = created.id;
+    } else {
+      await clerkClient.users.updateUser(user.clerkUserId, {
+        primaryEmailAddressID: emailId,
+      });
+    }
+    // Best-effort: sweep up old non-primary addresses so the account
+    // doesn't accumulate stale emails.
+    for (const e of cu.emailAddresses) {
+      if (e.id !== emailId) {
+        try {
+          await clerkClient.emailAddresses.deleteEmailAddress(e.id);
+        } catch {
+          /* non-fatal — deletion can fail if the address backs an SSO link */
+        }
+      }
+    }
+    res.json({ ok: true, email: target });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage, userId: id }, "admin: email change failed");
+    res.status(500).json({ error: "Failed to update email", detail: errMessage });
+  }
+});
+
+const PasswordBody = z.object({
+  password: z.string().min(8).max(128),
+});
+
+/**
+ * POST /admin/users/:id/password — admin-set a temporary password.
+ * Forwarded straight to Clerk via `users.updateUser({ password })`.
+ * Clerk enforces its own complexity rules; we just gate length here.
+ *
+ * Setting `signOutOfOtherSessions: true` invalidates every existing
+ * session so the user is forced to re-auth with the new password —
+ * critical for "I locked someone out, here's their fresh creds" flows.
+ */
+router.post("/admin/users/:id/password", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const parsed = PasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  try {
+    await clerkClient.users.updateUser(user.clerkUserId, {
+      password: parsed.data.password,
+      signOutOfOtherSessions: true,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage, userId: id }, "admin: password reset failed");
+    res.status(500).json({ error: "Failed to set password", detail: errMessage });
+  }
+});
+
+/**
+ * DELETE /admin/users/:id — full account wipe. Cascade order matters:
+ *   1) Cancel any active Stripe subscription so no further charges land.
+ *   2) Delete the Clerk record so the user can no longer sign in.
+ *   3) Delete the DB row. FK cascades wipe `custom_commands` and
+ *      `giveaway_presets`. Chat-history rows (loot_drops,
+ *      point_redemptions, user_inventory, command_logs) are channel-
+ *      scoped strings — they're left in place by design so the
+ *      historical Ledger view remains intact for other admins.
+ *
+ * Refuses to delete the caller themselves so an admin can't lock
+ * themselves out with one slip.
+ */
+router.delete("/admin/users/:id", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  if (id === ctx.user.id) {
+    res.status(400).json({ error: "Refusing to delete yourself." });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  // 1) Stripe sub — cancel-now so the customer isn't billed again.
+  if (user.stripeSubscriptionId) {
+    try {
+      const stripe = await getUncachableStripeClient();
+      await stripe.subscriptions.cancel(user.stripeSubscriptionId);
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      req.log.warn({ errMessage, userId: id }, "admin: stripe cancel during delete failed");
+      // Non-fatal — keep going so the row gets removed regardless. Admin
+      // can clean up the Stripe sub manually if needed.
+    }
+  }
+  // 2) Clerk delete.
+  try {
+    await clerkClient.users.deleteUser(user.clerkUserId);
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.warn({ errMessage, userId: id }, "admin: clerk delete failed");
+    // Non-fatal too — the user might already be gone in Clerk.
+  }
+  // 3) DB delete. FK cascades handle dependent rows.
+  await db.delete(usersTable).where(eq(usersTable.id, id));
+  res.json({ ok: true });
+});
+
+interface InvoiceRow extends Record<string, unknown> {
+  id: string;
+  number: string | null;
+  status: string;
+  amount_paid: number;
+  amount_due: number;
+  currency: string;
+  created: number;
+  hosted_invoice_url: string | null;
+  invoice_pdf: string | null;
+  charge: string | null;
+  amount_refunded: number | null;
+}
+
+/**
+ * GET /admin/users/:id/invoices — billing history for a single user.
+ * Joins to `stripe.charges` so we can surface the refundable amount
+ * (charge.amount - charge.amount_refunded) per invoice without a
+ * second round-trip from the dashboard.
+ */
+router.get("/admin/users/:id/invoices", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (!user.stripeCustomerId) {
+    res.json({ invoices: [] });
+    return;
+  }
+  try {
+    const result = await db.execute<InvoiceRow>(sql`
+      SELECT
+        i.id,
+        i.number,
+        i.status,
+        i.amount_paid,
+        i.amount_due,
+        i.currency,
+        i.created::bigint AS created,
+        i.hosted_invoice_url,
+        i.invoice_pdf,
+        i.charge,
+        c.amount_refunded
+      FROM stripe.invoices i
+      LEFT JOIN stripe.charges c ON c.id = i.charge
+      WHERE i.customer = ${user.stripeCustomerId}
+      ORDER BY i.created DESC
+      LIMIT 200
+    `);
+    res.json({
+      invoices: result.rows.map((row) => ({
+        id: row.id,
+        number: row.number,
+        status: row.status,
+        amountPaid: row.amount_paid,
+        amountDue: row.amount_due,
+        amountRefunded: row.amount_refunded ?? 0,
+        currency: row.currency,
+        createdAt: Number(row.created) * 1000,
+        hostedInvoiceUrl: row.hosted_invoice_url,
+        invoicePdf: row.invoice_pdf,
+        chargeId: row.charge,
+        refundable:
+          row.charge != null &&
+          row.amount_paid > 0 &&
+          row.amount_paid > (row.amount_refunded ?? 0),
+      })),
+    });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage, userId: id }, "admin: invoices read failed");
+    res.status(500).json({ error: "Failed to load invoices" });
+  }
+});
+
+const RefundBody = z.object({
+  chargeId: z.string().startsWith("ch_").or(z.string().startsWith("py_")),
+  // Optional partial-refund amount in cents. Omit for full refund.
+  amount: z.number().int().positive().optional(),
+  reason: z
+    .enum(["duplicate", "fraudulent", "requested_by_customer"])
+    .optional(),
+});
+
+/**
+ * POST /admin/users/:id/refund — issue a Stripe refund against one of
+ * the user's charges. The chargeId is supplied by the dashboard from
+ * the invoices list; we don't trust an arbitrary charge id, so we
+ * verify it belongs to this user's Stripe customer before refunding.
+ */
+router.post("/admin/users/:id/refund", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const parsed = RefundBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user?.stripeCustomerId) {
+    res.status(404).json({ error: "User has no Stripe customer" });
+    return;
+  }
+
+  // Defence-in-depth: confirm the charge actually belongs to this user
+  // BEFORE we spend a Stripe API call. The dashboard already only
+  // surfaces this user's charges, but a forged request to /admin/users/
+  // /<other>/refund with a known chargeId from a different customer
+  // would otherwise refund the wrong account.
+  const owns = await db.execute<{ id: string }>(sql`
+    SELECT id FROM stripe.charges
+    WHERE id = ${parsed.data.chargeId}
+      AND customer = ${user.stripeCustomerId}
+    LIMIT 1
+  `);
+  if (owns.rows.length === 0) {
+    res.status(404).json({ error: "Charge not found for this user" });
+    return;
+  }
+
+  try {
+    const stripe = await getUncachableStripeClient();
+    const refund = await stripe.refunds.create({
+      charge: parsed.data.chargeId,
+      ...(parsed.data.amount !== undefined ? { amount: parsed.data.amount } : {}),
+      ...(parsed.data.reason ? { reason: parsed.data.reason } : {}),
+      metadata: {
+        adminClerkUserId: ctx.user.clerkUserId,
+        targetUserId: String(id),
+      },
+    });
+    res.json({
+      ok: true,
+      refund: {
+        id: refund.id,
+        amount: refund.amount,
+        status: refund.status,
+        currency: refund.currency,
+      },
+    });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage, userId: id }, "admin: refund failed");
+    res.status(500).json({ error: "Failed to issue refund", detail: errMessage });
+  }
+});
+
+/**
+ * POST /admin/users/:id/subscription/cancel — admin-initiated immediate
+ * cancellation of the target user's active Stripe subscription. Same
+ * shape as the user-facing /stripe/subscription/cancel-now but operates
+ * on any user the admin selects.
+ */
+router.post("/admin/users/:id/subscription/cancel", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user?.stripeSubscriptionId) {
+    res.status(400).json({ error: "User has no active Stripe subscription" });
+    return;
+  }
+  try {
+    const stripe = await getUncachableStripeClient();
+    await stripe.subscriptions.cancel(user.stripeSubscriptionId);
+    await db
+      .update(usersTable)
+      .set({ subscriptionTier: "free", stripeSubscriptionId: null })
+      .where(eq(usersTable.id, id));
+    res.json({ ok: true });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage, userId: id }, "admin: cancel sub failed");
+    res.status(500).json({ error: "Failed to cancel subscription" });
+  }
 });
 
 /**
