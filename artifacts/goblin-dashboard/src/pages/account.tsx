@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Hint } from "@/components/hint";
 import { UserAvatar } from "@/components/user-avatar";
 import { AVATAR_PRESETS } from "@/lib/avatar-presets";
 import {
-  Crown, Sword, Shield, Tv, CheckCircle2, XCircle, Gem, KeyRound, Mail
+  Crown, Sword, Shield, Tv, CheckCircle2, XCircle, Gem, KeyRound, Mail, Pencil
 } from "lucide-react";
 
 interface UserProfile {
@@ -96,6 +98,7 @@ export function Account() {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
   async function authedFetch(path: string, init: RequestInit = {}) {
     const token = await getToken();
@@ -188,75 +191,49 @@ export function Account() {
             </div>
           ) : (
             <>
-              {/* Header summary */}
-              <div className="flex items-center gap-4">
-                <UserAvatar
-                  presetId={profile?.user.avatarPreset}
-                  imageUrl={clerkUser?.imageUrl}
-                  fallbackText={clerkUser?.username ?? clerkUser?.fullName ?? "?"}
-                  className="w-16 h-16"
-                  emojiClass="text-3xl"
-                />
-                <div>
-                  <p className="font-bold text-xl text-foreground">
-                    {profile?.user.twitchUsername ?? "Unknown Goblin"}
-                  </p>
-                  <p className="text-muted-foreground text-sm">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
-                  <div className="mt-1">
+              {/* Identity (avatar + name + email + plan, all in one row) */}
+              <div className="flex items-start gap-5">
+                <div className="relative group">
+                  <UserAvatar
+                    presetId={profile?.user.avatarPreset}
+                    imageUrl={clerkUser?.imageUrl}
+                    fallbackText={profile?.user.twitchUsername ?? "?"}
+                    className="w-20 h-20"
+                    emojiClass="text-4xl"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAvatarPickerOpen(true)}
+                    title="Change avatar"
+                    aria-label="Change avatar"
+                    className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-primary text-primary-foreground border-2 border-background flex items-center justify-center shadow-md hover:scale-110 transition-transform"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-bold text-xl text-foreground truncate">
+                      {profile?.user.twitchUsername ?? "Unknown Goblin"}
+                    </p>
+                    {profile?.user.twitchUsername ? (
+                      <Badge variant="outline" className="text-[10px] border-green-500/40 text-green-400 gap-1">
+                        <Tv className="w-2.5 h-2.5" /> From Twitch
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">
+                        Connect Twitch to set name
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-sm truncate">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
+                  <div>
                     <PlanBadge tier={currentTier} />
                   </div>
                 </div>
               </div>
 
               <Separator className="opacity-50" />
-
-              {/* Avatar presets */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-semibold">Avatar</Label>
-                  <Hint text="Pick a goblin form. This avatar shows up in the sidebar and on your profile." />
-                </div>
-                <div className="grid grid-cols-6 gap-3 max-w-md">
-                  {AVATAR_PRESETS.map((p) => {
-                    const selected = profile?.user.avatarPreset === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => avatarMutation.mutate(p.id)}
-                        disabled={avatarMutation.isPending}
-                        title={p.label}
-                        className={`aspect-square rounded-full bg-gradient-to-br ${p.bg} flex items-center justify-center text-2xl border-2 transition-all hover:scale-105 ${
-                          selected ? "border-primary ring-2 ring-primary/40" : "border-border/50 opacity-80 hover:opacity-100"
-                        }`}
-                      >
-                        {p.emoji}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <Separator className="opacity-50" />
-
-              {/* Username (read-only — sourced from Twitch authorization) */}
-              <div className="space-y-2 max-w-sm">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-semibold">Username</Label>
-                  <Hint text="Your username is taken from Twitch when you connect your channel below. Until then it stays as 'Unknown Goblin'." />
-                </div>
-                <div className="flex items-center gap-3 rounded-md border border-border bg-muted/30 px-3 py-2">
-                  <Tv className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span className="text-sm text-foreground font-medium flex-1 truncate">
-                    {profile?.user.twitchUsername ?? "Unknown Goblin"}
-                  </span>
-                  {profile?.user.twitchUsername ? (
-                    <Badge variant="outline" className="text-[10px] border-green-500/40 text-green-400">From Twitch</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Not connected</Badge>
-                  )}
-                </div>
-              </div>
 
               {/* Email & Password (Clerk-managed via modal) */}
               <div className="space-y-3 max-w-sm">
@@ -414,6 +391,38 @@ export function Account() {
           Premium & Pro billing coming soon via Stripe. Plans saved for when payments go live.
         </p>
       </div>
+
+      {/* Avatar picker dialog */}
+      <Dialog open={avatarPickerOpen} onOpenChange={setAvatarPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-medieval">Choose your goblin form</DialogTitle>
+            <DialogDescription>This avatar shows up in the sidebar and on your profile.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-3 gap-3 pt-2">
+            {AVATAR_PRESETS.map((p) => {
+              const selected = profile?.user.avatarPreset === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    avatarMutation.mutate(p.id, { onSuccess: () => setAvatarPickerOpen(false) });
+                  }}
+                  disabled={avatarMutation.isPending}
+                  title={p.label}
+                  className={`aspect-square rounded-xl bg-gradient-to-br ${p.bg} flex flex-col items-center justify-center gap-1 border-2 transition-all hover:scale-105 ${
+                    selected ? "border-primary ring-2 ring-primary/40" : "border-border/50 opacity-90 hover:opacity-100"
+                  }`}
+                >
+                  <span className="text-3xl">{p.emoji}</span>
+                  <span className="text-[10px] font-medium text-foreground/80 uppercase tracking-wide">{p.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
