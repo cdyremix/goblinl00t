@@ -25,4 +25,5 @@ export interface UpdateBotSettings {
   coinCap?: number | null;
   wheelMode?: UpdateBotSettingsWheelMode;
   wheelSpeed?: UpdateBotSettingsWheelSpeed;
+  eliminationFlavorEnabled?: boolean;
 }

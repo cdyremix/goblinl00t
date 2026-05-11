@@ -644,6 +644,95 @@ export function useGetGiveaway<
 }
 
 /**
+ * Removes the giveaway row and any associated entries / trade
+fulfillment rows. Coin awards already credited to winners are NOT
+clawed back (they live in `loot_drops`). Use this to clean up test
+/ aborted giveaways from the Loot Hoard list.
+
+ * @summary Permanently delete a giveaway and its entries
+ */
+export const getDeleteGiveawayUrl = (id: number) => {
+  return `/api/giveaway/${id}`;
+};
+
+export const deleteGiveaway = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteGiveawayUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteGiveawayMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGiveaway>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteGiveaway>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteGiveaway"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteGiveaway>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteGiveaway(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteGiveawayMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteGiveaway>>
+>;
+
+export type DeleteGiveawayMutationError = ErrorType<void>;
+
+/**
+ * @summary Permanently delete a giveaway and its entries
+ */
+export const useDeleteGiveaway = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGiveaway>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteGiveaway>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteGiveawayMutationOptions(options));
+};
+
+/**
  * @summary Start a giveaway (bot announces in chat)
  */
 export const getStartGiveawayUrl = (id: number) => {

@@ -43,6 +43,7 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
         | "slow"
         | "medium"
         | "fast",
+    eliminationFlavorEnabled: user.eliminationFlavorEnabled,
   };
 }
 
@@ -69,6 +70,7 @@ router.put("/settings", async (req, res) => {
     coinCap?: number | null;
     wheelMode?: string;
     wheelSpeed?: string;
+    eliminationFlavorEnabled?: boolean;
   };
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
@@ -121,6 +123,9 @@ router.put("/settings", async (req, res) => {
       return;
     }
     updates.wheelSpeed = body.wheelSpeed;
+  }
+  if (typeof body.eliminationFlavorEnabled === "boolean") {
+    updates.eliminationFlavorEnabled = body.eliminationFlavorEnabled;
   }
 
   const before = await getOrCreateUser(userId);

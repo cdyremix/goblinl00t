@@ -33,6 +33,7 @@ interface BotSettings {
   coinCap: number | null;
   wheelMode: "auto" | "manual";
   wheelSpeed: "slow" | "medium" | "fast";
+  eliminationFlavorEnabled: boolean;
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -351,51 +352,13 @@ export default function SettingsPage() {
         />
       </section>
 
-      {/* Elimination Wheel */}
-      <section className="space-y-4 max-w-2xl">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🎡</span>
-          <h2 className="text-lg font-semibold text-foreground">Elimination Wheel</h2>
-          <Hint text="When you end a giveaway, the wheel spins through entries and eliminates one per round until a winner remains. Configure how it runs here." side="right" />
-        </div>
-
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="wheel-mode" className="text-sm font-semibold">Spin Mode</Label>
-              <Hint text="Auto: the wheel spins through every elimination by itself. Manual: the streamer clicks Spin between each elimination — great for hype." side="right" />
-            </div>
-            <Select
-              value={settings?.wheelMode ?? "auto"}
-              onValueChange={(v) => mutation.mutate({ wheelMode: v as "auto" | "manual" })}
-            >
-              <SelectTrigger id="wheel-mode" data-testid="select-wheel-mode"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto — spin through automatically</SelectItem>
-                <SelectItem value="manual">Manual — click to spin each round</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="wheel-speed" className="text-sm font-semibold">Spin Speed</Label>
-              <Hint text="Animation pacing. Slow = more dramatic, Fast = quick reveals." side="right" />
-            </div>
-            <Select
-              value={settings?.wheelSpeed ?? "medium"}
-              onValueChange={(v) => mutation.mutate({ wheelSpeed: v as "slow" | "medium" | "fast" })}
-            >
-              <SelectTrigger id="wheel-speed" data-testid="select-wheel-speed"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="slow">Slow — dramatic build-up</SelectItem>
-                <SelectItem value="medium">Medium — balanced</SelectItem>
-                <SelectItem value="fast">Fast — rapid-fire</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </section>
+      {/*
+        Elimination Wheel settings used to live here. They've moved to a
+        ⚙️ gear-icon popover inside the wheel modal itself (see
+        components/elimination-wheel.tsx) so the streamer can tweak Spin
+        Mode / Spin Speed / RPG Flavor Text right where they spin — no
+        more bouncing back to the Forge mid-giveaway.
+      */}
 
       </TabsContent>
 

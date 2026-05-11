@@ -1,10 +1,8 @@
 import {
   useListGiveaways, useCreateGiveaway, getListGiveawaysQueryKey, useGetCurrentGiveaway,
   getGetCurrentGiveawayQueryKey,
-  useListGiveawayPresets, useCreateGiveawayPreset, useDeleteGiveawayPreset, useLaunchGiveawayPreset,
-  getListGiveawayPresetsQueryKey,
   useSeedGiveawayEntries,
-  useStartGiveaway, useEndGiveaway,
+  useStartGiveaway, useEndGiveaway, useDeleteGiveaway,
   useGetGiveawayEntries, useGetBotSettings,
   getGetGiveawayEntriesQueryKey, getGetBotSettingsQueryKey,
 } from "@workspace/api-client-react";
@@ -25,7 +23,7 @@ import * as z from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
-import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins, Bookmark, Rocket, Trash2, FlaskConical, Play, Sparkles, Users, ChevronDown, Zap } from "lucide-react";
+import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins, Trash2, FlaskConical, Play, Sparkles, Users, ChevronDown, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { InventoryPicker, type PickedItem } from "@/components/inventory-picker";
@@ -541,12 +539,9 @@ export function Giveaways() {
                     </span>
                   </div>
 
-                  <div className="flex gap-2">
-                    <Button type="submit" disabled={createMutation.isPending} className="flex-1 font-bold">
-                      {createMutation.isPending ? "Forging..." : "Add to Hoard"}
-                    </Button>
-                    <SavePresetButton getValues={form.getValues} />
-                  </div>
+                  <Button type="submit" disabled={createMutation.isPending} className="w-full font-bold">
+                    {createMutation.isPending ? "Forging..." : "Add to Hoard"}
+                  </Button>
                 </form>
               </Form>
             </CardContent>
@@ -555,7 +550,6 @@ export function Giveaways() {
 
         {/* List */}
         <div className="lg:col-span-2 space-y-6">
-          <PresetsPanel />
           <CollapsibleSection
             title="Quick Prize Drop"
             icon={<Coins className="w-4 h-4 text-amber-400" />}
@@ -778,159 +772,12 @@ function QuickPrizePanel() {
   );
 }
 
-// =====================================================================
-// Giveaway Presets — save the current form as a reusable template
-// and one-click launch a fresh giveaway from it.
-// =====================================================================
-
-function SavePresetButton({ getValues }: { getValues: () => FormValues }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const createPreset = useCreateGiveawayPreset();
-
-  function handleSave() {
-    const v = getValues();
-    if (!v.title || !v.prize) {
-      toast({ title: "Fill in title and prize first", variant: "destructive" });
-      return;
-    }
-    createPreset.mutate(
-      {
-        data: {
-          title: v.title,
-          description: v.description ?? "",
-          prize: v.prize,
-          prizeKind: v.prizeKind,
-          prizeBotCoins: v.prizeBotCoins ?? undefined,
-          prizeBotRarity: v.prizeKind === "bot_coins" ? undefined : v.prizeBotRarity,
-          keyword: v.keyword,
-          requireFollower: v.requireFollower,
-          subscriberOnly: v.subscriberOnly,
-          minSubTier: v.subscriberOnly ? v.minSubTier : undefined,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast({ title: "Preset saved", description: "Launch it later with one click." });
-          queryClient.invalidateQueries({ queryKey: getListGiveawayPresetsQueryKey() });
-        },
-        onError: () => toast({ title: "Couldn't save preset", variant: "destructive" }),
-      },
-    );
-  }
-
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={handleSave}
-      disabled={createPreset.isPending}
-      className="gap-1.5"
-      data-testid="button-save-preset"
-    >
-      <Bookmark className="w-4 h-4" />
-      Save Preset
-    </Button>
-  );
-}
-
-function PresetsPanel() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { data: presets, isLoading } = useListGiveawayPresets();
-  const launchMutation = useLaunchGiveawayPreset();
-  const deleteMutation = useDeleteGiveawayPreset();
-
-  function handleLaunch(id: number) {
-    launchMutation.mutate(
-      { id },
-      {
-        onSuccess: () => {
-          toast({ title: "Giveaway forged from preset", description: "Find it in the list below and hit Start when ready." });
-          queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
-        },
-        onError: () => toast({ title: "Launch failed", variant: "destructive" }),
-      },
-    );
-  }
-
-  function handleDelete(id: number) {
-    deleteMutation.mutate(
-      { id },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListGiveawayPresetsQueryKey() });
-        },
-        onError: () => toast({ title: "Delete failed", variant: "destructive" }),
-      },
-    );
-  }
-
-  if (!isLoading && (!presets || presets.length === 0)) {
-    // Don't render an empty card — the "Save Preset" button on the form is
-    // already discoverable. Rendering an empty state would just add noise.
-    return null;
-  }
-
-  return (
-    <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-amber-500/5">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Bookmark className="w-4 h-4 text-purple-400" />
-          Saved Presets
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Templates you can re-launch each stream — saves typing the same giveaway over and over.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {isLoading
-          ? <Skeleton className="h-12 w-full" />
-          : presets!.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/40 p-3"
-                data-testid={`row-preset-${p.id}`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-sm text-foreground truncate">{p.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {p.prizeKind === "bot_coins"
-                      ? `${p.prizeBotCoins ?? 0} coins`
-                      : p.prize}
-                    {" · !"}{p.keyword}
-                    {p.subscriberOnly ? " · subs only" : ""}
-                    {p.requireFollower ? " · followers" : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button
-                    size="sm"
-                    onClick={() => handleLaunch(p.id)}
-                    disabled={launchMutation.isPending}
-                    className="gap-1.5"
-                    data-testid={`button-launch-preset-${p.id}`}
-                  >
-                    <Rocket className="w-3.5 h-3.5" />
-                    Launch
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDelete(p.id)}
-                    disabled={deleteMutation.isPending}
-                    className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                    data-testid={`button-delete-preset-${p.id}`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-      </CardContent>
-    </Card>
-  );
-}
+// Giveaway Presets (SavePresetButton + PresetsPanel) lived here. Removed
+// per UX simplification — streamers asked to drop the saved-preset
+// workflow because the create form is fast enough on its own and the
+// presets panel was visual clutter on the Loot Hoard. The DB table and
+// /giveaway-presets routes still exist for back-compat with any
+// pre-existing preset rows, but no UI surfaces them anymore.
 
 function StatusBadge({ status, isCurrent }: { status: string; isCurrent?: boolean }) {
   if (status === "active") return <Badge className="bg-primary/20 text-primary border-primary/30">ACTIVE {isCurrent && "(LIVE)"}</Badge>;
@@ -1016,6 +863,7 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
       ? botSettings.wheelSpeed
       : "medium"
   ) as "slow" | "medium" | "fast";
+  const flavorEnabled = botSettings?.eliminationFlavorEnabled ?? true;
 
   // Pre-fetch entries for the spotlighted giveaway so the wheel modal can
   // animate against the real roster the moment the streamer hits Spin.
@@ -1226,6 +1074,7 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
         winner={wheelWinner}
         mode={wheelMode}
         speed={wheelSpeed}
+        flavorEnabled={flavorEnabled}
       />
     </>
   );
@@ -1249,11 +1098,34 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
   const { toast } = useToast();
   const seedEntries = useSeedGiveawayEntries();
   const startMutation = useStartGiveaway();
+  const deleteMutation = useDeleteGiveaway();
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetCurrentGiveawayQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetGiveawayEntriesQueryKey(giveaway.id) });
+  }
+
+  // Confirm-then-delete. We use the native confirm() dialog rather than
+  // an AlertDialog because this is a destructive but reversible-by-recreate
+  // action and the row already has a trash-can icon making intent clear.
+  function handleDelete(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ok = window.confirm(
+      `Delete "${giveaway.title}" and all its entries?\n\nCoins already credited to a winner are NOT clawed back. This cannot be undone.`,
+    );
+    if (!ok) return;
+    deleteMutation.mutate(
+      { id: giveaway.id },
+      {
+        onSuccess: () => {
+          toast({ title: "Giveaway deleted" });
+          invalidate();
+        },
+        onError: () => toast({ title: "Couldn't delete", variant: "destructive" }),
+      },
+    );
   }
 
   function handleSeed(e: React.MouseEvent) {
@@ -1366,6 +1238,17 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
               👑 {giveaway.winnerUsername}
             </span>
           )}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 w-8"
+            title="Delete giveaway"
+            data-testid={`button-row-delete-${giveaway.id}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
           {/* Decorative — the title-area Link already handles navigation. */}
           <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" aria-hidden="true" />
         </div>

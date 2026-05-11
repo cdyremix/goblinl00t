@@ -223,6 +223,18 @@ export const GetGiveawayResponse = zod.object({
 });
 
 /**
+ * Removes the giveaway row and any associated entries / trade
+fulfillment rows. Coin awards already credited to winners are NOT
+clawed back (they live in `loot_drops`). Use this to clean up test
+/ aborted giveaways from the Loot Hoard list.
+
+ * @summary Permanently delete a giveaway and its entries
+ */
+export const DeleteGiveawayParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Start a giveaway (bot announces in chat)
  */
 export const StartGiveawayParams = zod.object({
@@ -892,6 +904,7 @@ export const GetBotSettingsResponse = zod.object({
   coinCap: zod.number().nullable(),
   wheelMode: zod.enum(["auto", "manual"]),
   wheelSpeed: zod.enum(["slow", "medium", "fast"]),
+  eliminationFlavorEnabled: zod.boolean(),
 });
 
 /**
@@ -909,6 +922,7 @@ export const UpdateBotSettingsBody = zod.object({
   coinCap: zod.number().nullish(),
   wheelMode: zod.enum(["auto", "manual"]).optional(),
   wheelSpeed: zod.enum(["slow", "medium", "fast"]).optional(),
+  eliminationFlavorEnabled: zod.boolean().optional(),
 });
 
 export const UpdateBotSettingsResponse = zod.object({
@@ -923,6 +937,7 @@ export const UpdateBotSettingsResponse = zod.object({
   coinCap: zod.number().nullable(),
   wheelMode: zod.enum(["auto", "manual"]),
   wheelSpeed: zod.enum(["slow", "medium", "fast"]),
+  eliminationFlavorEnabled: zod.boolean(),
 });
 
 /**

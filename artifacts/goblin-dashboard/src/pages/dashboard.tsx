@@ -2,12 +2,12 @@ import {
   useGetBotStatus,
   useGetStatsOverview,
   useGetRecentLoot,
-  useGetCurrentGiveaway,
+  useListGiveaways,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AlertCircle, Sparkles, Gem, ArrowRight, Activity, Users, Zap } from "lucide-react";
+import { AlertCircle, Crown, Gem, Activity, Users, Zap, Trophy, Coins } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ChatUsers } from "@/pages/chat-users";
@@ -24,11 +24,17 @@ import { ChatUsers } from "@/pages/chat-users";
 export function Dashboard() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: botStatus, isLoading: botLoading } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: currentGiveaway, isLoading: giveawayLoading } = useGetCurrentGiveaway({ query: { refetchInterval: 10000 } as any });
 
   const { data: stats, isLoading: statsLoading } = useGetStatsOverview({ range: "stream" });
   const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 10, since: "stream" });
+  // Pull every giveaway and slice client-side to "the last 5 with a winner."
+  // The list is small enough (one streamer's history) that paginating
+  // server-side isn't worth a new endpoint.
+  const { data: allGiveaways, isLoading: giveawaysLoading } = useListGiveaways();
+  const recentWinners = (allGiveaways ?? [])
+    .filter((g) => g.status === "ended" && !!g.winnerUsername)
+    .sort((a, b) => new Date(b.endedAt ?? b.createdAt).getTime() - new Date(a.endedAt ?? a.createdAt).getTime())
+    .slice(0, 5);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -91,68 +97,87 @@ export function Dashboard() {
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
             <div className="xl:col-span-2 space-y-8">
-              {/* Active Giveaway Panel */}
-              <Card className="border-primary/20 shadow-[0_0_30px_rgba(255,180,0,0.05)] overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+              {/*
+                "Current Hoard" used to live here as a duplicate of the
+                active-giveaway / spin-wheel surface that's now front and
+                center on the Loot Hoard page. Replaced with a "Recent
+                Winners" hall of fame so Operations stays useful at a
+                glance — streamers land here for the pulse of the show,
+                not to manage a single giveaway.
+              */}
+              <Card className="border-amber-500/30 shadow-[0_0_30px_rgba(255,180,0,0.05)] overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
                 <CardHeader className="border-b border-border/50 bg-card/50">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-primary" />
-                      Current Hoard
+                      <Crown className="w-5 h-5 text-amber-400" />
+                      Recent Winners
                     </CardTitle>
-                    {currentGiveaway?.giveaway ? (
-                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 animate-pulse">ACTIVE</Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-muted text-muted-foreground">IDLE</Badge>
-                    )}
+                    <Link
+                      href="/giveaway"
+                      className="text-xs text-muted-foreground hover:text-primary underline-offset-2 hover:underline"
+                      data-testid="link-recent-winners-hoard"
+                    >
+                      Manage giveaways →
+                    </Link>
                   </div>
+                  <CardDescription>The last few crowns handed out across all your giveaways.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-6">
-                  {giveawayLoading ? (
-                    <div className="space-y-4">
-                      <Skeleton className="h-8 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
+                  {giveawaysLoading ? (
+                    <div className="space-y-3">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
                     </div>
-                  ) : currentGiveaway?.giveaway ? (
-                    <Link
-                      href={`/giveaway/${currentGiveaway.giveaway.id}`}
-                      className="block rounded-md -m-2 p-2 hover:bg-primary/5 focus-visible:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors cursor-pointer"
-                      data-testid="link-active-giveaway"
-                      aria-label={`Open ${currentGiveaway.giveaway.title} — manage entries and spin the wheel`}
-                    >
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                        <div>
-                          <h3 className="text-3xl font-bold text-foreground mb-2">{currentGiveaway.giveaway.title}</h3>
-                          <p className="text-xl text-primary font-medium mb-4">Prize: {currentGiveaway.giveaway.prize}</p>
-                          <div className="flex items-center gap-4 text-sm">
-                            <div className="bg-muted px-3 py-1.5 rounded-md border border-border">
-                              <span className="text-muted-foreground">Keyword: </span>
-                              <span className="font-mono text-foreground font-bold">{currentGiveaway.giveaway.keyword}</span>
-                            </div>
-                            <div className="bg-muted px-3 py-1.5 rounded-md border border-border">
-                              <span className="text-muted-foreground">Entries: </span>
-                              <span className="font-mono text-foreground font-bold">{currentGiveaway.giveaway.entryCount}</span>
-                            </div>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-3 italic">Click anywhere to open the spin wheel &amp; options →</p>
-                        </div>
-                        <span className="group flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,180,0,0.3)]">
-                          Spin Wheel
-                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </span>
+                  ) : recentWinners.length === 0 ? (
+                    <div className="text-center py-10">
+                      <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3 border border-border/50">
+                        <Trophy className="w-7 h-7 text-muted-foreground/50" />
                       </div>
-                    </Link>
-                  ) : (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4 border border-border/50">
-                        <GiftIcon className="w-8 h-8 text-muted-foreground/50" />
-                      </div>
-                      <h3 className="text-xl font-bold text-foreground mb-2">No active giveaways</h3>
-                      <p className="text-muted-foreground mb-6 max-w-md mx-auto">The goblin is sleeping on the pile. Time to wake him up and give away some loot.</p>
-                      <Link href="/giveaway" className="inline-flex items-center gap-2 bg-card border border-border hover:border-primary/50 text-foreground px-6 py-3 rounded-lg font-bold transition-all">
-                        Start New Giveaway
+                      <h3 className="text-lg font-bold text-foreground mb-1">No winners yet</h3>
+                      <p className="text-muted-foreground text-sm mb-4 max-w-md mx-auto">
+                        Run a giveaway and the hall of fame fills in automatically.
+                      </p>
+                      <Link
+                        href="/giveaway"
+                        className="inline-flex items-center gap-2 bg-card border border-border hover:border-primary/50 text-foreground px-4 py-2 rounded-lg text-sm font-bold transition-all"
+                        data-testid="link-empty-start-giveaway"
+                      >
+                        Start a Giveaway
                       </Link>
                     </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {recentWinners.map((g) => (
+                        <li key={g.id}>
+                          <Link
+                            href={`/giveaway/${g.id}`}
+                            className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/40 px-3 py-2.5 hover:border-amber-500/40 hover:bg-amber-500/5 transition-colors group"
+                            data-testid={`link-recent-winner-${g.id}`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="shrink-0 w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+                                <Crown className="w-4 h-4 text-amber-400" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-sm text-foreground group-hover:text-primary transition-colors truncate">
+                                  @{g.winnerUsername}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {g.title} · {g.prizeKind === "bot_coins" && g.prizeBotCoins
+                                    ? <span className="inline-flex items-center gap-0.5 text-amber-400/90"><Coins className="w-3 h-3" />{g.prizeBotCoins}</span>
+                                    : g.prize}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono uppercase text-muted-foreground shrink-0">
+                              {new Date(g.endedAt ?? g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </CardContent>
               </Card>

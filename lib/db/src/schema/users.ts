@@ -26,6 +26,10 @@ export const usersTable = pgTable("users", {
   wheelMode: text("wheel_mode").notNull().default("auto"),
   // Animation pacing: 'slow' | 'medium' | 'fast'.
   wheelSpeed: text("wheel_speed").notNull().default("medium"),
+  // When true, the elimination wheel shows RPG-style flavor text on each
+  // elimination (e.g. "{user} was struck by a goblin's club!"). Purely
+  // cosmetic — no chat side effects, just modal eye candy.
+  eliminationFlavorEnabled: boolean("elimination_flavor_enabled").notNull().default(true),
   // Deprecated — kept for back-compat with existing data. Operations now
   // shows a passive "current stream" window (last 6h) instead of a manual
   // start/end stamp. Reads still consult this column when set so legacy

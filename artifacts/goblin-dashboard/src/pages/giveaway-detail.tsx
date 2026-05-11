@@ -206,6 +206,7 @@ export function GiveawayDetail() {
         winner={wheelWinner}
         mode={wheelMode}
         speed={wheelSpeed}
+        flavorEnabled={botSettings?.eliminationFlavorEnabled ?? true}
       />
 
       {/* Stats Row */}

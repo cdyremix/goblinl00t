@@ -315,6 +315,65 @@ router.get("/giveaway/:id", async (req, res) => {
   res.json({ giveaway: serializeGiveaway(giveaway, Number(cnt)), entries: serializedEntries });
 });
 
+/**
+ * DELETE /giveaway/:id
+ *
+ * Permanently removes a giveaway and its entries / fulfillment rows so a
+ * streamer can clean up test or aborted runs from the Loot Hoard list.
+ * Coin awards already credited to the winner live in `loot_drops` and are
+ * NOT clawed back — that's intentional, since refunding would require
+ * re-running the cap math against the current balance.
+ */
+router.delete("/giveaway/:id", async (req, res) => {
+  const id = Number(req.params["id"]);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  // Auth: only the streamer who owns the giveaway's channel may delete it.
+  // We resolve the caller's `twitchUsername` and require it to match the
+  // giveaway's `channel`. This blocks cross-streamer destruction even
+  // though giveaway IDs are guessable integers.
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const [caller] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId))
+    .limit(1);
+  const callerChannel = caller?.twitchUsername?.toLowerCase() ?? null;
+
+  const [existing] = await db
+    .select()
+    .from(giveawaysTable)
+    .where(eq(giveawaysTable.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+  if (!callerChannel || existing.channel.toLowerCase() !== callerChannel) {
+    // Mirror the 404 shape — don't leak existence to a non-owner.
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+
+  // Delete child rows first — entries and trade fulfillments reference the
+  // giveaway by id, so the parent delete would fail with them in place.
+  // (`tradeFulfillmentsTable` doesn't have an enforced FK in the current
+  // schema, but we still wipe its rows so deleted giveaways don't leave
+  // orphaned fulfillment records dangling in the Trade Office UI.)
+  await db.delete(giveawayEntriesTable).where(eq(giveawayEntriesTable.giveawayId, id));
+  await db.delete(tradeFulfillmentsTable).where(eq(tradeFulfillmentsTable.giveawayId, id));
+  await db.delete(giveawaysTable).where(eq(giveawaysTable.id, id));
+
+  res.status(204).end();
+});
+
 router.post("/giveaway/:id/start", async (req, res) => {
   const { id } = StartGiveawayParams.parse({ id: Number(req.params["id"]) });
 

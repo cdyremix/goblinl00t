@@ -292,6 +292,7 @@ export interface BotSettings {
   coinCap: number | null;
   wheelMode: BotSettingsWheelMode;
   wheelSpeed: BotSettingsWheelSpeed;
+  eliminationFlavorEnabled: boolean;
 }
 
 export type UpdateBotSettingsBotTheme =
@@ -335,6 +336,7 @@ export interface UpdateBotSettings {
   coinCap?: number | null;
   wheelMode?: UpdateBotSettingsWheelMode;
   wheelSpeed?: UpdateBotSettingsWheelSpeed;
+  eliminationFlavorEnabled?: boolean;
 }
 
 export type ManualDropRequestKind =

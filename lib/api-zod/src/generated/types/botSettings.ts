@@ -25,4 +25,5 @@ export interface BotSettings {
   coinCap: number | null;
   wheelMode: BotSettingsWheelMode;
   wheelSpeed: BotSettingsWheelSpeed;
+  eliminationFlavorEnabled: boolean;
 }

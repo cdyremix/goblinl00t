@@ -146,6 +146,26 @@ paths:
                 $ref: "#/components/schemas/GiveawayWithEntries"
         "404":
           description: Not found
+    delete:
+      operationId: deleteGiveaway
+      tags: [giveaway]
+      summary: Permanently delete a giveaway and its entries
+      description: |
+        Removes the giveaway row and any associated entries / trade
+        fulfillment rows. Coin awards already credited to winners are NOT
+        clawed back (they live in `loot_drops`). Use this to clean up test
+        / aborted giveaways from the Loot Hoard list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Giveaway deleted
+        "404":
+          description: Not found
 
   /giveaway/{id}/start:
     post:
@@ -1236,6 +1256,8 @@ components:
         wheelSpeed:
           type: string
           enum: [slow, medium, fast]
+        eliminationFlavorEnabled:
+          type: boolean
       required:
         - botTheme
         - botName
@@ -1248,6 +1270,7 @@ components:
         - coinCap
         - wheelMode
         - wheelSpeed
+        - eliminationFlavorEnabled
 
     UpdateBotSettings:
       type: object
@@ -1277,6 +1300,8 @@ components:
         wheelSpeed:
           type: string
           enum: [slow, medium, fast]
+        eliminationFlavorEnabled:
+          type: boolean
 
     ManualDropRequest:
       type: object
