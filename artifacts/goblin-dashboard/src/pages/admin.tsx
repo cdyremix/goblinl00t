@@ -464,6 +464,7 @@ function CreateUserDialog({
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [twitchUsername, setTwitchUsername] = useState("");
   const [tier, setTier] = useState<Tier>("free");
   // Three-way role selector. "none" = ordinary streamer (just gets the
   // chosen tier). "dev" = full feature bypass, no admin. "admin" = full
@@ -474,14 +475,15 @@ function CreateUserDialog({
   // Inline validation state. `touched` only flips after the user has
   // blurred a field (or attempted submit), so the dialog doesn't yell
   // at them while they're still typing the first character.
-  const [touched, setTouched] = useState<{ email: boolean; password: boolean }>({
+  const [touched, setTouched] = useState<{ email: boolean; password: boolean; twitchUsername: boolean }>({
     email: false,
     password: false,
+    twitchUsername: false,
   });
   // Per-field server errors returned by the API after submit (`issues[]`
   // shaped like Zod). Cleared on every input change so the user gets
   // immediate feedback that they're addressing the problem.
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; twitchUsername?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
   // Admin override — when on, the dialog skips client validation AND
   // tells the server to skip its own checks (incl. Clerk's password
@@ -494,10 +496,11 @@ function CreateUserDialog({
     if (open) {
       setEmail("");
       setPassword("");
+      setTwitchUsername("");
       setTier("free");
       setRole("none");
       setShowPassword(false);
-      setTouched({ email: false, password: false });
+      setTouched({ email: false, password: false, twitchUsername: false });
       setFieldErrors({});
       setFormError(null);
       setBypassValidation(false);
@@ -524,7 +527,19 @@ function CreateUserDialog({
       : password.length < 8
         ? "Password must be at least 8 characters."
         : null;
-  const canSubmit = !localEmailError && !localPasswordError;
+  // Username is OPTIONAL. When provided + bypass off, it must look like
+  // a real Twitch handle. With bypass on, anything non-empty is allowed
+  // (admin can seed a placeholder; will be overwritten by Twitch OAuth).
+  const twitchTrimmed = twitchUsername.trim();
+  const localTwitchError =
+    twitchTrimmed.length === 0
+      ? null
+      : bypassValidation
+        ? null
+        : !/^[a-zA-Z0-9_]{4,25}$/.test(twitchTrimmed)
+          ? "Twitch handles are 4–25 characters, letters/numbers/underscore only."
+          : null;
+  const canSubmit = !localEmailError && !localPasswordError && !localTwitchError;
 
   const create = useMutation({
     mutationFn: async () => {
@@ -534,6 +549,7 @@ function CreateUserDialog({
         body: JSON.stringify({
           email: emailTrimmed,
           password,
+          twitchUsername: twitchTrimmed || null,
           subscriptionTier: tier,
           isAdmin: role === "admin",
           isDev: role === "dev",
@@ -545,11 +561,12 @@ function CreateUserDialog({
         issues?: Array<{ path?: (string | number)[]; message?: string }>;
       };
       if (!r.ok) {
-        const next: { email?: string; password?: string } = {};
+        const next: { email?: string; password?: string; twitchUsername?: string } = {};
         for (const iss of json.issues ?? []) {
           const key = String(iss.path?.[0] ?? "");
           if (key === "email" && iss.message) next.email = iss.message;
           if (key === "password" && iss.message) next.password = iss.message;
+          if (key === "twitchUsername" && iss.message) next.twitchUsername = iss.message;
         }
         // If the server returned a generic message and no per-field
         // issues (e.g. Clerk rejection, duplicate email), surface it as
@@ -564,15 +581,15 @@ function CreateUserDialog({
       toast({ title: "User created", description: `${emailTrimmed} can now sign in.` });
       onCreated();
     },
-    onError: (err: Error & { fieldErrors?: { email?: string; password?: string } }) => {
+    onError: (err: Error & { fieldErrors?: { email?: string; password?: string; twitchUsername?: string } }) => {
       const fe = err.fieldErrors ?? {};
       setFieldErrors(fe);
       // Show the form-level banner when the failure isn't field-specific
       // (duplicate email, Clerk weak-password rejection, network error).
-      if (!fe.email && !fe.password) setFormError(err.message);
+      if (!fe.email && !fe.password && !fe.twitchUsername) setFormError(err.message);
       else setFormError(null);
       // Force-show the inline messages even if the user never blurred.
-      setTouched({ email: true, password: true });
+      setTouched({ email: true, password: true, twitchUsername: true });
     },
   });
 
@@ -598,7 +615,7 @@ function CreateUserDialog({
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setTouched({ email: true, password: true });
+    setTouched({ email: true, password: true, twitchUsername: true });
     setFormError(null);
     setFieldErrors({});
     if (!canSubmit) return;
@@ -610,6 +627,7 @@ function CreateUserDialog({
   // duplicate email), and we only render local ones once touched.
   const emailErr = fieldErrors.email ?? (touched.email ? localEmailError : null);
   const passwordErr = fieldErrors.password ?? (touched.password ? localPasswordError : null);
+  const twitchErr = fieldErrors.twitchUsername ?? (touched.twitchUsername ? localTwitchError : null);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -731,6 +749,36 @@ function CreateUserDialog({
               The user will appear as <span className="font-semibold">Unknown Goblin</span> until
               they connect their Twitch account from the account page.
             </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="create-twitch">Twitch handle (optional)</Label>
+            <Input
+              id="create-twitch"
+              autoComplete="off"
+              value={twitchUsername}
+              onChange={(e) => {
+                setTwitchUsername(e.target.value);
+                if (fieldErrors.twitchUsername) {
+                  setFieldErrors((p) => ({ ...p, twitchUsername: undefined }));
+                }
+                if (formError) setFormError(null);
+              }}
+              onBlur={() => setTouched((t) => ({ ...t, twitchUsername: true }))}
+              placeholder="goblinl00t"
+              aria-invalid={!!twitchErr}
+              className={twitchErr ? "border-destructive focus-visible:ring-destructive" : ""}
+              data-testid="input-create-twitch"
+            />
+            {twitchErr ? (
+              <p className="text-xs text-destructive" data-testid="error-create-twitch">
+                {twitchErr}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Placeholder only — overwritten with the real handle when the user connects Twitch.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

@@ -28,6 +28,13 @@ const CreateUserBody = z
     // is off. The route is admin-only either way.
     email: z.string().min(1).max(254),
     password: z.string().min(1).max(128),
+    // Optional pre-link username. Lowercased + format-checked when
+    // `bypassValidation` is off (must look like a real Twitch handle so
+    // the bot's channel-join layer doesn't choke on it). When the user
+    // later completes Twitch OAuth, the callback overwrites this with
+    // the real `twitchUser.login` value, so admin-set usernames are
+    // effectively a placeholder until the OAuth round-trip lands.
+    twitchUsername: z.string().trim().min(1).max(64).optional().nullable(),
     isAdmin: z.boolean().optional(),
     isDev: z.boolean().optional(),
     subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
@@ -77,7 +84,10 @@ router.post("/admin/users", async (req, res) => {
     res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
     return;
   }
-  const { email, password, isAdmin, isDev, subscriptionTier, bypassValidation } = parsed.data;
+  const { email, password, twitchUsername, isAdmin, isDev, subscriptionTier, bypassValidation } = parsed.data;
+  // Normalize lowercase up front so uniqueness check + insert + bot
+  // channel join all key on the same string.
+  const normalizedTwitch = twitchUsername ? twitchUsername.toLowerCase() : null;
 
   // Conditional strict validation. With `bypassValidation` off (the
   // default) we enforce email format + password ≥ 8 chars; with it on
@@ -93,8 +103,35 @@ router.post("/admin/users", async (req, res) => {
     if (password.length < 8) {
       issues.push({ path: ["password"], message: "Password must be at least 8 characters." });
     }
+    // Twitch handle format: alphanumeric + underscore, 4–25 chars per
+    // Twitch's public docs. Only enforced when bypass is off — admins
+    // sometimes need to seed odd legacy / test handles.
+    if (normalizedTwitch && !/^[a-z0-9_]{4,25}$/.test(normalizedTwitch)) {
+      issues.push({
+        path: ["twitchUsername"],
+        message: "Twitch handles are 4–25 characters, letters/numbers/underscore only.",
+      });
+    }
     if (issues.length > 0) {
       res.status(400).json({ error: "Invalid body", issues });
+      return;
+    }
+  }
+
+  // Uniqueness pre-flight — twitch_username has a UNIQUE index, so we'd
+  // get a 23505 either way, but returning a clean 409 with a per-field
+  // issue lets the dialog render it inline instead of as a generic 500.
+  if (normalizedTwitch) {
+    const [conflict] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.twitchUsername, normalizedTwitch))
+      .limit(1);
+    if (conflict) {
+      res.status(409).json({
+        error: `Twitch handle "${normalizedTwitch}" is already taken.`,
+        issues: [{ path: ["twitchUsername"], message: "Already taken by another account." }],
+      });
       return;
     }
   }
@@ -144,9 +181,10 @@ router.post("/admin/users", async (req, res) => {
       .insert(usersTable)
       .values({
         clerkUserId,
-        // Twitch handle is intentionally NOT set here — it gets bound
-        // later when the user completes Twitch OAuth from /account.
-        // Until then they show as "Unknown Goblin" in the UI.
+        // Optional admin-supplied placeholder. Will be overwritten with
+        // the canonical Twitch login when the user completes OAuth.
+        // Null → user shows as "Unknown Goblin" in the UI until then.
+        twitchUsername: normalizedTwitch,
         isAdmin: isAdmin ?? false,
         isDev: isDev ?? false,
         subscriptionTier: subscriptionTier ?? "free",
