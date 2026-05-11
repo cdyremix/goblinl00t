@@ -418,7 +418,16 @@ export function Home() {
           </div>
 
           <p className="text-center text-xs text-muted-foreground mt-6">
-            Paid ranks are billing-soon — Stripe is wiring up. Pick today and you'll be grandfathered when it goes live.
+            Billing handled securely by{" "}
+            <a
+              href="https://stripe.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-dotted hover:text-primary"
+            >
+              Stripe
+            </a>
+            . Cancel anytime from your account.
           </p>
         </div>
       </section>

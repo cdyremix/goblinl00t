@@ -87,11 +87,18 @@ interface SubRow extends Record<string, unknown> {
 async function loadActiveSubscription(
   customerId: string,
 ): Promise<SubRow | null> {
+  // NOTE: in the stripe-replit-sync schema, ALL timestamp columns
+  // (`current_period_end`, `created`, `period_start`, `period_end`, …)
+  // are stored as plain `integer` Unix seconds — NOT `timestamp`. Wrapping
+  // them in `EXTRACT(EPOCH FROM …)` blows up at runtime ("function pg_catalog.date_part(unknown, integer)
+  // does not exist"). Read the column directly. Likewise we don't need to
+  // join `subscription_items` — `current_period_end` lives on the
+  // subscription row itself, and `s.plan` is the active price id.
   const result = await db.execute<SubRow>(sql`
     SELECT
       s.id,
       s.status,
-      EXTRACT(EPOCH FROM s.current_period_end)::bigint AS current_period_end,
+      s.current_period_end::bigint AS current_period_end,
       s.cancel_at_period_end,
       pr.id   AS price_id,
       p.id    AS product_id,
@@ -101,9 +108,8 @@ async function loadActiveSubscription(
       pr.currency,
       pr.recurring->>'interval' AS interval
     FROM stripe.subscriptions s
-    JOIN stripe.subscription_items si ON si.subscription = s.id
-    JOIN stripe.prices pr ON pr.id = si.price
-    JOIN stripe.products p ON p.id = pr.product
+    JOIN stripe.prices   pr ON pr.id = s.plan
+    JOIN stripe.products p  ON p.id  = pr.product
     WHERE s.customer = ${customerId}
       AND s.status IN ('active','trialing','past_due')
     ORDER BY s.created DESC
@@ -464,17 +470,23 @@ router.get("/stripe/invoices", async (req, res) => {
       conditions.push(sql`status = ANY(${statuses})`);
     }
     if (fromTs && !Number.isNaN(fromTs.getTime())) {
-      conditions.push(sql`created >= ${fromTs.toISOString()}`);
+      // `created` is integer unix seconds — compare numerically, not against
+      // an ISO string (Postgres would error: integer >= text).
+      const fromUnix = Math.floor(fromTs.getTime() / 1000);
+      conditions.push(sql`created >= ${fromUnix}`);
     }
     if (toTs && !Number.isNaN(toTs.getTime())) {
       // Inclusive day bound — bump 1 day forward.
       const end = new Date(toTs);
       end.setDate(end.getDate() + 1);
-      conditions.push(sql`created < ${end.toISOString()}`);
+      const toUnix = Math.floor(end.getTime() / 1000);
+      conditions.push(sql`created < ${toUnix}`);
     }
     const whereClause = conditions.reduce(
       (acc, cond, i) => (i === 0 ? cond : sql`${acc} AND ${cond}`),
     );
+    // All timestamp columns on stripe.invoices are integer unix seconds —
+    // see SubRow query above for why we don't EXTRACT(EPOCH FROM …).
     const result = await db.execute<InvoiceRow>(sql`
       SELECT
         id,
@@ -483,11 +495,11 @@ router.get("/stripe/invoices", async (req, res) => {
         amount_paid,
         amount_due,
         currency,
-        EXTRACT(EPOCH FROM created)::bigint AS created,
+        created::bigint AS created,
         hosted_invoice_url,
         invoice_pdf,
-        EXTRACT(EPOCH FROM period_start)::bigint AS period_start,
-        EXTRACT(EPOCH FROM period_end)::bigint AS period_end
+        period_start::bigint AS period_start,
+        period_end::bigint   AS period_end
       FROM stripe.invoices
       WHERE ${whereClause}
       ORDER BY created DESC

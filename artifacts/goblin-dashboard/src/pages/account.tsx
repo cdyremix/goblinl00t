@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { useUser, useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -66,10 +66,12 @@ export function Account() {
         return;
       }
       const { url } = (await r.json()) as { url: string };
-      // Break out of the Replit preview iframe — id.twitch.tv refuses to be
-      // framed (X-Frame-Options DENY), so an in-frame redirect would just
-      // show a blank pane and look like the button "did nothing." Walking
-      // up to window.top forces a real top-level navigation.
+      // id.twitch.tv refuses to be framed (X-Frame-Options DENY), so we
+      // navigate the current window. We can't touch `window.top.location`
+      // — under the Replit preview iframe it's cross-origin and throws
+      // "permission denied to access property 'assign' on cross-origin
+      // object." Setting `window.location.href` lets the proxy upgrade us
+      // to a top-level navigation without that exception.
       window.location.href = url;
     } catch {
       setTwitchConnecting(false);
@@ -374,7 +376,7 @@ export function Account() {
             return (
               <div
                 key={plan.id}
-                className={`relative rounded-xl border bg-card/50 overflow-hidden transition-all ${
+                className={`relative rounded-xl border bg-card/50 overflow-hidden transition-all flex flex-col ${
                   plan.highlight
                     ? "border-purple-500/50 shadow-[0_0_30px_rgba(168,85,247,0.1)]"
                     : plan.color
@@ -385,7 +387,7 @@ export function Account() {
                     {plan.badge}
                   </div>
                 )}
-                <div className="p-6">
+                <div className="p-6 flex flex-col flex-1">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-xl bg-background border border-border flex items-center justify-center">
                       {plan.icon}
@@ -401,19 +403,44 @@ export function Account() {
 
                   <Separator className="mb-4 opacity-50" />
 
-                  <ul className="space-y-2 mb-6">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-foreground">
-                        <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                        {f}
-                      </li>
-                    ))}
-                    {plan.locked.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground/50">
-                        <XCircle className="w-4 h-4 text-muted-foreground/30 shrink-0 mt-0.5" />
-                        {f}
-                      </li>
-                    ))}
+                  {/* Render exactly TOTAL_ROWS list items per card by padding
+                      with invisible placeholders. Without this, cards with
+                      different feature counts make the action button sit at
+                      different vertical positions across the row. */}
+                  <ul className="space-y-2 mb-6 flex-1">
+                    {(() => {
+                      const TOTAL_ROWS = 12;
+                      const rows: ReactNode[] = [];
+                      plan.features.forEach((f) =>
+                        rows.push(
+                          <li key={`f-${f}`} className="flex items-start gap-2 text-sm text-foreground">
+                            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                            {f}
+                          </li>,
+                        ),
+                      );
+                      plan.locked.forEach((f) =>
+                        rows.push(
+                          <li key={`l-${f}`} className="flex items-start gap-2 text-sm text-muted-foreground/50">
+                            <XCircle className="w-4 h-4 text-muted-foreground/30 shrink-0 mt-0.5" />
+                            {f}
+                          </li>,
+                        ),
+                      );
+                      while (rows.length < TOTAL_ROWS) {
+                        rows.push(
+                          <li
+                            key={`pad-${rows.length}`}
+                            aria-hidden="true"
+                            className="flex items-start gap-2 text-sm invisible"
+                          >
+                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                            &nbsp;
+                          </li>,
+                        );
+                      }
+                      return rows;
+                    })()}
                   </ul>
 
                   {isActive ? (

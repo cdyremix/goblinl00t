@@ -225,7 +225,17 @@ export function BillingSection() {
             Subscription
           </CardTitle>
           <CardDescription>
-            Manage your plan, payment method, and auto-renew.
+            Manage your plan, payment method, and auto-renew. Payments are
+            processed securely by{" "}
+            <a
+              href="https://stripe.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-dotted hover:text-primary"
+            >
+              Stripe
+            </a>
+            {" "}— card details never touch our servers.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">

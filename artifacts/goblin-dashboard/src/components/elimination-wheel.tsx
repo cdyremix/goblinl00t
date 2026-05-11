@@ -385,7 +385,7 @@ export function EliminationWheel({
           `max-h-[90vh]` + giving the body its own scroll container keeps
           everything visible regardless of viewer count. */}
       <DialogContent
-        className="!left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !max-w-5xl !w-[95vw] !max-h-[90vh] relative overflow-hidden flex flex-col [&>button]:hidden"
+        className="!left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !max-w-5xl !w-[95vw] !max-h-[90vh] relative overflow-hidden flex flex-col gap-3 p-4 sm:p-6 [&>button]:hidden"
       >
         {/* Winner celebration overlay — rendered INSIDE the wheel's
             DialogContent (not as a nested Dialog) so we keep a single
@@ -443,23 +443,6 @@ export function EliminationWheel({
           {liveAnnouncement}
         </div>
 
-        {/* Pixel-art final showdown — mounted only during the final-two
-            phase, after the streamer hits "Final Spin." When it finishes
-            (or is skipped via reduced-motion), we mark pixelFightDone and
-            re-invoke revealWinner() to chain straight into the reveal. */}
-        {showPixelFight && winner && finalLoserUsername && phase === "final-two" && (
-          <PixelFightScene
-            winner={winner}
-            loser={finalLoserUsername}
-            onDone={() => {
-              setShowPixelFight(false);
-              setPixelFightDone(true);
-              // Trigger the actual reveal after the scene resolves.
-              setTimeout(() => revealWinner(), 50);
-            }}
-          />
-        )}
-
         {/* RPG flavor banner */}
         {flavorEnabled && flavorText && (
           <div
@@ -477,10 +460,17 @@ export function EliminationWheel({
           </div>
         )}
 
-        {/* Slots grid — one card per ticket. Wider grid + bigger cards now
-            that the modal is max-w-5xl. The grid scrolls inside the modal
-            so the header / controls stay pinned. */}
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 flex-1 min-h-0 overflow-y-auto p-1">
+        {/* Slots grid + pixel-fight overlay share a single relative wrapper
+            so the fight scene is scoped to the grid area only — header,
+            flavor banner, settings ⚙️, and footer controls stay accessible
+            and visible while the showdown plays. Earlier the overlay sat
+            at DialogContent level and blanketed the whole modal, hiding
+            the controls the streamer needs to dismiss/skip. */}
+        <div className="relative flex-1 min-h-0">
+          {/* Slots grid — one card per ticket. Wider grid + bigger cards now
+              that the modal is max-w-5xl. The grid scrolls inside the modal
+              so the header / controls stay pinned. */}
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 h-full overflow-y-auto p-1">
           {slots.map((s) => {
             const isOut = eliminated.has(s.key);
             const isHighlighted = highlight === s.key;
@@ -510,6 +500,27 @@ export function EliminationWheel({
               </div>
             );
           })}
+          </div>
+
+          {/* Pixel-art final showdown — absolute overlay scoped to the
+              grid container only. Header / flavor banner / footer controls
+              remain interactive so the streamer can dismiss or close. */}
+          {showPixelFight && winner && finalLoserUsername && phase === "final-two" && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg p-4">
+              <div className="w-full max-w-3xl">
+                <PixelFightScene
+                  winner={winner}
+                  loser={finalLoserUsername}
+                  onDone={() => {
+                    setShowPixelFight(false);
+                    setPixelFightDone(true);
+                    // Trigger the actual reveal after the scene resolves.
+                    setTimeout(() => revealWinner(), 50);
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Controls */}
