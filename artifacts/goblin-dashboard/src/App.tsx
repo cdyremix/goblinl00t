@@ -1,6 +1,7 @@
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SignIn, SignUp, Show, useClerk, useAuth } from "@clerk/react";
+import { SignUp, Show, useClerk, useAuth } from "@clerk/react";
+import { SignInPage } from "@/pages/sign-in";
 import { InternalClerkProvider, publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
@@ -170,21 +171,6 @@ function AuthLoader() {
         <img src={`${basePath}/goblin-logo.png`} alt="Goblin" className="w-16 h-16 animate-bounce opacity-70" />
         <p className="text-muted-foreground text-sm font-medieval">Summoning the goblin…</p>
       </div>
-    </div>
-  );
-}
-
-function SignInPage() {
-  const { isLoaded } = useAuth();
-  if (!isLoaded) return <AuthLoader />;
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 dark">
-      <SignIn
-        routing="path"
-        path={`${basePath}/sign-in`}
-        signUpUrl={`${basePath}/sign-up`}
-        fallbackRedirectUrl={`${basePath}/dashboard`}
-      />
     </div>
   );
 }
