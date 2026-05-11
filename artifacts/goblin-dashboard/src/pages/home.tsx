@@ -204,7 +204,7 @@ export function Home() {
           <ProofStat value="2 min" label="Average setup time" />
           <ProofStat value="14" label="Built-in chat commands" />
           <ProofStat value="2" label="Themes" />
-          <ProofStat value="Free" label="Tier — no card required" />
+          <ProofStat value="5" label="Loot rarity tiers" />
         </div>
       </section>
 
@@ -296,13 +296,13 @@ export function Home() {
       <section id="commands" className="py-20 px-6">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-foreground mb-3">Full command reference</h2>
+            <h2 className="text-3xl font-bold text-foreground mb-3">Chat commands at a glance</h2>
             <p className="text-muted-foreground">
-              Every viewer-facing command. <span className="text-foreground font-medium">General</span> commands work in every theme; theme commands only respond when their theme is active. Toggle any of these on or off from your dashboard.
+              The core commands every viewer can use. Each one is theme-aware, customizable, and can be toggled on or off from your dashboard. Theme-specific commands unlock automatically when you pick a theme.
             </p>
           </div>
           <div className="space-y-10">
-            {(["general", "goblin", "cs2"] as CmdGroup[]).map((group) => {
+            {(["general"] as CmdGroup[]).map((group) => {
               const items = COMMANDS.filter((c) => c.group === group);
               const meta = GROUP_META[group];
               return (
@@ -336,7 +336,7 @@ export function Home() {
         <div className="relative max-w-2xl mx-auto">
           <h2 className="text-4xl font-bold text-foreground mb-4">Ready to run your first giveaway?</h2>
           <p className="text-muted-foreground mb-8 text-lg">
-            Sign up on the free tier, point the bot at your channel, and let chat fight for the loot.
+            Sign up, point the bot at your channel, and let chat fight for the loot.
           </p>
           {isLoaded && isSignedIn ? (
             <Link href="/dashboard" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(255,180,0,0.25)]" data-testid="cta-dashboard">
@@ -345,7 +345,7 @@ export function Home() {
             </Link>
           ) : (
             <Link href="/sign-up" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(255,180,0,0.25)]" data-testid="cta-dashboard">
-              Get started — free tier
+              Get started — connect your channel
               <ChevronRight className="w-5 h-5" />
             </Link>
           )}
