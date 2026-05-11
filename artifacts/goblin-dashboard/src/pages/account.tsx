@@ -10,7 +10,8 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { PLANS } from "@/lib/plans";
+import { PLANS, TIER_RANK } from "@/lib/plans";
+import { BillingSection } from "@/components/billing-section";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
 type ClerkEmail = ClerkUser["emailAddresses"][number];
@@ -96,20 +97,65 @@ export function Account() {
     enabled: isLoaded && !!clerkUser,
   });
 
+  // Plan-pick mutation:
+  // - Free → flips users.subscription_tier directly (no Stripe involved).
+  //   If the user currently has a paid subscription, this just records the
+  //   intent; the BillingSection's "Cancel now" is the real way to drop down.
+  // - Paid → kicks off Stripe Checkout for first subscribe, OR opens the
+  //   billing portal for upgrades/downgrades on an existing subscription.
   const subscriptionMutation = useMutation({
-    mutationFn: async (tier: string) => {
-      const r = await authedFetch("/api/users/me/subscription", {
-        method: "PUT",
+    mutationFn: async (tier: "free" | "premium" | "pro") => {
+      if (tier === "free") {
+        const r = await authedFetch("/api/users/me/subscription", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier }),
+        });
+        if (!r.ok) throw new Error("Failed to set rank");
+        return { kind: "free" as const };
+      }
+      // Paid tier — if the user already has an active sub, send them to the
+      // billing portal where Stripe handles plan switching + proration.
+      // Otherwise create a new checkout session.
+      const subRes = await authedFetch("/api/stripe/subscription");
+      const subData = (await subRes.json()) as {
+        subscription: { id: string } | null;
+      };
+      if (subData.subscription) {
+        const portalRes = await authedFetch("/api/stripe/portal", {
+          method: "POST",
+        });
+        if (!portalRes.ok) throw new Error("Failed to open billing portal");
+        const { url } = (await portalRes.json()) as { url: string };
+        return { kind: "portal" as const, url };
+      }
+      const r = await authedFetch("/api/stripe/checkout", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tier }),
       });
-      return r.json();
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Failed to start checkout");
+      }
+      const { url } = (await r.json()) as { url: string };
+      return { kind: "checkout" as const, url };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.kind === "checkout" || data.kind === "portal") {
+        (window.top ?? window).location.assign(data.url);
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["users", "me"] });
+      queryClient.invalidateQueries({ queryKey: ["stripe", "subscription"] });
       toast({ title: "Scroll updated!", description: "Your plan has been changed." });
     },
-    onError: () => toast({ title: "Failed to update plan", variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Failed to update plan",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   const avatarMutation = useMutation({
@@ -310,7 +356,11 @@ export function Account() {
       </Card>
         </TabsContent>
 
-        <TabsContent value="rank" className="mt-6">
+        <TabsContent value="rank" className="mt-6 space-y-10">
+      {/* Billing — current subscription + history. Shown above the plan
+          picker so returning subscribers see their state first. */}
+      <BillingSection />
+
       {/* Subscription Plans */}
       <div>
         <div className="flex items-center gap-2 mb-6">
@@ -377,8 +427,16 @@ export function Account() {
                       variant={plan.highlight ? "default" : "outline"}
                       onClick={() => subscriptionMutation.mutate(plan.id)}
                       disabled={subscriptionMutation.isPending}
+                      data-testid={`button-choose-${plan.id}`}
                     >
-                      {subscriptionMutation.isPending ? "Updating..." : `Choose ${plan.name}`}
+                      {subscriptionMutation.isPending
+                        ? "Working..."
+                        : plan.id === "free"
+                          ? "Switch to Free"
+                          : TIER_RANK[plan.id] >
+                              TIER_RANK[(currentTier as "free" | "premium" | "pro") ?? "free"]
+                            ? `Upgrade to ${plan.name}`
+                            : `Switch to ${plan.name}`}
                     </Button>
                   )}
                 </div>
@@ -388,7 +446,8 @@ export function Account() {
         </div>
 
         <p className="text-xs text-muted-foreground mt-4 text-center">
-          Premium & Pro billing coming soon via Stripe. Plans saved for when payments go live.
+          Paid plans bill monthly via Stripe. Cancel any time from the Subscription
+          card above — no questions asked.
         </p>
       </div>
         </TabsContent>

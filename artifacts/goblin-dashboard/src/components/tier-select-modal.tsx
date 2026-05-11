@@ -36,30 +36,72 @@ export function TierSelectModal({ open, onPicked }: Props) {
   const pickMutation = useMutation({
     mutationFn: async (tier: Plan["id"]) => {
       const token = await getToken();
-      const r = await fetch(`${BASE}/api/users/me/subscription`, {
+      // Free tier — flip tier_selected via the legacy endpoint and we're done.
+      // Paid tiers — kick off Stripe Checkout and redirect; the success URL
+      // brings the user back to /account?tab=rank&checkout=success and the
+      // subscription webhook reconciles their tier server-side.
+      if (tier === "free") {
+        const r = await fetch(`${BASE}/api/users/me/subscription`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ tier }),
+        });
+        if (!r.ok) throw new Error("Failed to set rank");
+        return { kind: "free" as const };
+      }
+      // Acknowledge the rank pick BEFORE redirecting to Stripe — otherwise
+      // `tierSelected` stays false and this non-dismissible modal will
+      // re-open the moment the user lands back on the dashboard (whether
+      // they completed checkout or hit cancel). Tier reconciliation from
+      // the actual subscription still happens server-side via
+      // GET /stripe/subscription on /account.
+      await fetch(`${BASE}/api/users/me/tier-acknowledge`, {
         method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }).catch(() => {
+        /* non-fatal — checkout still proceeds */
+      });
+      const r = await fetch(`${BASE}/api/stripe/checkout`, {
+        method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ tier }),
       });
-      if (!r.ok) throw new Error("Failed to set rank");
-      return r.json();
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Failed to start checkout");
+      }
+      const { url } = (await r.json()) as { url: string };
+      return { kind: "checkout" as const, url };
     },
-    onSuccess: (_data, tier) => {
+    onSuccess: (data, tier) => {
+      if (data.kind === "checkout") {
+        // Top-level navigation so we escape the Replit preview iframe.
+        (window.top ?? window).location.assign(data.url);
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["users", "me"] });
       const plan = PLANS.find((p) => p.id === tier);
       toast({
         title: `Welcome, ${plan?.name ?? "goblin"}!`,
-        description: tier === "free"
-          ? "You're on the free plan. Upgrade any time from The Scroll."
-          : "Billing comes online soon — you'll keep your selection.",
+        description: "You're on the free plan. Upgrade any time from The Scroll.",
       });
       onPicked();
     },
-    onError: () =>
-      toast({ title: "Couldn't save your rank", variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({
+        title: "Couldn't save your rank",
+        description: err.message,
+        variant: "destructive",
+      }),
   });
 
   if (!isLoaded || !isSignedIn) return null;
@@ -154,7 +196,8 @@ export function TierSelectModal({ open, onPicked }: Props) {
         </div>
 
         <p className="text-[11px] text-muted-foreground text-center mt-3">
-          Paid tiers are billing-soon. You can switch ranks any time from The Scroll.
+          Paid ranks are billed monthly via Stripe. You can switch or cancel
+          any time from The Scroll.
         </p>
       </DialogContent>
     </Dialog>

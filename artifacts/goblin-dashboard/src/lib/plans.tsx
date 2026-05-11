@@ -15,6 +15,12 @@ export interface Plan {
   locked: string[];
 }
 
+export const TIER_RANK: Record<Plan["id"], number> = {
+  free: 0,
+  premium: 1,
+  pro: 2,
+};
+
 export const PLANS: Plan[] = [
   {
     id: "free",

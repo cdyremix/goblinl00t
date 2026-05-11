@@ -49,5 +49,13 @@ export const usersTable = pgTable("users", {
   // embed announcing the winner. Validated against discord.com/api/webhooks/...
   // before write; any other URL shape is rejected.
   discordWebhookUrl: text("discord_webhook_url"),
+  // Stripe customer + active subscription IDs. Customer created lazily on
+  // first checkout; subscription written back from webhook + reconciled
+  // on every /users/me read so the UI is never stale even if a webhook
+  // is missed. NEVER duplicate other Stripe data here — query the synced
+  // `stripe.*` schema (managed by stripe-replit-sync) for prices, invoices,
+  // products, etc.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

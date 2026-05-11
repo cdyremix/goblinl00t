@@ -16,6 +16,7 @@ import lootHoardRouter from "./loot-hoard";
 import chatUsersRouter from "./chat-users";
 import streamRouter from "./stream";
 import giveawayPresetsRouter from "./giveaway-presets";
+import stripeRouter from "./stripe";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(lootHoardRouter);
 router.use(chatUsersRouter);
 router.use(streamRouter);
 router.use(giveawayPresetsRouter);
+router.use(stripeRouter);
 
 export default router;

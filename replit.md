@@ -60,6 +60,31 @@ pnpm workspaces, Node 24, TS 5.9. API: Express 5 + pino. DB: Postgres + Drizzle 
 - **Terms / Privacy** (`/terms`, `/privacy`) — public; no API calls.
 - **Pricing** lives on the public homepage as a `#pricing` anchor section (NOT a separate route). `/pricing` is a `<Redirect>` to `/#pricing` for back-compat. Tier copy is sourced from `lib/plans.tsx` so the homepage section, the post-signup `<TierSelectModal>`, and `/account` Rank tab stay in sync — edit in one place.
 
+## Stripe Subscriptions
+
+Real recurring billing via the Replit Stripe connector. The user's Stripe account is the source of truth — we never write to the `stripe.*` schema (managed by `stripe-replit-sync`).
+
+- **Setup**: `artifacts/api-server/src/lib/stripeClient.ts` lazily inits a Stripe SDK client + a `StripeSync` instance. Secret key + connector account id are pulled from the connector at request time (cached). API version pinned to `2026-04-22.dahlia` (must match in `scripts/src/lib/stripeClient.ts` too).
+- **Boot sequence** (`index.ts`, gated, never crashes the server):
+  1. `runMigrations()` once to create the `stripe.*` schema.
+  2. `findOrCreateManagedWebhook(<https://${REPLIT_DOMAINS[0]}/api/stripe/webhook>)` registers the webhook on the connector's Stripe account.
+  3. `sync.syncBackfill({ object: "all" })` — **must pass `object: "all"`**; without it the package's switch falls through and silently no-ops, leaving `stripe.products`/`stripe.prices` empty and `/api/stripe/prices` returning `{}`.
+- **Webhook**: `/api/stripe/webhook` is mounted with `express.raw({ type: "application/json" })` BEFORE `express.json()` in `app.ts` so signature verification sees the raw bytes. Don't reorder.
+- **esbuild**: `stripe-replit-sync` is **externalized** in `artifacts/api-server/build.mjs` — its migrations resolve via `__dirname` and break when bundled.
+- **Tier mapping**: each Stripe Product carries `metadata.tier ∈ {"premium","pro"}` (set by `scripts/seed-products.ts`). `routes/stripe.ts#GET /subscription` reconciles `usersTable.subscriptionTier` from the active sub's product metadata on every read, so no extra webhook handler is needed for tier sync.
+- **Routes** (all Clerk-authed, NO `requireStreamerChannel` so users can subscribe pre-Twitch-link):
+  - `GET /stripe/prices` — public-ish; lists active monthly prices keyed by tier.
+  - `POST /stripe/checkout` — creates/reuses `usersTable.stripeCustomerId`, returns Checkout Session URL.
+  - `POST /stripe/portal` — Billing Portal session for an existing customer.
+  - `GET /stripe/subscription` — current sub + reconciles tier.
+  - `POST /stripe/subscription/cancel-at-period-end` (toggle) / `POST /stripe/subscription/cancel-now`.
+  - `GET /stripe/invoices?status=&from=&to=` — billing history (channel-scoped to the caller's customer).
+- **Frontend**:
+  - `tier-select-modal.tsx`: free → `/users/me/subscription`; paid → `/api/stripe/checkout` redirect.
+  - `account.tsx` Rank tab: subscription mutation routes existing-sub → portal, new-sub → checkout. Upgrade/Switch label derived via `TIER_RANK` from `lib/plans.tsx`.
+  - `billing-section.tsx`: subscription status card (badge, period end, portal button, auto-renew Switch, cancel-now AlertDialog) + filterable invoice table.
+- **Re-seed prices**: `pnpm --filter @workspace/scripts run seed-products` (idempotent — looks up existing products by `metadata.tier`).
+
 ## Bot Commands
 
 Canonicals (Spells page lists only these; aliases share toggle/cooldown/handler):
