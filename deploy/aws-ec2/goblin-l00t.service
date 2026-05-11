@@ -1,0 +1,43 @@
+# /etc/systemd/system/goblin-l00t.service
+#
+# Run the Goblin L00t API server (Express + Twitch bot) under systemd.
+# Reads env from /etc/goblinl00t.env. Restart-on-crash with backoff.
+#
+# Install:  sudo cp deploy/aws-ec2/goblin-l00t.service /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now goblin-l00t
+
+[Unit]
+Description=Goblin L00t API + Twitch bot
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=goblin
+Group=goblin
+WorkingDirectory=/opt/goblinl00t
+EnvironmentFile=/etc/goblinl00t.env
+# Use the absolute Node path so systemd doesn't depend on the user's PATH.
+# Adjust if `which node` returns something else (nvm users: see runbook).
+ExecStart=/usr/bin/node --enable-source-maps /opt/goblinl00t/artifacts/api-server/dist/index.mjs
+Restart=on-failure
+RestartSec=5
+# Crash-loop guard — give up after 5 failures in 60s instead of frying the box.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/goblinl00t/web /var/log/goblinl00t
+
+# Log to journald — view with `journalctl -u goblin-l00t -f`.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=goblin-l00t
+
+[Install]
+WantedBy=multi-user.target
