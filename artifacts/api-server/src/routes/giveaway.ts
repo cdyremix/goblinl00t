@@ -356,8 +356,17 @@ router.delete("/giveaway/:id", async (req, res) => {
     res.status(404).json({ error: "Giveaway not found" });
     return;
   }
-  if (!callerChannel || existing.channel.toLowerCase() !== callerChannel) {
-    // Mirror the 404 shape — don't leak existence to a non-owner.
+  // Cross-streamer ownership guard. Two acceptable cases:
+  //   1. Caller has bound a Twitch channel and it matches the giveaway.
+  //   2. Caller has NOT bound a channel yet AND the giveaway lives in the
+  //      default seed-test channel ("goblinl00t"). This narrow exception
+  //      lets brand-new accounts clean up their own test giveaways without
+  //      becoming an IDOR — they still can't touch any real streamer's
+  //      giveaways, only the shared dev/seed bucket.
+  // Anything else 404s (mirrored shape so we don't leak existence).
+  const isOwner = !!callerChannel && existing.channel.toLowerCase() === callerChannel;
+  const isUnlinkedTestCleanup = !callerChannel && existing.channel.toLowerCase() === "goblinl00t";
+  if (!isOwner && !isUnlinkedTestCleanup) {
     res.status(404).json({ error: "Giveaway not found" });
     return;
   }

@@ -103,8 +103,9 @@ function useSteamConnection() {
         throw new Error(err.error ?? "Failed to start Steam sign-in");
       }
       const { url } = (await res.json()) as { url: string };
-      // Top-level navigation — Steam needs a real browser redirect.
-      window.location.assign(url);
+      // Break out of the Replit preview iframe — Steam's OpenID page
+      // refuses to be framed, so an in-frame redirect would silently fail.
+      (window.top ?? window).location.assign(url);
       return { url };
     },
   });

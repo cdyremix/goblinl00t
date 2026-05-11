@@ -127,7 +127,11 @@ export function Account() {
         return;
       }
       const { url } = (await r.json()) as { url: string };
-      window.location.assign(url);
+      // Break out of the Replit preview iframe — id.twitch.tv refuses to be
+      // framed (X-Frame-Options DENY), so an in-frame redirect would just
+      // show a blank pane and look like the button "did nothing." Walking
+      // up to window.top forces a real top-level navigation.
+      (window.top ?? window).location.assign(url);
     } catch {
       setTwitchConnecting(false);
       toast({ title: "Couldn't start Twitch sign-in", variant: "destructive" });

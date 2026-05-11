@@ -100,9 +100,21 @@ export function EliminationWheel({
   const [index, setIndex] = useState(0);
   const [eliminated, setEliminated] = useState<Set<string>>(new Set());
   const [highlight, setHighlight] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"idle" | "spinning" | "final-two" | "revealed">("idle");
+  // "shuffling" plays a brief animation that flashes random slot cards so
+  // viewers see the order genuinely being re-randomized when the streamer
+  // hits the Shuffle button. It's purely cosmetic — the new order is
+  // already committed by the time the animation plays out.
+  const [phase, setPhase] = useState<"idle" | "spinning" | "shuffling" | "final-two" | "revealed">("idle");
   const [flavorText, setFlavorText] = useState<string | null>(null);
+  // Set of slot keys currently lit up by the shuffle animation (just for
+  // glow — they're not eliminated).
+  const [shuffleHighlights, setShuffleHighlights] = useState<Set<string>>(new Set());
+  // Mounted toggle for the winner celebration overlay. Pops once when the
+  // wheel transitions into the revealed phase; the streamer can dismiss it
+  // and the underlying wheel stays visible behind.
+  const [showCelebration, setShowCelebration] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shuffleTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Single full-reset effect — runs ONLY when the modal re-opens or the
   // underlying slot pool changes. Critically, `eliminationOrder` is NOT in
@@ -135,11 +147,34 @@ export function EliminationWheel({
     setPhase(initialOrder.length === 0 ? "revealed" : "idle");
   }, [open, slots, winningSlotKey]);
 
+  // Cleanup on unmount.
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      for (const t of shuffleTimersRef.current) clearTimeout(t);
     };
   }, []);
+
+  // Cancel any in-flight timers when the modal closes — otherwise a
+  // background setTimeout fired after the streamer hits Close keeps
+  // mutating state on an unmounted-from-the-user's-POV component, which
+  // can re-open the celebration overlay or flicker the slot grid the
+  // next time the modal is opened.
+  useEffect(() => {
+    if (open) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    for (const t of shuffleTimersRef.current) clearTimeout(t);
+    shuffleTimersRef.current = [];
+    setShuffleHighlights(new Set());
+  }, [open]);
+
+  // Pop the winner celebration overlay exactly once when the wheel reveals
+  // a winner. We don't auto-pop on every re-render of the revealed phase —
+  // the streamer might dismiss and we'd just put it right back.
+  useEffect(() => {
+    if (phase === "revealed" && winner) setShowCelebration(true);
+    if (phase !== "revealed") setShowCelebration(false);
+  }, [phase, winner]);
 
   const speedMs = { slow: 1500, medium: 900, fast: 450 }[speed];
   const highlightMs = Math.max(180, Math.floor(speedMs * 0.55));
@@ -236,17 +271,44 @@ export function EliminationWheel({
     }
   }
 
-  // Re-shuffle the elimination order. Only meaningful before the first spin
-  // (after that, eliminated slots are locked in); we still allow it if the
-  // streamer wants to re-roll mid-stream.
+  // Re-shuffle the elimination order, then play a brief "shuffling"
+  // animation so the audience can see entries cycling. The new order is
+  // committed immediately — the animation is purely cosmetic and gates
+  // the Spin button so nothing fires mid-shuffle.
   function handleShuffle() {
     if (!winningSlotKey) return;
-    const remainingLosers = slots
+    const remainingKeys = slots
       .map((s) => s.key)
-      .filter((k) => k !== winningSlotKey && !eliminated.has(k));
+      .filter((k) => !eliminated.has(k)); // includes the winning slot
+    const remainingLosers = remainingKeys.filter((k) => k !== winningSlotKey);
     const reshuffled = shuffle(remainingLosers);
-    // Replace the unprocessed tail of the order with the freshly shuffled losers.
     setEliminationOrder((prev) => [...prev.slice(0, index), ...reshuffled]);
+
+    // Cancel any in-flight shuffle animation, then flash random batches of
+    // remaining slots in quick succession. ~12 frames over ~1.2s feels
+    // genuinely "shuffling" without dragging the streamer's pacing.
+    for (const t of shuffleTimersRef.current) clearTimeout(t);
+    shuffleTimersRef.current = [];
+    setPhase("shuffling");
+    if (flavorEnabled) setFlavorText("🔀 Reshuffling the bones…");
+    const frames = 12;
+    const frameMs = 100;
+    for (let f = 0; f < frames; f++) {
+      const t = setTimeout(() => {
+        // Light up ~25% of the remaining slots at random for this frame.
+        const sample = shuffle(remainingKeys).slice(0, Math.max(3, Math.floor(remainingKeys.length / 4)));
+        setShuffleHighlights(new Set(sample));
+      }, f * frameMs);
+      shuffleTimersRef.current.push(t);
+    }
+    // Final frame: clear highlights and return to idle so the streamer can
+    // resume control. The actual wheel state is already updated.
+    const done = setTimeout(() => {
+      setShuffleHighlights(new Set());
+      setPhase("idle");
+      if (flavorEnabled) setFlavorText(null);
+    }, frames * frameMs + 50);
+    shuffleTimersRef.current.push(done);
   }
 
   const isComplete = phase === "revealed";
@@ -264,7 +326,21 @@ export function EliminationWheel({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl">
+      {/* Bumped from max-w-2xl — the slot grid was cramped on viewers' wide
+          monitors and the streamer asked for more breathing room so the
+          wheel reads on stream. */}
+      <DialogContent className="max-w-5xl w-[95vw] relative overflow-hidden">
+        {/* Winner celebration overlay — rendered INSIDE the wheel's
+            DialogContent (not as a nested Dialog) so we keep a single
+            focus trap and a clean modal a11y tree. Confetti respects
+            prefers-reduced-motion: when set, the layer renders nothing
+            and we just show the winner banner + dismiss button. */}
+        {showCelebration && winner && (
+          <WinnerCelebrationOverlay
+            winner={winner}
+            onDismiss={() => setShowCelebration(false)}
+          />
+        )}
         <DialogHeader>
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
@@ -277,6 +353,7 @@ export function EliminationWheel({
                   <>The goblin has chosen a winner. {mode === "auto" ? "Press Start to spin through eliminations." : "Click Spin to eliminate one slot per round."}</>
                 )}
                 {phase === "spinning" && <>Spinning… {remainingSlots} slots remaining</>}
+                {phase === "shuffling" && <>🔀 Reshuffling the bones…</>}
                 {phase === "final-two" && <>🔥 The final two! Spin once more to crown the winner.</>}
                 {phase === "revealed" && winner && <>🏆 Winner: <span className="text-amber-400 font-bold">{winner}</span></>}
               </DialogDescription>
@@ -287,7 +364,7 @@ export function EliminationWheel({
                 variant="ghost"
                 size="icon"
                 onClick={handleShuffle}
-                disabled={isComplete || phase === "spinning"}
+                disabled={isComplete || phase === "spinning" || phase === "shuffling"}
                 title="Reshuffle remaining entries"
                 data-testid="button-wheel-shuffle"
               >
@@ -323,22 +400,25 @@ export function EliminationWheel({
           </div>
         )}
 
-        {/* Slots grid — one card per ticket */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-[55vh] overflow-y-auto p-1">
+        {/* Slots grid — one card per ticket. Wider grid + bigger cards now
+            that the modal is max-w-5xl. */}
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 max-h-[60vh] overflow-y-auto p-1">
           {slots.map((s) => {
             const isOut = eliminated.has(s.key);
             const isHighlighted = highlight === s.key;
+            const isShuffleLit = shuffleHighlights.has(s.key);
             const isWinningSlot = isComplete && s.key === winningSlotKey;
             return (
               <div
                 key={s.key}
                 data-testid={`wheel-slot-${s.key}`}
                 className={`
-                  rounded-lg border px-2 py-1.5 text-xs font-medium transition-all duration-200
+                  rounded-lg border px-2 py-2 text-xs font-medium transition-all duration-150
                   ${isWinningSlot ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_20px_rgba(255,180,0,0.4)] scale-110" : ""}
                   ${isHighlighted ? "bg-rose-500/30 border-rose-400 text-rose-100 scale-110 animate-pulse" : ""}
+                  ${isShuffleLit && !isWinningSlot && !isHighlighted ? "bg-purple-500/20 border-purple-400/70 text-purple-100 scale-105" : ""}
                   ${isOut && !isWinningSlot ? "bg-muted/30 border-border/40 text-muted-foreground/60 line-through" : ""}
-                  ${!isOut && !isHighlighted && !isWinningSlot ? "bg-card border-border text-foreground" : ""}
+                  ${!isOut && !isHighlighted && !isWinningSlot && !isShuffleLit ? "bg-card border-border text-foreground" : ""}
                 `}
               >
                 <div className="flex items-center gap-1">
@@ -396,7 +476,127 @@ export function EliminationWheel({
           </div>
         </div>
       </DialogContent>
+
     </Dialog>
+  );
+}
+
+/**
+ * Confetti-and-crown overlay rendered inside the wheel's DialogContent
+ * once a winner is revealed. Implemented as an absolute layer (not a
+ * nested Dialog) so the wheel modal keeps a single focus trap and clean
+ * screen-reader semantics. Confetti is pure CSS — 80 absolutely
+ * positioned divs animated by inline keyframes; if the user has
+ * `prefers-reduced-motion: reduce`, the confetti layer is omitted and
+ * only the static crown + winner banner renders.
+ */
+function WinnerCelebrationOverlay({
+  winner,
+  onDismiss,
+}: {
+  winner: string;
+  onDismiss: () => void;
+}) {
+  // Detect reduced-motion preference once per mount. We don't subscribe
+  // to changes — if the user toggles mid-celebration that's fine, the
+  // overlay is short-lived.
+  const reducedMotion = useMemo(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }, []);
+
+  // Pre-compute confetti specs once per mount so they don't reshuffle
+  // on every render (which would tear the animation).
+  const pieces = useMemo(() => {
+    if (reducedMotion) return [];
+    const colors = ["#fbbf24", "#a855f7", "#22c55e", "#ef4444", "#3b82f6", "#ec4899", "#f97316"];
+    return Array.from({ length: 80 }).map((_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      delay: Math.random() * 0.6,
+      duration: 2 + Math.random() * 2,
+      color: colors[Math.floor(Math.random() * colors.length)]!,
+      rotate: Math.random() * 360,
+      size: 6 + Math.floor(Math.random() * 8),
+    }));
+  }, [reducedMotion]);
+
+  return (
+    <div
+      className="absolute inset-0 z-20 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg"
+      data-testid="overlay-winner-celebration"
+      role="status"
+      aria-live="polite"
+    >
+      {!reducedMotion && (
+        <style>{`
+          @keyframes goblin-confetti-fall {
+            0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+          }
+          @keyframes goblin-crown-pop {
+            0%   { transform: scale(0.4) rotate(-15deg); opacity: 0; }
+            60%  { transform: scale(1.15) rotate(5deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+          }
+        `}</style>
+      )}
+
+      {/* Confetti layer — absolutely positioned, pointer-events:none so it
+          never blocks the dismiss button. Skipped entirely when the user
+          prefers reduced motion. */}
+      {!reducedMotion && (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {pieces.map((p) => (
+            <div
+              key={p.id}
+              className="absolute top-0"
+              style={{
+                left: `${p.left}%`,
+                width: `${p.size}px`,
+                height: `${p.size * 1.4}px`,
+                background: p.color,
+                transform: `rotate(${p.rotate}deg)`,
+                animation: `goblin-confetti-fall ${p.duration}s ease-in ${p.delay}s forwards`,
+                borderRadius: "2px",
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="text-center space-y-3 relative z-10 px-6">
+        <div
+          className="mx-auto"
+          style={
+            reducedMotion
+              ? undefined
+              : { animation: "goblin-crown-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" }
+          }
+        >
+          <Crown className="w-20 h-20 text-amber-400 drop-shadow-[0_0_25px_rgba(255,180,0,0.6)] mx-auto" />
+        </div>
+        <h2 className="text-3xl font-medieval text-amber-300">We have a champion!</h2>
+        <div className="text-base">
+          <span className="block text-2xl font-bold text-foreground my-2" data-testid="text-winner-username">
+            @{winner}
+          </span>
+          <span className="block text-muted-foreground">
+            has plundered the loot. Congratulations!
+          </span>
+        </div>
+        <div className="flex justify-center pt-2">
+          <Button
+            onClick={onDismiss}
+            className="gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold"
+            data-testid="button-dismiss-celebration"
+          >
+            <Sparkles className="w-4 h-4" />
+            Continue
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
