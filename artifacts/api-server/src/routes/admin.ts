@@ -3,7 +3,6 @@ import { db, usersTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { clerkClient } from "@clerk/express";
-import bcrypt from "bcryptjs";
 import { requireAdmin } from "../lib/auth-helpers";
 import { getUncachableStripeClient } from "../lib/stripeClient";
 
@@ -143,27 +142,17 @@ router.post("/admin/users", async (req, res) => {
 
   // Step 1: Clerk create (isolated try). Map Clerk's structured errors
   // (`{ errors: [{ code, message }] }`) into appropriate HTTP statuses
-  // so the admin sees "email taken" / "password too weak" instead of a
-  // generic 500.
-  //
-  // Why we pre-hash with bcrypt instead of sending plaintext +
-  // `skipPasswordChecks: true`: even with that flag set, Replit-managed
-  // Clerk's instance-level "Compromised passwords" protection still
-  // rejects common test passwords (e.g. `devpassword123`) with
-  // `form_password_pwned`. Importing via `passwordDigest`/
-  // `passwordHasher` skips ALL server-side checks (strength, length,
-  // pwned, leak DB) — Clerk treats it as a migrated credential and
-  // just stores the digest. This is the documented escape hatch for
-  // exactly this case (admin-seeded test fixtures with weak creds).
-  // The user can still sign in with the plaintext password they were
-  // given because bcrypt verifies the digest at sign-in time.
+  // so the admin sees "email taken" / "password too weak" / "password
+  // compromised" instead of a generic 500. Sending plaintext means
+  // Clerk runs its full validation pipeline (strength, length, pwned
+  // check) — which is what we want: the password the admin chose has
+  // to actually be usable for sign-in, so reject it now rather than
+  // discover at first-login that it's been breached.
   let clerkUserId: string;
   try {
-    const passwordDigest = await bcrypt.hash(password, 10);
     const created = await clerkClient.users.createUser({
       emailAddress: [email],
-      passwordDigest,
-      passwordHasher: "bcrypt",
+      password,
     });
     clerkUserId = created.id;
     // For admin/dev rows: explicitly flip every email address to
@@ -822,20 +811,16 @@ router.post("/admin/users/:id/password", async (req, res) => {
     return;
   }
   try {
-    // Same bcrypt-digest workaround as POST /admin/users — Clerk's
-    // pwned-password check rejects common temp passwords even with
-    // `skipPasswordChecks: true`, so we import a pre-hashed credential
-    // instead. `signOutOfOtherSessions` isn't a valid param when
-    // setting a digest (Clerk treats it as a migration), so we sign
-    // the user out separately via revokeSession on each active session.
-    const passwordDigest = await bcrypt.hash(parsed.data.password, 10);
+    // Plaintext path: Clerk runs strength + pwned-check validation and
+    // returns `form_password_pwned` if the chosen password is breached,
+    // which the admin UI surfaces inline. Better to fail loudly here
+    // than save a credential the user can't actually sign in with.
     await clerkClient.users.updateUser(user.clerkUserId, {
-      passwordDigest,
-      passwordHasher: "bcrypt",
+      password: parsed.data.password,
+      signOutOfOtherSessions: true,
     });
-    // Best-effort sign-out of every active session — same effect as
-    // `signOutOfOtherSessions: true` would have given us, but available
-    // when using the digest path. Failures don't block the response.
+    // Best-effort sign-out of every active session as belt-and-braces in
+    // case `signOutOfOtherSessions` doesn't catch a stale session.
     try {
       const sessions = await clerkClient.sessions.getSessionList({
         userId: user.clerkUserId,
