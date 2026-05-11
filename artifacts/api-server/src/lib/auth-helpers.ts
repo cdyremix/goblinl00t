@@ -4,6 +4,33 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 /**
+ * Strict admin gate. Returns the calling user's row when `isAdmin` is
+ * true; otherwise writes 401/403 + returns null and the caller MUST
+ * early-return. Use for ALL `/admin/*` mutations and listings — never
+ * trust the dashboard `isAdmin` flag alone.
+ */
+export async function requireAdmin(
+  req: Request,
+  res: Response,
+): Promise<{ user: typeof usersTable.$inferSelect } | null> {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId))
+    .limit(1);
+  if (!user || !user.isAdmin) {
+    res.status(403).json({ error: "Admin only" });
+    return null;
+  }
+  return { user };
+}
+
+/**
  * Resolve the calling streamer's row + canonical channel handle (lower-cased
  * Twitch username). Used by routes that mutate per-channel state to enforce
  * that one streamer can never poke another streamer's data.

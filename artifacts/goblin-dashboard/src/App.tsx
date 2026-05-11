@@ -19,10 +19,12 @@ import SettingsPage from "@/pages/settings";
 import TradeOffice from "@/pages/trade-office";
 import HelpGuide from "@/pages/help";
 import ChatUsers from "@/pages/chat-users";
+import { Admin } from "@/pages/admin";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { useSubscriptionTier } from "@/hooks/use-tier";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -136,6 +138,30 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Admin-only route. First gate: signed in (handled by inner ProtectedRoute).
+ * Second gate: caller's `/users/me` row reports `isAdmin === true`. Non-admin
+ * signed-in users get redirected to /dashboard so the route is invisible to
+ * regular streamers. The server still enforces 403 on `/api/admin/*` so even
+ * a tampered client can't read other accounts.
+ */
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <AdminGate>{children}</AdminGate>
+    </ProtectedRoute>
+  );
+}
+
+function AdminGate({ children }: { children: React.ReactNode }) {
+  // useSubscriptionTier already fetches /users/me — reuse the same query
+  // to avoid a second network round-trip here.
+  const { isAdmin, loading } = useSubscriptionTier();
+  if (loading) return null;
+  if (!isAdmin) return <Redirect to="/dashboard" />;
+  return <>{children}</>;
+}
+
 function AuthLoader() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background">
@@ -209,6 +235,9 @@ function AppRouter() {
       </Route>
       <Route path="/users">
         <ProtectedRoute><Layout><ChatUsers /></Layout></ProtectedRoute>
+      </Route>
+      <Route path="/admin">
+        <AdminRoute><Layout><Admin /></Layout></AdminRoute>
       </Route>
       <Route path="/help">
         <ProtectedRoute><Layout><HelpGuide /></Layout></ProtectedRoute>

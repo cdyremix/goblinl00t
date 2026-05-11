@@ -2,22 +2,9 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getOrCreateUser } from "../lib/get-or-create-user";
 
 const router = Router();
-
-async function getOrCreateUser(clerkUserId: string) {
-  const [existing] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.clerkUserId, clerkUserId))
-    .limit(1);
-  if (existing) return existing;
-  const [created] = await db
-    .insert(usersTable)
-    .values({ clerkUserId, subscriptionTier: "free" })
-    .returning();
-  return created!;
-}
 
 router.get("/users/me", async (req, res) => {
   const { userId } = getAuth(req);

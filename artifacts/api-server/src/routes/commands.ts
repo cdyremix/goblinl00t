@@ -13,6 +13,7 @@ import {
   type CommandTheme,
 } from "../bot/bot-service";
 import { invalidateCommandResponses } from "../bot/command-responses";
+import { userHasFeature } from "../lib/tier-helpers";
 
 const router: IRouter = Router();
 
@@ -84,6 +85,13 @@ router.put("/commands/:name/response", async (req, res) => {
   const canonical = resolveCanonical(name);
   if (!canonical || !isCommandCustomizable(canonical)) {
     res.status(400).json({ error: `${name} cannot be customized` });
+    return;
+  }
+  // Custom command responses are a Premium-tier feature. UI hides the
+  // editor for free users via `hasFeature("custom-responses")`, but the
+  // server is the actual entitlement boundary so curl can't bypass it.
+  if (!userHasFeature(user, "custom-responses")) {
+    res.status(403).json({ error: "Custom command responses require the Premium rank." });
     return;
   }
   const parsed = ResponseInput.safeParse(req.body);

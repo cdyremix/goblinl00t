@@ -4,8 +4,9 @@ import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
-  Plug, X, MessageCircle,
+  Plug, X, MessageCircle, Crown,
 } from "lucide-react";
+import { useSubscriptionTier } from "@/hooks/use-tier";
 import { UserAvatar } from "@/components/user-avatar";
 import { OnboardingTour } from "@/components/onboarding-tour";
 import { TierSelectModal } from "@/components/tier-select-modal";
@@ -76,15 +77,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // inside the expandable user menu as "Account Settings".
   // Chat Users used to be its own sidebar entry; it now lives as a tab inside
   // Operations (`/dashboard`). The `/users` route still works for deep links.
+  const { isAdmin } = useSubscriptionTier();
+
   const allLinks = [
     { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
     { href: "/giveaway", label: "Loot Horde", icon: Gift },
     { href: "/stats", label: "Ledger", icon: BarChart3 },
     { href: "/settings", label: "Forge", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true, newWhen: isCS2 },
+    // Admin Console — only rendered for super-users (`usersTable.isAdmin`).
+    // Server still enforces 403 on `/api/admin/*` so even if a normal user
+    // forces the route, the page lights up empty + every action 403s.
+    { href: "/admin", label: "Admin Console", icon: Crown, adminOnly: true },
   ];
 
-  const links = allLinks.filter((l) => !("cs2Only" in l) || isCS2);
+  const links = allLinks.filter((l) => {
+    if ("cs2Only" in l && l.cs2Only && !isCS2) return false;
+    if ("adminOnly" in l && l.adminOnly && !isAdmin) return false;
+    return true;
+  });
 
   // Auto-expand the user menu while the user is on /account so the highlighted
   // sub-link is visible without an extra click.

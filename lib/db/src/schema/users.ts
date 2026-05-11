@@ -8,6 +8,15 @@ export const usersTable = pgTable("users", {
   twitchAccessToken: text("twitch_access_token"),
   twitchRefreshToken: text("twitch_refresh_token"),
   subscriptionTier: text("subscription_tier").notNull().default("premium"),
+  // Super-user flag. When true, the row owner is treated as having every
+  // feature regardless of `subscriptionTier` (server-side `userHasFeature`
+  // short-circuits to true) AND can hit the `/api/admin/*` endpoints.
+  // Populated automatically in `getOrCreateUser` whenever a sign-in's
+  // primary email matches `SUPER_USER_EMAILS` (env-driven allowlist,
+  // defaults to `c.borawa@gmail.com`). Manual flips happen via
+  // `PATCH /api/admin/users/:id`. NEVER expose a write surface for
+  // streamers themselves to flip this.
+  isAdmin: boolean("is_admin").notNull().default(false),
   // True once the streamer has explicitly chosen (or acknowledged) a rank in
   // the post-signup tier picker. Drives the "pick your rank" modal in the
   // dashboard layout — modal opens whenever this is false for a signed-in

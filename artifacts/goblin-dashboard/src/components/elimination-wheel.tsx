@@ -446,7 +446,7 @@ export function EliminationWheel({
               </DialogTitle>
               <DialogDescription className="mt-1">
                 {phase === "idle" && !winner && (
-                  <>Ready when you are. Click Start Eliminations and the goblin will pick a winner — the wheel runs the rest itself.</>
+                  <>Click <span className="font-semibold text-amber-400">Start Eliminations</span> — the wheel will eliminate contestants one by one until two remain, then crown a champion.</>
                 )}
                 {phase === "idle" && winner && livingCount > 2 && (
                   <>Drawing your champion…</>

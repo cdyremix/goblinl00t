@@ -3,7 +3,7 @@ import type { usersTable } from "@workspace/db";
 /**
  * Server-side mirror of `lib/plans.tsx` on the dashboard. The dashboard's
  * `<FeatureLock>` / `useSubscriptionTier()` hide gated UI but every paid
- * surface MUST also call `requireFeature()` here — UI gates can be
+ * surface MUST also call `userHasFeature()` here — UI gates can be
  * bypassed by anyone with curl, so the API is the actual entitlement
  * boundary.
  *
@@ -44,10 +44,19 @@ export function normalizeTier(raw: unknown): TierId {
   return raw === "premium" || raw === "pro" ? raw : "free";
 }
 
+/**
+ * Server-side feature check. Admins (`isAdmin = true`) short-circuit to
+ * `true` for every feature so the super-user dashboard can poke any
+ * channel without tripping rank gates.
+ */
 export function userHasFeature(
-  user: Pick<typeof usersTable.$inferSelect, "subscriptionTier"> | null | undefined,
+  user:
+    | Pick<typeof usersTable.$inferSelect, "subscriptionTier" | "isAdmin">
+    | null
+    | undefined,
   feature: FeatureId,
 ): boolean {
+  if (user?.isAdmin) return true;
   const tier = normalizeTier(user?.subscriptionTier);
   const need = FEATURE_MIN_TIER[feature];
   return TIER_RANK[tier] >= TIER_RANK[need];

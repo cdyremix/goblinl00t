@@ -17,6 +17,7 @@ import chatUsersRouter from "./chat-users";
 import streamRouter from "./stream";
 import giveawayPresetsRouter from "./giveaway-presets";
 import stripeRouter from "./stripe";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(chatUsersRouter);
 router.use(streamRouter);
 router.use(giveawayPresetsRouter);
 router.use(stripeRouter);
+router.use(adminRouter);
 
 export default router;

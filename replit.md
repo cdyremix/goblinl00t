@@ -37,6 +37,7 @@ pnpm workspaces, Node 24, TS 5.9. API: Express 5 + pino. DB: Postgres + Drizzle 
 
 ## Key DB Columns (on `usersTable`)
 
+- `isAdmin` (bool, default false) — super-user flag. When true, server `userHasFeature()` short-circuits to true for every feature AND `requireAdmin` middleware lets the row owner hit `/api/admin/*`. Auto-set in `lib/get-or-create-user.ts` whenever Clerk's primary email matches `SUPER_USER_EMAILS` env (default `c.borawa@gmail.com`); first-time grant also bumps `subscriptionTier` → `"pro"` and flips `tierSelected` so the picker doesn't pop. Manual flips happen via `PATCH /api/admin/users/:id` (with self-demotion guard). Frontend `useSubscriptionTier()` exposes `isAdmin` and bypasses `hasFeature` checks accordingly; sidebar Admin Console link + `/admin` route both gate on it.
 - `streamStartedAt` — **deprecated** (manual Start/End Stream removed). Read by `routes/stats.ts` (`range=stream`) and `routes/loot.ts` (`since=stream`); falls back to last 12h.
 - `eliminationFlavorEnabled` (bool, default true) — RPG flavor banner in wheel modal (cosmetic, never reaches chat). Toggled in modal's ⚙️ popover.
 - `tierSelected` (bool, default false) — flips true the first time the streamer picks a rank in the post-signup `<TierSelectModal>` (mounted in `components/layout.tsx`). Both `PUT /users/me/subscription` and `PUT /users/me/tier-acknowledge` set it. Free is a valid choice. Modal is non-dismissible and re-opens on every dashboard load while false.
@@ -56,6 +57,7 @@ pnpm workspaces, Node 24, TS 5.9. API: Express 5 + pino. DB: Postgres + Drizzle 
 - **Forge** (`/settings`) — bot name, theme picker (goblin/cs2), Economy & Loot toggles, Discord webhook URL, Steam connection + CS2 inventory grid.
 - **Trade Office** (`/trade-office`) — manage CS2 skin delivery (trade URLs, locked items, status pending → sent).
 - **Chat Users** (`/users`) — every viewer who's earned/redeemed coins or held inventory; Adjust Coins dialog.
+- **Admin Console** (`/admin`) — super-user only (gated by `AdminRoute` + server `requireAdmin`). Roster of every registered streamer with tier/admin toggles + stat cards (total / Twitch-linked / Premium / Pro). Sidebar link only renders when `useSubscriptionTier().isAdmin` is true.
 - **Help & Guide** (`/help`) — static reference + chat command table.
 - **Terms / Privacy** (`/terms`, `/privacy`) — public; no API calls.
 - **Pricing** lives on the public homepage as a `#pricing` anchor section (NOT a separate route). `/pricing` is a `<Redirect>` to `/#pricing` for back-compat. Tier copy is sourced from `lib/plans.tsx` so the homepage section, the post-signup `<TierSelectModal>`, and `/account` Rank tab stay in sync — edit in one place.
@@ -110,6 +112,7 @@ Bot needs three env vars to go live: `TWITCH_OAUTH_TOKEN`, `TWITCH_BOT_USERNAME`
 
 ## Security & Multi-Tenancy
 
+- **`requireAdmin(req, res)`** — strict super-user gate; 401 unauthed, 403 if `usersTable.isAdmin` is false. Use for ALL `/admin/*` routes (`routes/admin.ts`). Returns `{ user }` (full row) so handlers can self-reference. Never trust the dashboard `isAdmin` flag alone — every admin endpoint MUST start with `requireAdmin`.
 - **`requireStreamerChannel(req, res)`** — strict; 401 if unauthed, 403 if Twitch not linked. Use for ALL mutations.
 - **`resolveStreamerChannelForRead(req, res)`** — read-only convenience: in `NODE_ENV !== "production"` falls back to `"goblinl00t"` for unlinked accounts so the dashboard isn't a 403 wall during onboarding/dev. Production behaves identically to `requireStreamerChannel`. Use for GET routes that should show *something* before linking; **NEVER** for writes.
 - **Giveaway routes are channel-scoped**: GETs (`/giveaway`, `/current`, `/:id`, `/:id/entries`) use `resolveStreamerChannelForRead` and filter by `ctx.channel`; cross-channel `:id` returns 404 (don't leak existence). POST `/giveaway` uses `requireStreamerChannel` and ignores body-supplied `channel`. Mutations (start/end/reroll/delete) verify ownership against `existing.channel`. The unlinked-`goblinl00t` exception in mutations is gated to `NODE_ENV !== "production"` (dev seed-flow convenience only).

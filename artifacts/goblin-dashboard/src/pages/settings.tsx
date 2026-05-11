@@ -982,6 +982,12 @@ function BuiltInCommandRow({
   const [draft, setDraft] = useState(cmd.customResponse ?? "");
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Custom command-response editor is a Premium feature. Free users see
+  // the row + the toggle, but the "Customize reply" button swaps to a
+  // LockedHint linking to the Rank tab. Server enforces the same gate
+  // in `routes/commands.ts`, so curl-only bypass is also blocked.
+  const { hasFeature: hasFeat } = useSubscriptionTier();
+  const canCustomResponses = hasFeat("custom-responses");
 
   const customizable = Boolean(cmd.customizable);
   const hasCustom = typeof cmd.customResponse === "string" && cmd.customResponse.length > 0;
@@ -1026,15 +1032,19 @@ function BuiltInCommandRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {customizable && !editing && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs h-7 px-2"
-              onClick={startEditing}
-              data-testid={`button-edit-response-${cmd.name.replace(/^!/, "")}`}
-            >
-              {hasCustom ? "Edit reply" : "Customize reply"}
-            </Button>
+            canCustomResponses ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7 px-2"
+                onClick={startEditing}
+                data-testid={`button-edit-response-${cmd.name.replace(/^!/, "")}`}
+              >
+                {hasCustom ? "Edit reply" : "Customize reply"}
+              </Button>
+            ) : (
+              <LockedHint feature="custom-responses" />
+            )
           )}
           <Switch
             checked={cmd.enabled}

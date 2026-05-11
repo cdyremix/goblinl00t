@@ -12,17 +12,24 @@ import {
 } from "@/lib/plans";
 
 interface MeResponse {
-  user: { subscriptionTier: string };
+  user: { subscriptionTier: string; isAdmin?: boolean };
 }
 
 /**
  * Caller's current subscription tier. Reads /users/me (cached by Clerk
  * auth state). Returns "free" while loading so feature gates default to
  * the safe / locked side rather than briefly leaking premium UI.
+ *
+ * Admin accounts (`user.isAdmin === true`) get every feature unlocked
+ * regardless of `subscriptionTier`. The reported `tier` is still the
+ * real DB value so the Rank tab UI stays accurate, but `hasFeature`
+ * short-circuits to `true` for admins to mirror the server behavior in
+ * `tier-helpers.ts`.
  */
 export function useSubscriptionTier(): {
   tier: TierId;
   loading: boolean;
+  isAdmin: boolean;
   hasFeature: (f: FeatureId) => boolean;
 } {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -45,11 +52,13 @@ export function useSubscriptionTier(): {
   const raw = data?.user.subscriptionTier ?? "free";
   const tier: TierId =
     raw === "premium" || raw === "pro" || raw === "free" ? raw : "free";
+  const isAdmin = !!data?.user.isAdmin;
 
   return {
     tier,
     loading: !enabled || isLoading,
-    hasFeature: (f: FeatureId) => hasFeature(tier, f),
+    isAdmin,
+    hasFeature: (f: FeatureId) => isAdmin || hasFeature(tier, f),
   };
 }
 
