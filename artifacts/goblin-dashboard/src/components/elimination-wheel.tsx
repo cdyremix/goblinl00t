@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Crown, Skull, Play, X, Settings, Shuffle, Sparkles } from "lucide-react";
+import { Crown, Skull, Play, Settings, Shuffle, Sparkles } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -15,7 +15,7 @@ import { PixelFightScene } from "./pixel-fight-scene";
 export interface WheelEntry {
   id: number | string;
   username: string;
-  /** How many tickets this user holds — shown as a stack on their card. */
+  /** How many tickets this user holds — shown as a stack badge on their card. */
   tickets: number;
 }
 
@@ -26,24 +26,24 @@ export interface EliminationWheelProps {
   entries: WheelEntry[];
   /**
    * The pre-determined winner returned by the server. When `null`, the
-   * wheel sits idle until the streamer clicks "Start Eliminations" — at
-   * which point we call `onDrawWinner` to fetch the winner and then
-   * auto-spin the eliminations as soon as the parent re-passes a
-   * non-null `winner`. This keeps the streamer to a single click.
+   * wheel sits idle showing only the "Start Eliminations" button — once
+   * the streamer clicks it we call `onDrawWinner`, the server picks the
+   * winner, and the wheel then auto-runs every phase (spinning →
+   * final-two → fight → reveal) without any further clicks.
    */
   winner: string | null;
-  /** "auto" spins through every elimination automatically; "manual" needs user clicks between spins. */
+  /** Spin mode setting from the streamer's bot settings (cosmetic only — wheel always auto-progresses). */
   mode: "auto" | "manual";
   /** Animation pacing. */
   speed: "slow" | "medium" | "fast";
   /** When true, show RPG-style flavor text on each elimination. */
   flavorEnabled: boolean;
   /**
-   * Streamer-initiated draw. When provided, the wheel's primary CTA is
+   * Streamer-initiated draw. The wheel's only footer CTA is
    * "Start Eliminations" — clicking it (a) fires this callback so the
-   * server picks the winner, then (b) auto-spins the eliminations the
-   * moment the parent feeds back a non-null `winner`. Without this prop
-   * the wheel assumes the parent has already drawn before opening.
+   * server picks the winner, then (b) auto-runs everything the moment
+   * the parent feeds back a non-null `winner`. Without this prop the
+   * wheel assumes the parent has already drawn before opening.
    */
   onDrawWinner?: () => void;
   /** Loading flag for the draw-winner network call. */
@@ -53,11 +53,10 @@ export interface EliminationWheelProps {
 }
 
 /**
- * In the new model each USER gets one card; their ticket count is shown
- * as a stack badge that ticks down by one per elimination round. A user
- * is fully eliminated only when their stack hits zero. This is much
- * easier to follow on stream than the old per-ticket card grid (where a
- * viewer with 5 tickets occupied 5 visually-identical cards).
+ * One card per user, with a ticket-stack badge that ticks down on every
+ * elimination round. A user is fully eliminated only when their stack
+ * hits 0 — much easier to follow on stream than the old per-ticket
+ * card grid where one viewer with 5 tickets occupied 5 identical cards.
  */
 type UserSlot = {
   username: string;
@@ -82,9 +81,8 @@ function shuffle<T>(arr: T[]): T[] {
 
 /**
  * Build the elimination order — a flat list of usernames where each
- * occurrence of a username represents one ticket strip from that user.
- * The winner's tickets are NEVER added to the order, so they're
- * guaranteed to survive every spin.
+ * occurrence represents one ticket strip from that user. The winner's
+ * tickets are NEVER added so they're guaranteed to survive every spin.
  */
 function buildOrder(userSlots: UserSlot[], winnerUsername: string): string[] {
   const targets: string[] = [];
@@ -100,51 +98,72 @@ export function EliminationWheel({
   onClose,
   entries,
   winner,
-  mode,
+  mode: _mode, // kept for API compat / settings popover; wheel always auto-runs.
   speed,
   flavorEnabled,
   onDrawWinner,
   drawingWinner,
   onComplete,
 }: EliminationWheelProps) {
-  const userSlots = useMemo(() => buildUserSlots(entries), [entries]);
+  const baseUserSlots = useMemo(() => buildUserSlots(entries), [entries]);
 
-  // Per-user remaining ticket counts. Decremented on every elimination
-  // round. A user is "out" when their value hits 0.
+  // If the server-chosen winner isn't present in the entries snapshot
+  // (chat can outpace the dashboard refetch), we splice them into the
+  // wheel as an extra slot. This MUST flow into `livingUsers` /
+  // `finalOpponent` derivation too — otherwise the auto
+  // final-two → fight transition stalls because `finalOpponent` stays
+  // null. We keep the patched slot in its own state so the splice is
+  // single-source-of-truth for tickets, displayOrder, AND livingUsers.
+  const [extraWinnerSlot, setExtraWinnerSlot] = useState<UserSlot | null>(null);
+  const userSlots = useMemo(
+    () => (extraWinnerSlot ? [...baseUserSlots, extraWinnerSlot] : baseUserSlots),
+    [baseUserSlots, extraWinnerSlot],
+  );
+
+  // Display order — purely visual ordering of the cards in the grid.
+  // The Shuffle button reshuffles this; it works pre-draw (before any
+  // winner has been picked) and during the wait for auto-spin to kick
+  // in. Once the wheel starts eliminating we leave the visual order
+  // alone so the streamer can track who got knocked out where.
+  const [displayOrder, setDisplayOrder] = useState<string[]>([]);
+
+  // Per-user remaining ticket counts. Decremented on every elimination.
   const [tickets, setTickets] = useState<Record<string, number>>({});
   const [eliminationOrder, setEliminationOrder] = useState<string[]>([]);
   const [index, setIndex] = useState(0);
   const [highlight, setHighlight] = useState<string | null>(null);
-  // "shuffling" plays a brief animation that flashes random user cards
-  // so viewers see the elimination order genuinely being re-randomized.
+  // "shuffling" plays a brief animation that flashes random cards so
+  // viewers see the order being re-randomized on stream.
   const [phase, setPhase] = useState<
     "idle" | "spinning" | "shuffling" | "final-two" | "fight" | "revealed"
   >("idle");
   const [flavorText, setFlavorText] = useState<string | null>(null);
   const [shuffleHighlights, setShuffleHighlights] = useState<Set<string>>(new Set());
-  // True when the streamer clicked "Start Eliminations" before a winner
-  // existed — we hold onto this flag so that as soon as the parent
-  // returns the winner, we auto-spin without a second click.
+  // True once the streamer clicks "Start Eliminations" — the wheel
+  // begins auto-spinning the moment the parent passes back a winner.
   const [autoStartAfterDraw, setAutoStartAfterDraw] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shuffleTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Reset effect — runs when the modal opens or the entry pool changes.
-  // We deliberately KEEP the existing tickets/index/phase if the only
-  // thing that changed is `winner` going null→string, so the auto-start
-  // flow can pick up exactly where the streamer left off.
   useEffect(() => {
     if (!open) return;
     const initialTickets: Record<string, number> = {};
-    for (const u of userSlots) initialTickets[u.username] = u.originalTickets;
+    for (const u of baseUserSlots) initialTickets[u.username] = u.originalTickets;
     setTickets(initialTickets);
+    setDisplayOrder(baseUserSlots.map((u) => u.username));
+    setExtraWinnerSlot(null);
     setEliminationOrder([]);
     setIndex(0);
     setHighlight(null);
     setFlavorText(null);
     setPhase("idle");
     setAutoStartAfterDraw(false);
-  }, [open, userSlots]);
+    // Crucial: clear the in-flight lock so a previous spin tick that
+    // never completed (because the modal closed mid-highlight-timeout)
+    // can't permanently jam the next session's elimination loop.
+    eliminatingRef.current = false;
+  }, [open, baseUserSlots]);
 
   // When the parent finally returns a winner (after Start Eliminations
   // fired the draw), build the elimination order and auto-spin.
@@ -152,35 +171,29 @@ export function EliminationWheel({
     if (!open || !winner) return;
     if (eliminationOrder.length > 0) return;
     // Defensive: if the server-chosen winner isn't in our local entries
-    // snapshot (entries can lag behind the server when chat is fast),
-    // splice them in with a single ticket so the wheel still has a
-    // valid card to crown — otherwise `finalOpponent` ends up null
-    // mid-fight and the overlay refuses to render, soft-locking the UI.
+    // snapshot (entries can lag behind server when chat is fast), splice
+    // them in so the fight overlay can never soft-lock on a null opponent.
     const winnerInSlots = userSlots.some((u) => u.username === winner);
+    let effectiveSlots = userSlots;
     if (!winnerInSlots) {
+      const patched: UserSlot = { username: winner, originalTickets: 1 };
+      setExtraWinnerSlot(patched);
       setTickets((prev) => ({ ...prev, [winner]: 1 }));
+      setDisplayOrder((prev) => (prev.includes(winner) ? prev : [...prev, winner]));
+      effectiveSlots = [...userSlots, patched];
     }
-    const baseSlots = winnerInSlots
-      ? userSlots
-      : [...userSlots, { username: winner, originalTickets: 1 }];
-    const order = buildOrder(baseSlots, winner);
+    const order = buildOrder(effectiveSlots, winner);
     setEliminationOrder(order);
     if (order.length === 0) {
       // Single-user giveaway — straight to reveal.
       setPhase("revealed");
       if (flavorEnabled) setFlavorText(pickVictoryFlavor(winner));
+      onComplete?.();
       return;
     }
     if (autoStartAfterDraw) {
-      // Tiny defer so React commits the order first.
-      timerRef.current = setTimeout(() => {
-        setPhase(mode === "auto" ? "spinning" : "idle");
-        if (mode === "manual") {
-          // In manual mode, kick off the first round so the streamer
-          // sees something happen immediately after Start.
-          eliminateOneRef.current?.();
-        }
-      }, 50);
+      // Tiny defer so React commits the order before the spin loop sees it.
+      timerRef.current = setTimeout(() => setPhase("spinning"), 50);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, winner, userSlots]);
@@ -195,16 +208,21 @@ export function EliminationWheel({
   useEffect(() => {
     if (open) return;
     if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
     for (const t of shuffleTimersRef.current) clearTimeout(t);
     shuffleTimersRef.current = [];
     setShuffleHighlights(new Set());
+    // Same reasoning as the open-reset: any spin tick that was mid-flight
+    // when the streamer hit close needs the lock cleared so the next
+    // open doesn't inherit a stuck `true`.
+    eliminatingRef.current = false;
   }, [open]);
 
   const speedMs = { slow: 1500, medium: 900, fast: 450 }[speed];
   const highlightMs = Math.max(180, Math.floor(speedMs * 0.55));
 
-  // Living = users with at least one ticket left. The winner is always
-  // in this list until the very end of the final spin.
+  // Living = users with at least one ticket left. Winner stays in this
+  // list until the final spin strips their opponent's last ticket.
   const livingUsers = useMemo(
     () => userSlots.filter((u) => (tickets[u.username] ?? u.originalTickets) > 0),
     [userSlots, tickets],
@@ -218,14 +236,10 @@ export function EliminationWheel({
     return others.length === 1 ? others[0]!.username : null;
   }, [livingUsers, winner]);
 
-  // Lightweight in-flight lock so rapid manual clicks (or an auto-tick
-  // racing a manual click) can't enqueue overlapping eliminations and
-  // double-decrement the same ticket.
+  // In-flight lock so back-to-back spin ticks (or HMR re-renders during
+  // dev) can't enqueue overlapping eliminations and double-decrement.
   const eliminatingRef = useRef(false);
 
-  // Strip one ticket from the next user in the elimination order.
-  // Wrapped in a ref so the auto-start effect can call the latest copy
-  // without a closure-over-stale-state bug.
   const eliminateOneRef = useRef<() => void>(() => {});
   function eliminateOne() {
     if (eliminatingRef.current) return;
@@ -236,8 +250,8 @@ export function EliminationWheel({
     setHighlight(targetUser);
     if (flavorEnabled) {
       const remainingForTarget = (tickets[targetUser] ?? 0) - 1;
-      // Only emit "eliminated!" flavor when this strip puts them at 0 —
-      // mid-stack ticket losses use a softer "ticket torched" line.
+      // Only emit the "ELIMINATED!" flavor when this strip puts them at 0;
+      // mid-stack ticket losses get a softer "torched" line.
       if (remainingForTarget <= 0) {
         setFlavorText(pickEliminationFlavor(targetUser));
       } else {
@@ -245,9 +259,8 @@ export function EliminationWheel({
       }
     }
     timerRef.current = setTimeout(() => {
-      // Atomically update tickets AND decide the next phase from the
-      // SAME post-update snapshot — derive `livingAfter` inside the
-      // updater so we never race against a stale closure.
+      // Atomically update tickets AND derive the next phase from the
+      // SAME post-update snapshot — never race against a stale closure.
       let livingAfter = 0;
       let opponentUsername: string | null = null;
       setTickets((prev) => {
@@ -270,25 +283,26 @@ export function EliminationWheel({
       setIndex((prev) => prev + 1);
 
       if (livingAfter <= 2) {
+        // Brief dramatic pause on "final two", then auto-trigger the
+        // pixel fight scene — no Final Spin button required.
         setPhase("final-two");
         if (flavorEnabled && winner) {
           setFlavorText(pickFinalTwoFlavor([winner, opponentUsername ?? "???"]));
         }
-      } else if (mode === "auto") {
-        timerRef.current = setTimeout(() => setPhase("spinning"), Math.floor(speedMs * 0.4));
       } else {
-        setPhase("idle");
+        // Always queue the next spin — the wheel runs to completion
+        // without any user input once Start Eliminations is clicked.
+        timerRef.current = setTimeout(() => setPhase("spinning"), Math.floor(speedMs * 0.4));
       }
       eliminatingRef.current = false;
     }, highlightMs);
   }
   eliminateOneRef.current = eliminateOne;
 
-  // Auto-progression: while spinning in auto mode, eliminate one per tick.
+  // Auto-progression: while spinning, eliminate one per tick.
   useEffect(() => {
     if (!open) return;
     if (phase !== "spinning") return;
-    if (mode !== "auto") return;
     if (index >= eliminationOrder.length) return;
     if (livingCount <= 2) {
       setPhase("final-two");
@@ -296,13 +310,24 @@ export function EliminationWheel({
     }
     eliminateOne();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, index, mode, open]);
+  }, [phase, index, open]);
+
+  // Auto-transition from final-two → fight after a dramatic pause so the
+  // streamer doesn't have to click anything. ~1.6s lets the flavor text
+  // land and the audience register the matchup before the swords come out.
+  useEffect(() => {
+    if (!open) return;
+    if (phase !== "final-two") return;
+    if (!winner || !finalOpponent) return;
+    const t = setTimeout(() => setPhase("fight"), 1600);
+    return () => clearTimeout(t);
+  }, [phase, open, winner, finalOpponent]);
 
   /**
-   * Single primary CTA. When no winner has been drawn yet AND the
-   * parent supplied `onDrawWinner`, we fire the draw + flag auto-start
-   * so the eliminations begin the moment the winner comes back. When a
-   * winner is already known we just kick off the spin directly.
+   * Single primary CTA. When no winner is drawn yet, fire the draw and
+   * flag auto-start so eliminations begin the moment the winner comes
+   * back. When a winner is already known (parent didn't supply
+   * `onDrawWinner` and pre-drew), kick off the spin directly.
    */
   function handleStart() {
     if (!winner && onDrawWinner) {
@@ -310,39 +335,37 @@ export function EliminationWheel({
       onDrawWinner();
       return;
     }
-    if (mode === "auto") {
-      setPhase("spinning");
-    } else {
-      eliminateOne();
-    }
+    setPhase("spinning");
   }
 
   /**
-   * Re-shuffle the unprocessed tail of the elimination order. The
-   * already-eliminated rounds are kept; only what's coming next gets
-   * randomized. Plays a brief glow animation across remaining users so
-   * the audience can see something happened.
+   * Pre-draw and during the brief idle window, Shuffle reshuffles the
+   * VISUAL card order so streamers can spice up the line-up before
+   * starting. Once the wheel is actively spinning we leave it alone.
+   * The animation flashes random cards purple so viewers can see the
+   * shuffle happen.
    */
   function handleShuffle() {
-    if (!winner || eliminationOrder.length === 0) return;
-    const tail = eliminationOrder.slice(index);
-    if (tail.length <= 1) return;
-    const reshuffled = shuffle(tail);
-    setEliminationOrder((prev) => [...prev.slice(0, index), ...reshuffled]);
+    if (userSlots.length < 2) return;
+    if (phase === "fight" || phase === "revealed") return;
+    if (phase === "shuffling") return;
 
-    const livingNames = livingUsers.map((u) => u.username);
+    const names = userSlots.map((u) => u.username);
+    const reshuffled = shuffle(names);
+    setDisplayOrder(reshuffled);
+
     for (const t of shuffleTimersRef.current) clearTimeout(t);
     shuffleTimersRef.current = [];
     const wasPhase = phase;
     setPhase("shuffling");
     if (flavorEnabled) setFlavorText("🔀 Reshuffling the bones…");
-    const frames = 12;
-    const frameMs = 90;
+    const frames = 10;
+    const frameMs = 80;
     for (let f = 0; f < frames; f++) {
       const t = setTimeout(() => {
-        const sample = shuffle(livingNames).slice(
+        const sample = shuffle(names).slice(
           0,
-          Math.max(2, Math.floor(livingNames.length / 3)),
+          Math.max(2, Math.floor(names.length / 3)),
         );
         setShuffleHighlights(new Set(sample));
       }, f * frameMs);
@@ -350,21 +373,12 @@ export function EliminationWheel({
     }
     const done = setTimeout(() => {
       setShuffleHighlights(new Set());
-      // Return to the prior phase so an auto-spin in progress resumes.
+      // Resume whatever phase we were in. If we were spinning, the
+      // auto-effect picks back up immediately.
       setPhase(wasPhase === "spinning" ? "spinning" : "idle");
       if (flavorEnabled) setFlavorText(null);
     }, frames * frameMs + 50);
     shuffleTimersRef.current.push(done);
-  }
-
-  /**
-   * Triggered by the streamer in the final-two phase. Plays the pixel
-   * fight; when it finishes we strip the opponent's remaining tickets
-   * to zero, mark the phase as revealed, and let the streamer dismiss
-   * via the Continue button rendered inside the same overlay.
-   */
-  function handleFinalSpin() {
-    setPhase("fight");
   }
 
   function finishFight() {
@@ -378,27 +392,41 @@ export function EliminationWheel({
 
   const isComplete = phase === "revealed";
 
-  // Screen-reader announcement for the current state of the wheel.
+  // The single CTA is shown only at the very start. Once Start is
+  // clicked, the wheel runs end-to-end on its own.
+  const showStartCta = phase === "idle" && !winner && !!onDrawWinner;
+  const startDisabled = !!drawingWinner || autoStartAfterDraw;
+
+  // Screen-reader announcement.
   const liveAnnouncement = isComplete && winner
     ? `Winner: ${winner}`
     : phase === "final-two"
-      ? `Final two remain. Spin once more to crown the winner.`
+      ? `Final two remain. The showdown begins.`
       : highlight
         ? `${highlight} loses a ticket.`
         : phase === "spinning"
-          ? `Spinning. ${livingCount} users still in.`
+          ? `Spinning. ${livingCount} contenders still in.`
           : "";
 
-  // Header CTA visibility helpers.
-  const showStartCta = phase === "idle" && (!winner || livingCount > 2);
-  const startLabel =
-    !winner && onDrawWinner
-      ? drawingWinner || autoStartAfterDraw
-        ? "Drawing…"
-        : "Start Eliminations"
-      : mode === "auto"
-        ? "Start"
-        : "Spin";
+  // Display the user cards in shuffled order; tolerate transient
+  // mismatches between displayOrder and userSlots (e.g. while entries
+  // refetch) by appending any users not yet in the order.
+  const orderedSlots = useMemo(() => {
+    const byName = new Map(userSlots.map((u) => [u.username, u] as const));
+    const seen = new Set<string>();
+    const out: UserSlot[] = [];
+    for (const name of displayOrder) {
+      const u = byName.get(name);
+      if (u && !seen.has(name)) {
+        out.push(u);
+        seen.add(name);
+      }
+    }
+    for (const u of userSlots) {
+      if (!seen.has(u.username)) out.push(u);
+    }
+    return out;
+  }, [userSlots, displayOrder]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -417,16 +445,16 @@ export function EliminationWheel({
                 Elimination Wheel
               </DialogTitle>
               <DialogDescription className="mt-1">
-                {phase === "idle" && !winner && onDrawWinner && (
-                  <>Ready when you are. Click below to start the eliminations — the goblin will pick a winner and the wheel will spin.</>
+                {phase === "idle" && !winner && (
+                  <>Ready when you are. Click Start Eliminations and the goblin will pick a winner — the wheel runs the rest itself.</>
                 )}
                 {phase === "idle" && winner && livingCount > 2 && (
-                  <>{mode === "auto" ? "Press Start to spin through eliminations." : "Click Spin to strip one ticket per round."}</>
+                  <>Drawing your champion…</>
                 )}
                 {phase === "spinning" && <>Spinning… {livingCount} contenders still in</>}
                 {phase === "shuffling" && <>🔀 Reshuffling the bones…</>}
-                {phase === "final-two" && <>🔥 The final two! Hit Final Spin to crown the winner.</>}
-                {phase === "fight" && <>⚔️ The showdown begins…</>}
+                {phase === "final-two" && <>🔥 The final two! The showdown begins…</>}
+                {phase === "fight" && <>⚔️ Final clash!</>}
                 {phase === "revealed" && winner && (
                   <>🏆 Winner: <span className="text-amber-400 font-bold">{winner}</span></>
                 )}
@@ -443,16 +471,15 @@ export function EliminationWheel({
                   phase === "shuffling" ||
                   phase === "fight" ||
                   phase === "final-two" ||
-                  !winner ||
-                  eliminationOrder.length - index <= 1
+                  userSlots.length < 2
                 }
-                title="Reshuffle remaining entries"
+                title="Reshuffle card order"
                 data-testid="button-wheel-shuffle"
               >
                 <Shuffle className="w-4 h-4" />
               </Button>
               <WheelSettingsPopover
-                mode={mode}
+                mode={_mode}
                 speed={speed}
                 flavorEnabled={flavorEnabled}
               />
@@ -484,12 +511,11 @@ export function EliminationWheel({
         {/* Slots grid + pixel-fight overlay share a single relative
             wrapper so the fight scene is scoped to the grid area only. */}
         <div className="relative flex-1 min-h-0">
-          {/* One card per USER. The ticket count badge ticks down on
-              every elimination round; users with 0 tickets are crossed
-              out with a skull but still rendered so the audience can
-              see the carnage. */}
+          {/* One card per USER, rendered in `displayOrder`. The ticket
+              badge ticks down on every elimination round; users at 0
+              are crossed out + skull-marked. */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 h-full overflow-y-auto p-1">
-            {userSlots.map((u) => {
+            {orderedSlots.map((u) => {
               const remaining = tickets[u.username] ?? u.originalTickets;
               const isOut = remaining <= 0;
               const isHighlighted = highlight === u.username;
@@ -512,10 +538,6 @@ export function EliminationWheel({
                     {isWinner && <Crown className="w-4 h-4 shrink-0 text-amber-400" />}
                     {isOut && !isWinner && <Skull className="w-4 h-4 shrink-0 opacity-60" />}
                     <span className="truncate flex-1">{u.username}</span>
-                    {/* Ticket badge: shown until the user is out. The
-                        original count stays visible alongside the
-                        remaining count so the audience can clock how
-                        much of a buffer each player started with. */}
                     {!isOut && (
                       <span
                         className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
@@ -537,11 +559,10 @@ export function EliminationWheel({
             })}
           </div>
 
-          {/* Pixel-art final showdown — replaces the old "winner
-              celebration" overlay entirely. The fight scene plays out,
+          {/* Pixel-art final showdown — replaces any separate winner
+              celebration overlay entirely. The fight scene plays out,
               then we swap to a winner-reveal panel inside the SAME
-              overlay with a Continue button that closes the wheel. No
-              second modal, no nested dialogs. */}
+              overlay with a Continue button that closes the wheel. */}
           {(phase === "fight" || phase === "revealed") && winner && finalOpponent && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg p-4">
               <div className="w-full max-w-3xl space-y-4">
@@ -549,19 +570,11 @@ export function EliminationWheel({
                   <PixelFightScene
                     winner={winner}
                     loser={finalOpponent}
-                    onDone={() => {
-                      // Micro-defer so the scene's final frame commits
-                      // before we swap state — without this React
-                      // batches and the cheer pose flickers.
-                      setTimeout(finishFight, 50);
-                    }}
+                    onDone={() => setTimeout(finishFight, 50)}
                   />
                 )}
                 {phase === "revealed" && (
-                  <div
-                    className="text-center space-y-4"
-                    data-testid="panel-winner-reveal"
-                  >
+                  <div className="text-center space-y-4" data-testid="panel-winner-reveal">
                     <Crown className="w-20 h-20 text-amber-400 drop-shadow-[0_0_25px_rgba(255,180,0,0.6)] mx-auto" />
                     <h2 className="text-3xl font-medieval text-amber-300">
                       We have a champion!
@@ -591,9 +604,8 @@ export function EliminationWheel({
             </div>
           )}
 
-          {/* Edge case: single-user giveaway (no opponent for the fight
-              scene). Show a plain reveal overlay so the streamer still
-              has a Continue button to close the wheel. */}
+          {/* Edge case: no opponent (single-user giveaway). Show a plain
+              reveal overlay with Continue so the wheel still closes. */}
           {phase === "revealed" && winner && !finalOpponent && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg p-4">
               <div className="text-center space-y-4" data-testid="panel-winner-reveal">
@@ -622,7 +634,10 @@ export function EliminationWheel({
           )}
         </div>
 
-        {/* Controls */}
+        {/* Footer — the ONLY button shown is "Start Eliminations" while
+            the wheel is idle pre-draw. Once the streamer clicks it, the
+            wheel auto-runs every phase to completion; the Continue
+            button inside the reveal overlay is the only other CTA. */}
         <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/50">
           <div className="text-xs text-muted-foreground font-mono">
             {livingCount} / {userSlots.length} contenders
@@ -631,41 +646,12 @@ export function EliminationWheel({
             {showStartCta && (
               <Button
                 onClick={handleStart}
-                disabled={!!drawingWinner || autoStartAfterDraw}
+                disabled={startDisabled}
                 className="gap-2 bg-primary text-primary-foreground font-bold"
                 data-testid="button-wheel-start"
               >
                 <Play className="w-4 h-4" />
-                {startLabel}
-              </Button>
-            )}
-            {phase === "spinning" && mode === "manual" && (
-              <Button onClick={eliminateOne} className="gap-2" data-testid="button-wheel-spin">
-                <Play className="w-4 h-4" />
-                Spin
-              </Button>
-            )}
-            {phase === "final-two" && (
-              <Button
-                onClick={handleFinalSpin}
-                className="gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold animate-pulse"
-                data-testid="button-wheel-final-spin"
-              >
-                <Crown className="w-4 h-4" />
-                Final Spin
-              </Button>
-            )}
-            {/* Revealed state has no extra footer button — the Continue
-                button lives inside the overlay panel for prominence. */}
-            {!isComplete && phase !== "fight" && (
-              <Button
-                onClick={onClose}
-                variant="outline"
-                className="gap-2"
-                data-testid="button-wheel-close"
-              >
-                <X className="w-4 h-4" />
-                Close
+                {startDisabled ? "Drawing…" : "Start Eliminations"}
               </Button>
             )}
           </div>
@@ -677,7 +663,8 @@ export function EliminationWheel({
 
 /**
  * Settings popover hung off the wheel header. Lets the streamer tweak
- * mode / speed / RPG-flavor toggle without leaving the modal.
+ * speed / flavor toggle without leaving the modal. (Mode is kept for
+ * legacy compat — the wheel itself always auto-progresses now.)
  */
 function WheelSettingsPopover({
   mode,

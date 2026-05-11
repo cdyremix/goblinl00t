@@ -91,6 +91,13 @@ export type FeatureId =
   | "advanced-analytics"
   | "priority-support";
 
+/**
+ * Full FeatureId catalogue, kept for server-side gating in
+ * `tier-helpers.ts` and dashboard `<FeatureLock>` checks. The plan
+ * cards on the marketing/account/tier-select surfaces render a
+ * trimmed-down list (`DISPLAYED_FEATURES` below) so streamers aren't
+ * drowning in 16 bullet points per tier.
+ */
 export const FEATURES: Feature[] = [
   { id: "core-chat", label: "Core chat commands", minTier: "free" },
   { id: "coin-economy", label: "Coin economy & inventory", minTier: "free" },
@@ -103,6 +110,25 @@ export const FEATURES: Feature[] = [
   { id: "all-themes", label: "All bot themes (Goblin + CS2)", minTier: "premium" },
   { id: "skin-trading", label: "Skin trading & Trade Office", minTier: "premium" },
   { id: "discord-webhooks", label: "Discord webhook announcements", minTier: "premium" },
+  { id: "custom-responses", label: "Custom command responses", minTier: "premium" },
+  { id: "full-ledger-export", label: "Full ledger history & CSV export", minTier: "premium" },
+  { id: "custom-bot-name", label: "Custom bot display name", minTier: "pro" },
+  { id: "advanced-analytics", label: "Advanced sponsorship analytics", minTier: "pro" },
+  { id: "priority-support", label: "Priority support & onboarding", minTier: "pro" },
+];
+
+/**
+ * Curated list shown on plan cards. Each row is a punchy one-liner
+ * that subsumes 1-2 underlying FeatureIds. Streamers get an at-a-
+ * glance comparison without scrolling a wall of text. Update labels
+ * here freely — gating still uses the full `FEATURES` table above.
+ */
+export const DISPLAYED_FEATURES: Feature[] = [
+  { id: "core-chat", label: "Chat commands, coin economy & inventory", minTier: "free" },
+  { id: "elimination-wheel", label: "Giveaways with the elimination wheel", minTier: "free" },
+  { id: "unlimited-giveaways", label: "Unlimited concurrent giveaways", minTier: "premium" },
+  { id: "skin-trading", label: "CS2 theme + skin trading & Trade Office", minTier: "premium" },
+  { id: "discord-webhooks", label: "Discord webhook winner announcements", minTier: "premium" },
   { id: "custom-responses", label: "Custom command responses", minTier: "premium" },
   { id: "full-ledger-export", label: "Full ledger history & CSV export", minTier: "premium" },
   { id: "custom-bot-name", label: "Custom bot display name", minTier: "pro" },

@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { PLANS, TIER_RANK, FEATURES, hasFeature } from "@/lib/plans";
+import { PLANS, TIER_RANK, DISPLAYED_FEATURES, hasFeature } from "@/lib/plans";
 import { BillingSection } from "@/components/billing-section";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
@@ -409,7 +409,7 @@ export function Account() {
                       the upgrade buys them. Single source of truth lives
                       in lib/plans.tsx#FEATURES. */}
                   <ul className="space-y-2 mb-6 flex-1">
-                    {FEATURES.map((feat) => {
+                    {DISPLAYED_FEATURES.map((feat) => {
                       const included = hasFeature(plan.id, feat.id);
                       return (
                         <li

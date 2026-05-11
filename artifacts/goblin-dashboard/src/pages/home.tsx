@@ -6,7 +6,7 @@ import {
   CheckCircle2, XCircle,
 } from "lucide-react";
 import { useAuth } from "@clerk/react";
-import { PLANS, FEATURES, hasFeature } from "@/lib/plans";
+import { PLANS, DISPLAYED_FEATURES, hasFeature } from "@/lib/plans";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -382,7 +382,7 @@ export function Home() {
                 <p className="text-sm text-muted-foreground mb-4">{plan.blurb}</p>
 
                 <ul className="space-y-1.5 mb-6 flex-1">
-                  {FEATURES.map((feat) => {
+                  {DISPLAYED_FEATURES.map((feat) => {
                     const included = hasFeature(plan.id, feat.id);
                     return (
                       <li

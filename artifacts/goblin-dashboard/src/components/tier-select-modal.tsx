@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { PLANS, FEATURES, hasFeature, type Plan } from "@/lib/plans";
+import { PLANS, DISPLAYED_FEATURES, hasFeature, type Plan } from "@/lib/plans";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -175,7 +175,7 @@ export function TierSelectModal({ open, onPicked }: Props) {
                   card shows the same rows so the streamer can compare
                   apples-to-apples. Mirrors the rank cards on /account. */}
               <ul className="space-y-1.5 mb-4 flex-1">
-                {FEATURES.map((feat) => {
+                {DISPLAYED_FEATURES.map((feat) => {
                   const included = hasFeature(plan.id, feat.id);
                   return (
                     <li
