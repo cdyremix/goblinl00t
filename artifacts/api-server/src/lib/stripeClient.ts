@@ -25,6 +25,21 @@ async function getCredentials(): Promise<{
   publishableKey: string;
   secretKey: string;
 }> {
+  // Self-host fallback. When the Replit connector env isn't present
+  // (e.g. running on a customer VPS via deploy/docker-compose.yml), fall
+  // back to plain `STRIPE_SECRET_KEY` + `STRIPE_PUBLISHABLE_KEY` env
+  // vars. The publishable key is also baked into the dashboard at build
+  // time via VITE_CLERK_PUBLISHABLE_KEY (separate flow); on the server
+  // side we only need it to round-trip through `getStripePublishableKey`
+  // for any code path that asks for it.
+  const directSecret = process.env["STRIPE_SECRET_KEY"];
+  if (directSecret) {
+    return {
+      publishableKey: process.env["STRIPE_PUBLISHABLE_KEY"] ?? "",
+      secretKey: directSecret,
+    };
+  }
+
   const hostname = process.env["REPLIT_CONNECTORS_HOSTNAME"];
   const xReplitToken = process.env["REPL_IDENTITY"]
     ? "repl " + process.env["REPL_IDENTITY"]
@@ -33,7 +48,9 @@ async function getCredentials(): Promise<{
       : null;
 
   if (!xReplitToken) {
-    throw new Error("X-Replit-Token not found for repl/depl");
+    throw new Error(
+      "Stripe credentials not configured: set STRIPE_SECRET_KEY (self-host) or run inside a Replit env with the Stripe connector.",
+    );
   }
   if (!hostname) {
     throw new Error("REPLIT_CONNECTORS_HOSTNAME not set");

@@ -1,0 +1,152 @@
+# Goblin L00t — production compose stack.
+#
+# Three services:
+#   * db    — Postgres 16 (named volume `goblin-pgdata`)
+#   * app   — Node 24 (api-server bundle + tmi.js bot)
+#   * nginx — reverse proxy + static dashboard host (binds :80 on the host)
+#
+# Deploy steps live in deploy/README.md. This file is the source of truth
+# for service topology — nginx.conf and Dockerfile only know about names
+# defined here (`app`, `db`).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-goblin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-goblin}
+    volumes:
+      - goblin-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-goblin} -d ${POSTGRES_DB:-goblin}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Optional: expose 5432 to the host if you want to connect with psql /
+    # a GUI from outside. Comment back in only on a trusted network.
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        # Vite needs the Clerk publishable key at BUILD time — it gets
+        # baked into the static dashboard bundle. Re-build the image
+        # whenever you rotate it.
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:?set in .env}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # ---- Database (constructed from the postgres service above) ----
+      DATABASE_URL: postgres://${POSTGRES_USER:-goblin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-goblin}
+
+      # ---- Domain ----
+      # The codebase reads REPLIT_DOMAINS for the Stripe webhook URL and
+      # for a couple of OAuth fallbacks. Set it to your bare prod host
+      # (no scheme, no path). Leave the var name as REPLIT_DOMAINS — the
+      # code keys off it directly.
+      REPLIT_DOMAINS: ${PUBLIC_HOST:?set PUBLIC_HOST=goblinl00t.com in .env}
+      APP_BASE_URL: https://${PUBLIC_HOST}
+
+      # ---- Auth: Clerk ----
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:?}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?}
+
+      # ---- Auth: Twitch OAuth (sign-in + bot) ----
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:?}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:?}
+      TWITCH_REDIRECT_URI: https://${PUBLIC_HOST}/api/auth/twitch/callback
+      TWITCH_BOT_USERNAME: ${TWITCH_BOT_USERNAME:-goblinl00t}
+      TWITCH_CHANNEL: ${TWITCH_CHANNEL:-goblinl00t}
+      TWITCH_OAUTH_TOKEN: ${TWITCH_OAUTH_TOKEN:-}
+
+      # ---- Sessions / signing ----
+      SESSION_SECRET: ${SESSION_SECRET:?generate with: openssl rand -hex 32}
+
+      # ---- Admin allowlist ----
+      # Comma-separated emails. First-time sign-in with one of these
+      # auto-grants isAdmin + flips subscriptionTier to pro. Defaults to
+      # c.borawa@gmail.com if omitted.
+      SUPER_USER_EMAILS: ${SUPER_USER_EMAILS:-}
+
+      # ---- Maintenance mode kill-switch ----
+      # When truthy, forces maintenance ON regardless of the admin toggle.
+      # Leave unset for normal operation; flip to "1" if you ever need a
+      # belt-and-suspenders lockdown without touching the DB.
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-}
+
+      # ---- Stripe ----
+      # The repo's Replit-managed Stripe integration won't be present on
+      # your VPS. `stripeClient.ts` falls back to these env vars when
+      # the Replit connector env isn't around.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+
+      # ---- DB sync at boot ----
+      RUN_DB_PUSH: ${RUN_DB_PUSH:-true}
+
+      # ---- Dev sign-in ----
+      # MUST stay unset (or "false") in production. Defense-in-depth: the
+      # route is also gated on NODE_ENV !== "production".
+      ENABLE_DEV_SIGN_IN: "false"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+      # Hold off until the dashboard static bundle has been copied into
+      # the shared `goblin-dashboard` volume. Without this, the first
+      # ~second of nginx is serving an empty docroot.
+      init-static:
+        condition: service_completed_successfully
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Serve the dashboard static bundle straight out of the app image.
+      # Volume-from-image: copy on first run via the `init-static` service
+      # below, or just bind-mount the host path you build to. We use a
+      # named volume populated by an init container.
+      - goblin-dashboard:/var/www/dashboard:ro
+
+  # Tiny one-shot that copies the dashboard `dist/public` from the app
+  # image into the shared `goblin-dashboard` volume so nginx can serve it.
+  # Re-runs on every `docker compose up` and overwrites — that's correct
+  # behavior; it makes `docker compose up -d --build app init-static`
+  # the deploy command.
+  init-static:
+    image: goblinl00t-app
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:?}
+    entrypoint: ["/bin/sh","-c"]
+    command:
+      - "rm -rf /out/* && cp -R /app/artifacts/goblin-dashboard/dist/public/. /out/"
+    volumes:
+      - goblin-dashboard:/out
+    restart: "no"
+
+volumes:
+  goblin-pgdata:
+  goblin-dashboard:

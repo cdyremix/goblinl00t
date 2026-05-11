@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/.next
+**/.cache
+**/.turbo
+**/.expo
+.git
+.local
+.cache
+.config
+.replit
+attached_assets
+deploy/.env
+*.log
+*.tsbuildinfo
+.DS_Store
