@@ -28,17 +28,36 @@ export const GiveawayStatus = {
   ended: "ended",
 } as const;
 
+/**
+ * @nullable
+ */
+export type GiveawayMinSubTier =
+  | (typeof GiveawayMinSubTier)[keyof typeof GiveawayMinSubTier]
+  | null;
+
+export const GiveawayMinSubTier = {
+  NUMBER_1000: "1000",
+  NUMBER_2000: "2000",
+  NUMBER_3000: "3000",
+} as const;
+
 export interface Giveaway {
   id: number;
   title: string;
   prize: string;
   /** @nullable */
+  prizeAssetId: string | null;
+  /** @nullable */
+  prizeIconUrl: string | null;
+  /** @nullable */
   description: string | null;
   status: GiveawayStatus;
   channel: string;
   keyword: string;
+  requireFollower: boolean;
+  subscriberOnly: boolean;
   /** @nullable */
-  maxEntries: number | null;
+  minSubTier: GiveawayMinSubTier;
   /** @nullable */
   winnerId: number | null;
   /** @nullable */
@@ -51,16 +70,29 @@ export interface Giveaway {
   endedAt: string | null;
 }
 
+export type GiveawayInputMinSubTier =
+  (typeof GiveawayInputMinSubTier)[keyof typeof GiveawayInputMinSubTier];
+
+export const GiveawayInputMinSubTier = {
+  NUMBER_1000: "1000",
+  NUMBER_2000: "2000",
+  NUMBER_3000: "3000",
+} as const;
+
 export interface GiveawayInput {
   /** @minLength 1 */
   title: string;
   /** @minLength 1 */
   prize: string;
+  prizeAssetId?: string;
+  prizeIconUrl?: string;
   description?: string;
   /** @minLength 1 */
   keyword: string;
-  maxEntries?: number;
   channel?: string;
+  requireFollower?: boolean;
+  subscriberOnly?: boolean;
+  minSubTier?: GiveawayInputMinSubTier;
 }
 
 export interface GiveawayEntry {
@@ -234,6 +266,26 @@ export interface SteamInventory {
   totalCount: number;
 }
 
+export interface PointsBalance {
+  username: string;
+  earned: number;
+  redeemed: number;
+  balance: number;
+  costPerEntry: number;
+}
+
+export interface RedeemEntriesInput {
+  username: string;
+  /** @minimum 1 */
+  entries: number;
+}
+
+export interface RedemptionResult {
+  ticketsAdded: number;
+  pointsSpent: number;
+  balanceAfter: number;
+}
+
 export type ListGiveawaysParams = {
   status?: ListGiveawaysStatus;
   limit?: number;
@@ -247,6 +299,10 @@ export const ListGiveawaysStatus = {
   active: "active",
   ended: "ended",
 } as const;
+
+export type GetMyPointsParams = {
+  username: string;
+};
 
 export type GetRecentLootParams = {
   limit?: number;

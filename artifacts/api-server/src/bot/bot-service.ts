@@ -5,6 +5,8 @@ import { logger } from "../lib/logger";
 import { rollLoot, getRarityEmoji } from "./loot-tables";
 import { pickRandom, formatMessage } from "./goblin-phrases";
 import { getThemePhrases, setActiveTheme, getActiveTheme, type BotTheme } from "./bot-themes";
+import { getPointsBalance, REDEEM_COST_PER_ENTRY, redeemEntriesForUser } from "./points";
+import { checkGating, type Gateable } from "./gating";
 
 export type CommandTheme = "goblin" | "cs2" | "both";
 
@@ -24,6 +26,8 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
   "!hoard":      { description: "Check your goblin hoard",                  cooldownSeconds: 15, theme: "goblin" },
   "!feedgoblin": { description: "Feed the goblin a snack",                  cooldownSeconds: 10, theme: "goblin" },
   "!tradeurl":   { description: "Submit your Steam trade URL after winning a skin", cooldownSeconds: 10, theme: "cs2" },
+  "!redeem":     { description: "Redeem loot points for extra giveaway entries (100 pts = 1 entry)", cooldownSeconds: 5, theme: "both" },
+  "!points":     { description: "Check your loot point balance",            cooldownSeconds: 10, theme: "both" },
 };
 
 interface CustomCommandCacheEntry {
@@ -175,6 +179,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const keyword = active.keyword ?? "!enter";
       if (command !== keyword.toLowerCase()) return;
 
+      const gate = await checkGating(active as Gateable, tags, channel);
+      if (!gate.allowed) {
+        void client?.say(channel, `${username}: ${gate.reason}`);
+        return;
+      }
+
       const [existing] = await db
         .select()
         .from(giveawayEntriesTable)
@@ -264,6 +274,49 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .set({ steamTradeUrl: tradeUrl })
         .where(eq(tradeFulfillmentsTable.id, pending.id));
       void client?.say(channel, `✅ ${username}: Trade URL saved! The streamer will send your skin soon 🎁`);
+    }
+
+    if (command === "!points") {
+      const { balance } = await getPointsBalance(username);
+      const entries = Math.floor(balance / REDEEM_COST_PER_ENTRY);
+      void client?.say(channel, `💰 ${username}: You have ${balance} loot points (worth ${entries} extra giveaway ${entries === 1 ? "entry" : "entries"} at ${REDEEM_COST_PER_ENTRY} pts each).`);
+    }
+
+    if (command === "!redeem") {
+      const requested = Math.max(1, Math.floor(Number(parts[1] ?? 1)));
+      const [active] = await db
+        .select()
+        .from(giveawaysTable)
+        .where(eq(giveawaysTable.status, "active"))
+        .limit(1);
+      if (!active) {
+        void client?.say(channel, `${username}: No active giveaway to redeem into right now.`);
+        return;
+      }
+
+      // Gate redemption the same as a normal !enter (cheap fail-fast before the txn).
+      const gate = await checkGating(active as Gateable, tags, channel);
+      if (!gate.allowed) {
+        void client?.say(channel, `${username}: ${gate.reason}`);
+        return;
+      }
+
+      const result = await redeemEntriesForUser({
+        giveawayId: active.id,
+        username,
+        entries: requested,
+      });
+      if (!result.ok) {
+        if (result.code === "insufficient" && typeof result.balance === "number") {
+          const affordable = Math.floor(result.balance / REDEEM_COST_PER_ENTRY);
+          void client?.say(channel, `${username}: Not enough points — ${result.message}. You can afford ${affordable} extra ${affordable === 1 ? "entry" : "entries"}.`);
+        } else {
+          void client?.say(channel, `${username}: ${result.message}`);
+        }
+        return;
+      }
+
+      void client?.say(channel, `🎟️ ${username} redeemed ${result.pointsSpent} pts for ${result.ticketsAdded} extra ${result.ticketsAdded === 1 ? "entry" : "entries"}! Balance: ${result.balanceAfter} pts.`);
     }
 
     if (command === "!giveaway") {

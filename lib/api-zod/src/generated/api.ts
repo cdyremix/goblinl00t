@@ -51,11 +51,22 @@ export const ListGiveawaysResponseItem = zod.object({
   id: zod.number(),
   title: zod.string(),
   prize: zod.string(),
+  prizeAssetId: zod.string().nullable(),
+  prizeIconUrl: zod.string().nullable(),
   description: zod.string().nullable(),
   status: zod.enum(["pending", "active", "ended"]),
   channel: zod.string(),
   keyword: zod.string(),
-  maxEntries: zod.number().nullable(),
+  requireFollower: zod.boolean(),
+  subscriberOnly: zod.boolean(),
+  minSubTier: zod
+    .union([
+      zod.literal("1000"),
+      zod.literal("2000"),
+      zod.literal("3000"),
+      zod.literal(null),
+    ])
+    .nullable(),
   winnerId: zod.number().nullable(),
   winnerUsername: zod.string().nullable(),
   entryCount: zod.number(),
@@ -72,10 +83,14 @@ export const ListGiveawaysResponse = zod.array(ListGiveawaysResponseItem);
 export const CreateGiveawayBody = zod.object({
   title: zod.string().min(1),
   prize: zod.string().min(1),
+  prizeAssetId: zod.string().optional(),
+  prizeIconUrl: zod.string().optional(),
   description: zod.string().optional(),
   keyword: zod.string().min(1),
-  maxEntries: zod.number().optional(),
   channel: zod.string().optional(),
+  requireFollower: zod.boolean().optional(),
+  subscriberOnly: zod.boolean().optional(),
+  minSubTier: zod.enum(["1000", "2000", "3000"]).optional(),
 });
 
 /**
@@ -86,11 +101,22 @@ export const GetCurrentGiveawayResponse = zod.object({
     id: zod.number(),
     title: zod.string(),
     prize: zod.string(),
+    prizeAssetId: zod.string().nullable(),
+    prizeIconUrl: zod.string().nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
     keyword: zod.string(),
-    maxEntries: zod.number().nullable(),
+    requireFollower: zod.boolean(),
+    subscriberOnly: zod.boolean(),
+    minSubTier: zod
+      .union([
+        zod.literal("1000"),
+        zod.literal("2000"),
+        zod.literal("3000"),
+        zod.literal(null),
+      ])
+      .nullable(),
     winnerId: zod.number().nullable(),
     winnerUsername: zod.string().nullable(),
     entryCount: zod.number(),
@@ -121,11 +147,22 @@ export const GetGiveawayResponse = zod.object({
     id: zod.number(),
     title: zod.string(),
     prize: zod.string(),
+    prizeAssetId: zod.string().nullable(),
+    prizeIconUrl: zod.string().nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
     keyword: zod.string(),
-    maxEntries: zod.number().nullable(),
+    requireFollower: zod.boolean(),
+    subscriberOnly: zod.boolean(),
+    minSubTier: zod
+      .union([
+        zod.literal("1000"),
+        zod.literal("2000"),
+        zod.literal("3000"),
+        zod.literal(null),
+      ])
+      .nullable(),
     winnerId: zod.number().nullable(),
     winnerUsername: zod.string().nullable(),
     entryCount: zod.number(),
@@ -155,11 +192,22 @@ export const StartGiveawayResponse = zod.object({
   id: zod.number(),
   title: zod.string(),
   prize: zod.string(),
+  prizeAssetId: zod.string().nullable(),
+  prizeIconUrl: zod.string().nullable(),
   description: zod.string().nullable(),
   status: zod.enum(["pending", "active", "ended"]),
   channel: zod.string(),
   keyword: zod.string(),
-  maxEntries: zod.number().nullable(),
+  requireFollower: zod.boolean(),
+  subscriberOnly: zod.boolean(),
+  minSubTier: zod
+    .union([
+      zod.literal("1000"),
+      zod.literal("2000"),
+      zod.literal("3000"),
+      zod.literal(null),
+    ])
+    .nullable(),
   winnerId: zod.number().nullable(),
   winnerUsername: zod.string().nullable(),
   entryCount: zod.number(),
@@ -180,11 +228,22 @@ export const EndGiveawayResponse = zod.object({
     id: zod.number(),
     title: zod.string(),
     prize: zod.string(),
+    prizeAssetId: zod.string().nullable(),
+    prizeIconUrl: zod.string().nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
     keyword: zod.string(),
-    maxEntries: zod.number().nullable(),
+    requireFollower: zod.boolean(),
+    subscriberOnly: zod.boolean(),
+    minSubTier: zod
+      .union([
+        zod.literal("1000"),
+        zod.literal("2000"),
+        zod.literal("3000"),
+        zod.literal(null),
+      ])
+      .nullable(),
     winnerId: zod.number().nullable(),
     winnerUsername: zod.string().nullable(),
     entryCount: zod.number(),
@@ -213,11 +272,22 @@ export const RerollGiveawayResponse = zod.object({
     id: zod.number(),
     title: zod.string(),
     prize: zod.string(),
+    prizeAssetId: zod.string().nullable(),
+    prizeIconUrl: zod.string().nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
     keyword: zod.string(),
-    maxEntries: zod.number().nullable(),
+    requireFollower: zod.boolean(),
+    subscriberOnly: zod.boolean(),
+    minSubTier: zod
+      .union([
+        zod.literal("1000"),
+        zod.literal("2000"),
+        zod.literal("3000"),
+        zod.literal(null),
+      ])
+      .nullable(),
     winnerId: zod.number().nullable(),
     winnerUsername: zod.string().nullable(),
     entryCount: zod.number(),
@@ -251,6 +321,39 @@ export const GetGiveawayEntriesResponseItem = zod.object({
 export const GetGiveawayEntriesResponse = zod.array(
   GetGiveawayEntriesResponseItem,
 );
+
+/**
+ * @summary Get loot point balance for a Twitch username
+ */
+export const GetMyPointsQueryParams = zod.object({
+  username: zod.coerce.string(),
+});
+
+export const GetMyPointsResponse = zod.object({
+  username: zod.string(),
+  earned: zod.number(),
+  redeemed: zod.number(),
+  balance: zod.number(),
+  costPerEntry: zod.number(),
+});
+
+/**
+ * @summary Redeem loot points for extra entries (manual override)
+ */
+export const RedeemEntriesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RedeemEntriesBody = zod.object({
+  username: zod.string(),
+  entries: zod.number().min(1),
+});
+
+export const RedeemEntriesResponse = zod.object({
+  ticketsAdded: zod.number(),
+  pointsSpent: zod.number(),
+  balanceAfter: zod.number(),
+});
 
 /**
  * @summary Get recent loot drops

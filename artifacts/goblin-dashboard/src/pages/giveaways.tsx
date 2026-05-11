@@ -6,52 +6,84 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Plus, Trophy, ChevronRight, Clock, Hash } from "lucide-react";
+import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { InventoryPicker, type PickedItem } from "@/components/inventory-picker";
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  prize: z.string().min(1, "Prize is required"),
+  prize: z.string().min(1, "Pick a prize from your inventory"),
+  prizeAssetId: z.string().optional(),
+  prizeIconUrl: z.string().optional(),
   keyword: z.string().min(1, "Keyword is required").regex(/^\w+$/, "Must be a single word (no spaces)"),
-  maxEntries: z.coerce.number().min(1).optional().or(z.literal("")),
   description: z.string().optional(),
+  requireFollower: z.boolean().default(false),
+  subscriberOnly: z.boolean().default(false),
+  minSubTier: z.enum(["1000", "2000", "3000"]).optional(),
 });
+
+type FormValues = z.infer<typeof formSchema>;
 
 export function Giveaways() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [filter, setFilter] = useState<string>("all");
-  
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickedIcon, setPickedIcon] = useState<string | null>(null);
+
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
-  
+
   const createMutation = useCreateGiveaway();
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: "",
       prize: "",
+      prizeAssetId: undefined,
+      prizeIconUrl: undefined,
       keyword: "loot",
-      maxEntries: undefined,
       description: "",
+      requireFollower: false,
+      subscriberOnly: false,
+      minSubTier: undefined,
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  const subscriberOnly = form.watch("subscriberOnly");
+
+  function handlePick(item: PickedItem) {
+    form.setValue("prize", item.marketHashName, { shouldValidate: true });
+    form.setValue("prizeAssetId", item.assetId);
+    form.setValue("prizeIconUrl", item.iconUrl);
+    setPickedIcon(item.iconUrl);
+    setPickerOpen(false);
+  }
+
+  function onSubmit(values: FormValues) {
     createMutation.mutate(
       {
         data: {
-          ...values,
-          maxEntries: values.maxEntries === "" ? undefined : values.maxEntries as number,
-        }
+          title: values.title,
+          prize: values.prize,
+          prizeAssetId: values.prizeAssetId,
+          prizeIconUrl: values.prizeIconUrl,
+          keyword: values.keyword,
+          description: values.description,
+          requireFollower: values.requireFollower,
+          subscriberOnly: values.subscriberOnly,
+          minSubTier: values.subscriberOnly ? values.minSubTier : undefined,
+        },
       },
       {
         onSuccess: () => {
@@ -60,6 +92,7 @@ export function Giveaways() {
             description: "Ready to be started from the hoard list.",
           });
           form.reset();
+          setPickedIcon(null);
           queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
         },
         onError: () => {
@@ -68,12 +101,12 @@ export function Giveaways() {
             description: "The goblin refused. Try again.",
             variant: "destructive",
           });
-        }
+        },
       }
     );
   }
 
-  const filteredGiveaways = giveaways?.filter(g => {
+  const filteredGiveaways = giveaways?.filter((g) => {
     if (filter === "all") return true;
     return g.status === filter;
   });
@@ -112,6 +145,7 @@ export function Giveaways() {
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={form.control}
                     name="prize"
@@ -119,43 +153,54 @@ export function Giveaways() {
                       <FormItem>
                         <FormLabel>Prize</FormLabel>
                         <FormControl>
-                          <Input placeholder="10,000 Gold" {...field} className="bg-background" />
+                          <button
+                            type="button"
+                            onClick={() => setPickerOpen(true)}
+                            className="w-full flex items-center gap-3 p-3 rounded-md border border-input bg-background text-left hover:border-primary/50 transition-colors"
+                            data-testid="button-open-prize-picker"
+                          >
+                            {pickedIcon ? (
+                              <img
+                                src={pickedIcon}
+                                alt=""
+                                className="w-12 h-12 object-contain rounded bg-background/50 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 flex items-center justify-center rounded bg-muted shrink-0">
+                                <Package className="w-5 h-5 text-muted-foreground" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              {field.value ? (
+                                <span className="text-sm font-medium text-foreground truncate block">{field.value}</span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">Click to pick from your CS2 inventory</span>
+                              )}
+                            </div>
+                          </button>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="keyword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Keyword</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">!</span>
-                              <Input placeholder="loot" {...field} className="pl-6 bg-background" />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="maxEntries"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Max Winners</FormLabel>
-                          <FormControl>
-                            <Input type="number" placeholder="1" {...field} className="bg-background" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="keyword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Keyword</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">!</span>
+                            <Input placeholder="loot" {...field} className="pl-6 bg-background" />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <FormField
                     control={form.control}
                     name="description"
@@ -169,6 +214,93 @@ export function Giveaways() {
                       </FormItem>
                     )}
                   />
+
+                  {/* Gating */}
+                  <div className="space-y-3 rounded-md border border-border/50 bg-background/30 p-3">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Entry Requirements</p>
+
+                    <FormField
+                      control={form.control}
+                      name="requireFollower"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between gap-3 space-y-0">
+                          <div className="flex items-center gap-2">
+                            <Heart className="w-4 h-4 text-pink-400" />
+                            <Label htmlFor="req-follower" className="text-sm font-normal cursor-pointer">
+                              Followers only
+                            </Label>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              id="req-follower"
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="switch-require-follower"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="subscriberOnly"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between gap-3 space-y-0">
+                          <div className="flex items-center gap-2">
+                            <Star className="w-4 h-4 text-purple-400" />
+                            <Label htmlFor="sub-only" className="text-sm font-normal cursor-pointer">
+                              Subscribers only
+                            </Label>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              id="sub-only"
+                              checked={field.value}
+                              onCheckedChange={(v) => {
+                                field.onChange(v);
+                                if (!v) form.setValue("minSubTier", undefined);
+                              }}
+                              data-testid="switch-subscriber-only"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    {subscriberOnly && (
+                      <FormField
+                        control={form.control}
+                        name="minSubTier"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">Minimum tier</FormLabel>
+                            <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
+                              <FormControl>
+                                <SelectTrigger className="bg-background" data-testid="select-min-tier">
+                                  <SelectValue placeholder="Any tier" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="1000">Tier 1+</SelectItem>
+                                <SelectItem value="2000">Tier 2+</SelectItem>
+                                <SelectItem value="3000">Tier 3 only</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/20 p-3 text-xs text-muted-foreground">
+                    <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      Viewers can also <span className="font-mono text-amber-400">!redeem</span> loot points for extra entries (100 pts = 1 entry).
+                    </span>
+                  </div>
+
                   <Button type="submit" disabled={createMutation.isPending} className="w-full font-bold">
                     {createMutation.isPending ? "Forging..." : "Add to Hoard"}
                   </Button>
@@ -203,22 +335,38 @@ export function Giveaways() {
             ) : filteredGiveaways && filteredGiveaways.length > 0 ? (
               filteredGiveaways.map((giveaway) => {
                 const isActive = giveaway.status === "active";
-                const isEnded = giveaway.status === "ended";
                 const isCurrent = currentGiveaway?.giveaway?.id === giveaway.id;
 
                 return (
                   <Link key={giveaway.id} href={`/giveaway/${giveaway.id}`}>
-                    <Card className={`border-border/50 hover:border-primary/50 transition-all cursor-pointer group ${isActive ? 'bg-primary/5' : 'bg-card/50'}`}>
+                    <Card className={`border-border/50 hover:border-primary/50 transition-all cursor-pointer group ${isActive ? "bg-primary/5" : "bg-card/50"}`}>
                       <CardContent className="p-5 flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-1">
-                            <h3 className="font-bold text-lg text-foreground truncate group-hover:text-primary transition-colors">{giveaway.title}</h3>
-                            <StatusBadge status={giveaway.status} isCurrent={isCurrent} />
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> {giveaway.prize}</span>
-                            <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> !{giveaway.keyword}</span>
-                            <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {new Date(giveaway.createdAt).toLocaleDateString()}</span>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {giveaway.prizeIconUrl && (
+                            <img
+                              src={giveaway.prizeIconUrl}
+                              alt=""
+                              className="w-12 h-12 object-contain rounded bg-background/40 shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3 mb-1">
+                              <h3 className="font-bold text-lg text-foreground truncate group-hover:text-primary transition-colors">{giveaway.title}</h3>
+                              <StatusBadge status={giveaway.status} isCurrent={isCurrent} />
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                              <span className="flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> {giveaway.prize}</span>
+                              <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> !{giveaway.keyword}</span>
+                              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {new Date(giveaway.createdAt).toLocaleDateString()}</span>
+                              {giveaway.requireFollower && (
+                                <span className="flex items-center gap-1 text-pink-400"><Heart className="w-3 h-3" /> followers</span>
+                              )}
+                              {giveaway.subscriberOnly && (
+                                <span className="flex items-center gap-1 text-purple-400">
+                                  <Star className="w-3 h-3" /> subs{giveaway.minSubTier ? ` T${Number(giveaway.minSubTier) / 1000}+` : ""}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="shrink-0 flex items-center gap-4">
@@ -241,17 +389,19 @@ export function Giveaways() {
           </div>
         </div>
       </div>
+
+      <InventoryPicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={handlePick} />
     </div>
   );
 }
 
-function FilterButton({ active, onClick, children }: { active: boolean, onClick: () => void, children: React.ReactNode }) {
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
       className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-        active 
-          ? "bg-primary text-primary-foreground shadow-[0_0_10px_rgba(255,180,0,0.3)]" 
+        active
+          ? "bg-primary text-primary-foreground shadow-[0_0_10px_rgba(255,180,0,0.3)]"
           : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-border/80"
       }`}
     >
@@ -260,7 +410,7 @@ function FilterButton({ active, onClick, children }: { active: boolean, onClick:
   );
 }
 
-function StatusBadge({ status, isCurrent }: { status: string, isCurrent?: boolean }) {
+function StatusBadge({ status, isCurrent }: { status: string; isCurrent?: boolean }) {
   if (status === "active") return <Badge className="bg-primary/20 text-primary border-primary/30">ACTIVE {isCurrent && "(LIVE)"}</Badge>;
   if (status === "pending") return <Badge variant="outline" className="text-muted-foreground border-border">PENDING</Badge>;
   if (status === "ended") return <Badge variant="secondary" className="bg-muted text-muted-foreground">ENDED</Badge>;

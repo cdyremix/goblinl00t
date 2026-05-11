@@ -20,10 +20,14 @@ function serializeGiveaway(g: typeof giveawaysTable.$inferSelect, entryCount: nu
     title: g.title,
     prize: g.prize,
     description: g.description ?? null,
+    prizeAssetId: g.prizeAssetId ?? null,
+    prizeIconUrl: g.prizeIconUrl ?? null,
     status: g.status,
     channel: g.channel,
     keyword: g.keyword,
-    maxEntries: g.maxEntries ?? null,
+    requireFollower: g.requireFollower,
+    subscriberOnly: g.subscriberOnly,
+    minSubTier: g.minSubTier ?? null,
     winnerId: g.winnerId ?? null,
     winnerUsername: g.winnerUsername ?? null,
     entryCount,
@@ -64,10 +68,14 @@ router.post("/giveaway", async (req, res) => {
     .values({
       title: body.title,
       prize: body.prize,
+      prizeAssetId: body.prizeAssetId ?? null,
+      prizeIconUrl: body.prizeIconUrl ?? null,
       description: body.description ?? null,
       keyword: body.keyword ?? "!enter",
-      maxEntries: body.maxEntries ?? null,
       channel: body.channel ?? "goblinl00t",
+      requireFollower: body.requireFollower ?? false,
+      subscriberOnly: body.subscriberOnly ?? false,
+      minSubTier: body.minSubTier ?? null,
     })
     .returning();
   res.status(201).json(serializeGiveaway(giveaway!, 0));

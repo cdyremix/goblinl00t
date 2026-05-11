@@ -5,15 +5,20 @@
  * Goblin L00t API - Twitch bot + giveaway dashboard
  * OpenAPI spec version: 0.1.0
  */
+import type { GiveawayInputMinSubTier } from "./giveawayInputMinSubTier";
 
 export interface GiveawayInput {
   /** @minLength 1 */
   title: string;
   /** @minLength 1 */
   prize: string;
+  prizeAssetId?: string;
+  prizeIconUrl?: string;
   description?: string;
   /** @minLength 1 */
   keyword: string;
-  maxEntries?: number;
   channel?: string;
+  requireFollower?: boolean;
+  subscriberOnly?: boolean;
+  minSubTier?: GiveawayInputMinSubTier;
 }

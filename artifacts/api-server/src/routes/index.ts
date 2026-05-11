@@ -10,6 +10,7 @@ import authRouter from "./auth";
 import settingsRouter from "./settings";
 import steamRouter from "./steam";
 import tradeFulfillmentsRouter from "./trade-fulfillments";
+import pointsRouter from "./points";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(authRouter);
 router.use(settingsRouter);
 router.use(steamRouter);
 router.use(tradeFulfillmentsRouter);
+router.use(pointsRouter);
 
 export default router;

@@ -23,6 +23,7 @@ import type {
   CommandStat,
   ConnectSteam200,
   DisconnectSteam200,
+  GetMyPointsParams,
   GetRecentLootParams,
   GetTopLootersParams,
   Giveaway,
@@ -33,6 +34,9 @@ import type {
   HealthStatus,
   ListGiveawaysParams,
   LootDrop,
+  PointsBalance,
+  RedeemEntriesInput,
+  RedemptionResult,
   StatsOverview,
   SteamInventory,
   TradeFulfillment,
@@ -960,6 +964,187 @@ export function useGetGiveawayEntries<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get loot point balance for a Twitch username
+ */
+export const getGetMyPointsUrl = (params: GetMyPointsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/points/me?${stringifiedParams}`
+    : `/api/points/me`;
+};
+
+export const getMyPoints = async (
+  params: GetMyPointsParams,
+  options?: RequestInit,
+): Promise<PointsBalance> => {
+  return customFetch<PointsBalance>(getGetMyPointsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyPointsQueryKey = (params?: GetMyPointsParams) => {
+  return [`/api/points/me`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMyPointsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyPoints>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetMyPointsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMyPoints>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyPointsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyPoints>>> = ({
+    signal,
+  }) => getMyPoints(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPoints>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyPointsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyPoints>>
+>;
+export type GetMyPointsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get loot point balance for a Twitch username
+ */
+
+export function useGetMyPoints<
+  TData = Awaited<ReturnType<typeof getMyPoints>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetMyPointsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMyPoints>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyPointsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Redeem loot points for extra entries (manual override)
+ */
+export const getRedeemEntriesUrl = (id: number) => {
+  return `/api/giveaway/${id}/redeem`;
+};
+
+export const redeemEntries = async (
+  id: number,
+  redeemEntriesInput: RedeemEntriesInput,
+  options?: RequestInit,
+): Promise<RedemptionResult> => {
+  return customFetch<RedemptionResult>(getRedeemEntriesUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(redeemEntriesInput),
+  });
+};
+
+export const getRedeemEntriesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof redeemEntries>>,
+    TError,
+    { id: number; data: BodyType<RedeemEntriesInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof redeemEntries>>,
+  TError,
+  { id: number; data: BodyType<RedeemEntriesInput> },
+  TContext
+> => {
+  const mutationKey = ["redeemEntries"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof redeemEntries>>,
+    { id: number; data: BodyType<RedeemEntriesInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return redeemEntries(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RedeemEntriesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof redeemEntries>>
+>;
+export type RedeemEntriesMutationBody = BodyType<RedeemEntriesInput>;
+export type RedeemEntriesMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Redeem loot points for extra entries (manual override)
+ */
+export const useRedeemEntries = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof redeemEntries>>,
+    TError,
+    { id: number; data: BodyType<RedeemEntriesInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof redeemEntries>>,
+  TError,
+  { id: number; data: BodyType<RedeemEntriesInput> },
+  TContext
+> => {
+  return useMutation(getRedeemEntriesMutationOptions(options));
+};
 
 /**
  * @summary Get recent loot drops

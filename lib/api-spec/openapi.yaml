@@ -223,6 +223,50 @@ paths:
                 items:
                   $ref: "#/components/schemas/GiveawayEntry"
 
+  /points/me:
+    get:
+      operationId: getMyPoints
+      tags: [points]
+      summary: Get loot point balance for a Twitch username
+      parameters:
+        - name: username
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Points balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointsBalance"
+
+  /giveaway/{id}/redeem:
+    post:
+      operationId: redeemEntries
+      tags: [giveaway]
+      summary: Redeem loot points for extra entries (manual override)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemEntriesInput"
+      responses:
+        "200":
+          description: Redemption result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedemptionResult"
+
   /loot/recent:
     get:
       operationId: getRecentLoot
@@ -507,6 +551,10 @@ components:
           type: string
         prize:
           type: string
+        prizeAssetId:
+          type: ["string", "null"]
+        prizeIconUrl:
+          type: ["string", "null"]
         description:
           type: ["string", "null"]
         status:
@@ -516,8 +564,13 @@ components:
           type: string
         keyword:
           type: string
-        maxEntries:
-          type: ["integer", "null"]
+        requireFollower:
+          type: boolean
+        subscriberOnly:
+          type: boolean
+        minSubTier:
+          type: ["string", "null"]
+          enum: ["1000", "2000", "3000", null]
         winnerId:
           type: ["integer", "null"]
         winnerUsername:
@@ -534,11 +587,15 @@ components:
         - id
         - title
         - prize
+        - prizeAssetId
+        - prizeIconUrl
         - description
         - status
         - channel
         - keyword
-        - maxEntries
+        - requireFollower
+        - subscriberOnly
+        - minSubTier
         - winnerId
         - winnerUsername
         - entryCount
@@ -555,15 +612,24 @@ components:
         prize:
           type: string
           minLength: 1
+        prizeAssetId:
+          type: string
+        prizeIconUrl:
+          type: string
         description:
           type: string
         keyword:
           type: string
           minLength: 1
-        maxEntries:
-          type: integer
         channel:
           type: string
+        requireFollower:
+          type: boolean
+        subscriberOnly:
+          type: boolean
+        minSubTier:
+          type: string
+          enum: ["1000", "2000", "3000"]
       required:
         - title
         - prize
@@ -840,3 +906,49 @@ components:
       required:
         - items
         - totalCount
+
+    PointsBalance:
+      type: object
+      properties:
+        username:
+          type: string
+        earned:
+          type: integer
+        redeemed:
+          type: integer
+        balance:
+          type: integer
+        costPerEntry:
+          type: integer
+      required:
+        - username
+        - earned
+        - redeemed
+        - balance
+        - costPerEntry
+
+    RedeemEntriesInput:
+      type: object
+      properties:
+        username:
+          type: string
+        entries:
+          type: integer
+          minimum: 1
+      required:
+        - username
+        - entries
+
+    RedemptionResult:
+      type: object
+      properties:
+        ticketsAdded:
+          type: integer
+        pointsSpent:
+          type: integer
+        balanceAfter:
+          type: integer
+      required:
+        - ticketsAdded
+        - pointsSpent
+        - balanceAfter

@@ -74,6 +74,11 @@ Without them, the API and dashboard work fully; the bot just won't connect to Tw
 - Do not run `pnpm dev` at root — use workflows or `pnpm --filter` commands.
 - The `getGiveawayEntries` endpoint does NOT have a `limit` query param (removed to avoid TS2308 collision with path param).
 - `currentGiveaway.giveaway` can be null — always optional-chain as `currentGiveaway?.giveaway?.id`.
+- `giveaway_entries` has a unique index on `(giveaway_id, username)` — always insert tickets via `onConflictDoUpdate` (see `bot/points.ts#redeemEntriesForUser`), never read-modify-write.
+- All point-redemption flows MUST go through `redeemEntriesForUser()` (serializable transaction). Do not write `point_redemptions` + `giveaway_entries` directly from a route or bot handler.
+- `POST /giveaway/:id/redeem` is Clerk-authed and operates on the caller's linked `usersTable.twitchUsername` — it cannot redeem for another user.
+- Sub-tier detection reads `tags.badges?.subscriber` (only `"2000"` / `"3000"` indicate Tier 2 / 3; anything else is Tier 1). `badges-raw` and `badge-info` are NOT reliable for tier.
+- Follower gating is best-effort and falls open when `TWITCH_CLIENT_ID` / `TWITCH_OAUTH_TOKEN` aren't set or the broadcaster has no stored `twitchUserId`. For strict enforcement, configure a real Twitch app token.
 
 ## User preferences
 
