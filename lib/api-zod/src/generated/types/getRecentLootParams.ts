@@ -5,7 +5,12 @@
  * Goblin L00t API - Twitch bot + giveaway dashboard
  * OpenAPI spec version: 0.1.0
  */
+import type { GetRecentLootSince } from "./getRecentLootSince";
 
 export type GetRecentLootParams = {
   limit?: number;
+  /**
+   * Time window filter. `stream` resolves to caller's streamStartedAt.
+   */
+  since?: GetRecentLootSince;
 };

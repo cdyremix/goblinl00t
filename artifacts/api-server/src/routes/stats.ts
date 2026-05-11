@@ -1,28 +1,83 @@
 import { Router, type IRouter } from "express";
-import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable } from "@workspace/db";
-import { eq, desc, count, sum, sql } from "drizzle-orm";
+import { getAuth } from "@clerk/express";
+import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, usersTable } from "@workspace/db";
+import { eq, desc, count, sum, sql, and, gte } from "drizzle-orm";
 import { GetTopLootersQueryParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
-router.get("/stats/overview", async (_req, res) => {
-  const [totalGiveawaysRow] = await db.select({ count: count() }).from(giveawaysTable);
+type RangeKey = "day" | "week" | "month" | "year" | "all" | "stream";
+
+/**
+ * Resolve the start-time for a given filter window. `stream` returns the
+ * caller's `streamStartedAt` (Operations → "Start Stream"); when no session
+ * is active it falls back to the last 12h so the dashboard never shows an
+ * empty state. `all` returns null (unbounded).
+ */
+async function resolveSince(req: Parameters<typeof getAuth>[0], range: RangeKey): Promise<Date | null> {
+  const now = Date.now();
+  switch (range) {
+    case "day":   return new Date(now - 24 * 60 * 60 * 1000);
+    case "week":  return new Date(now - 7 * 24 * 60 * 60 * 1000);
+    case "month": return new Date(now - 30 * 24 * 60 * 60 * 1000);
+    case "year":  return new Date(now - 365 * 24 * 60 * 60 * 1000);
+    case "all":   return null;
+    case "stream": {
+      const { userId } = getAuth(req);
+      if (userId) {
+        const [user] = await db
+          .select({ streamStartedAt: usersTable.streamStartedAt })
+          .from(usersTable)
+          .where(eq(usersTable.clerkUserId, userId))
+          .limit(1);
+        if (user?.streamStartedAt) return user.streamStartedAt;
+      }
+      // Fallback: last 12h so Operations isn't empty before the streamer
+      // explicitly starts a session.
+      return new Date(now - 12 * 60 * 60 * 1000);
+    }
+  }
+}
+
+function parseRange(raw: unknown): RangeKey {
+  const v = String(raw ?? "all");
+  if (v === "day" || v === "week" || v === "month" || v === "year" || v === "all" || v === "stream") return v;
+  return "all";
+}
+
+router.get("/stats/overview", async (req, res) => {
+  const range = parseRange(req.query["range"]);
+  const since = await resolveSince(req, range);
+
+  const lootWhere = since ? gte(lootDropsTable.droppedAt, since) : undefined;
+  const cmdWhere = since ? gte(commandLogsTable.executedAt, since) : undefined;
+  const givWhere = since ? gte(giveawaysTable.createdAt, since) : undefined;
+  const entryWhere = since ? gte(giveawayEntriesTable.enteredAt, since) : undefined;
+
+  const [totalGiveawaysRow] = givWhere
+    ? await db.select({ count: count() }).from(giveawaysTable).where(givWhere)
+    : await db.select({ count: count() }).from(giveawaysTable);
   const [activeGiveawayRow] = await db
     .select({ count: count() })
     .from(giveawaysTable)
     .where(eq(giveawaysTable.status, "active"));
-  const [totalLootRow] = await db.select({ count: count() }).from(lootDropsTable);
-  const [totalCommandsRow] = await db.select({ count: count() }).from(commandLogsTable);
-  const [uniqueUsersRow] = await db
-    .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
-    .from(lootDropsTable);
-
-  // Recent entries (last 24h)
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [recentEntriesRow] = await db
-    .select({ count: count() })
-    .from(giveawayEntriesTable)
-    .where(sql`${giveawayEntriesTable.enteredAt} > ${oneDayAgo}`);
+  const [totalLootRow] = lootWhere
+    ? await db.select({ count: count() }).from(lootDropsTable).where(lootWhere)
+    : await db.select({ count: count() }).from(lootDropsTable);
+  const [totalCommandsRow] = cmdWhere
+    ? await db.select({ count: count() }).from(commandLogsTable).where(cmdWhere)
+    : await db.select({ count: count() }).from(commandLogsTable);
+  const [uniqueUsersRow] = lootWhere
+    ? await db
+        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
+        .from(lootDropsTable)
+        .where(lootWhere)
+    : await db
+        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
+        .from(lootDropsTable);
+  const [recentEntriesRow] = entryWhere
+    ? await db.select({ count: count() }).from(giveawayEntriesTable).where(entryWhere)
+    : await db.select({ count: count() }).from(giveawayEntriesTable);
 
   res.json({
     totalGiveaways: Number(totalGiveawaysRow?.count ?? 0),
@@ -31,19 +86,32 @@ router.get("/stats/overview", async (_req, res) => {
     totalCommandsUsed: Number(totalCommandsRow?.count ?? 0),
     uniqueUsers: Number(uniqueUsersRow?.count ?? 0),
     recentEntries: Number(recentEntriesRow?.count ?? 0),
+    range,
+    since: since?.toISOString() ?? null,
   });
 });
 
-router.get("/stats/commands", async (_req, res) => {
-  const rows = await db
-    .select({
-      command: commandLogsTable.command,
-      usageCount: count(),
-      lastUsedAt: sql<string>`max(${commandLogsTable.executedAt})`,
-    })
-    .from(commandLogsTable)
-    .groupBy(commandLogsTable.command)
-    .orderBy(desc(count()));
+router.get("/stats/commands", async (req, res) => {
+  const range = parseRange(req.query["range"]);
+  const since = await resolveSince(req, range);
+
+  const baseSelect = {
+    command: commandLogsTable.command,
+    usageCount: count(),
+    lastUsedAt: sql<string>`max(${commandLogsTable.executedAt})`,
+  };
+  const rows = since
+    ? await db
+        .select(baseSelect)
+        .from(commandLogsTable)
+        .where(gte(commandLogsTable.executedAt, since))
+        .groupBy(commandLogsTable.command)
+        .orderBy(desc(count()))
+    : await db
+        .select(baseSelect)
+        .from(commandLogsTable)
+        .groupBy(commandLogsTable.command)
+        .orderBy(desc(count()));
 
   res.json(
     rows.map((r) => ({
@@ -57,26 +125,37 @@ router.get("/stats/commands", async (_req, res) => {
 router.get("/stats/top-looters", async (req, res) => {
   const query = GetTopLootersQueryParams.safeParse(req.query);
   const limit = query.success ? (query.data.limit ?? 10) : 10;
+  const range = parseRange(req.query["range"]);
+  const since = await resolveSince(req, range);
 
-  const rows = await db
-    .select({
-      username: lootDropsTable.username,
-      lootCount: count(),
-      totalPoints: sum(lootDropsTable.points),
-      bestRarity: sql<string>`
-        CASE
-          WHEN bool_or(${lootDropsTable.rarity} = 'legendary') THEN 'legendary'
-          WHEN bool_or(${lootDropsTable.rarity} = 'epic') THEN 'epic'
-          WHEN bool_or(${lootDropsTable.rarity} = 'rare') THEN 'rare'
-          WHEN bool_or(${lootDropsTable.rarity} = 'uncommon') THEN 'uncommon'
-          ELSE 'common'
-        END
-      `,
-    })
-    .from(lootDropsTable)
-    .groupBy(lootDropsTable.username)
-    .orderBy(desc(sum(lootDropsTable.points)))
-    .limit(limit);
+  const baseSelect = {
+    username: lootDropsTable.username,
+    lootCount: count(),
+    totalPoints: sum(lootDropsTable.points),
+    bestRarity: sql<string>`
+      CASE
+        WHEN bool_or(${lootDropsTable.rarity} = 'legendary') THEN 'legendary'
+        WHEN bool_or(${lootDropsTable.rarity} = 'epic') THEN 'epic'
+        WHEN bool_or(${lootDropsTable.rarity} = 'rare') THEN 'rare'
+        WHEN bool_or(${lootDropsTable.rarity} = 'uncommon') THEN 'uncommon'
+        ELSE 'common'
+      END
+    `,
+  };
+  const rows = since
+    ? await db
+        .select(baseSelect)
+        .from(lootDropsTable)
+        .where(gte(lootDropsTable.droppedAt, since))
+        .groupBy(lootDropsTable.username)
+        .orderBy(desc(sum(lootDropsTable.points)))
+        .limit(limit)
+    : await db
+        .select(baseSelect)
+        .from(lootDropsTable)
+        .groupBy(lootDropsTable.username)
+        .orderBy(desc(sum(lootDropsTable.points)))
+        .limit(limit);
 
   res.json(
     rows.map((r) => ({
@@ -87,5 +166,100 @@ router.get("/stats/top-looters", async (req, res) => {
     }))
   );
 });
+
+/**
+ * Engagement tips: lightweight heuristics over the selected window.
+ * Returns 0–5 actionable tips for streamers to lift chat participation.
+ * Does not prescribe — these are suggestions, not auto-actions.
+ */
+router.get("/stats/engagement", async (req, res) => {
+  const range = parseRange(req.query["range"]);
+  const since = await resolveSince(req, range);
+
+  const lootWhere = since ? gte(lootDropsTable.droppedAt, since) : undefined;
+  const cmdWhere = since ? gte(commandLogsTable.executedAt, since) : undefined;
+  const givWhere = since ? gte(giveawaysTable.createdAt, since) : undefined;
+
+  const [lootCount] = lootWhere
+    ? await db.select({ count: count() }).from(lootDropsTable).where(lootWhere)
+    : await db.select({ count: count() }).from(lootDropsTable);
+  const [cmdCount] = cmdWhere
+    ? await db.select({ count: count() }).from(commandLogsTable).where(cmdWhere)
+    : await db.select({ count: count() }).from(commandLogsTable);
+  const [givCount] = givWhere
+    ? await db.select({ count: count() }).from(giveawaysTable).where(givWhere)
+    : await db.select({ count: count() }).from(giveawaysTable);
+  const [uniqueRow] = lootWhere
+    ? await db
+        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
+        .from(lootDropsTable)
+        .where(lootWhere)
+    : await db
+        .select({ count: sql<number>`count(distinct ${lootDropsTable.username})` })
+        .from(lootDropsTable);
+
+  const totalLoot = Number(lootCount?.count ?? 0);
+  const totalCmds = Number(cmdCount?.count ?? 0);
+  const totalGiv = Number(givCount?.count ?? 0);
+  const uniques = Number(uniqueRow?.count ?? 0);
+
+  const tips: { id: string; severity: "info" | "warn"; title: string; detail: string }[] = [];
+
+  if (totalGiv === 0) {
+    tips.push({
+      id: "no-giveaways",
+      severity: "warn",
+      title: "No giveaways in this window",
+      detail: "Run a small giveaway (even 100 coins) to give viewers a reason to !enter and chat.",
+    });
+  }
+  if (totalCmds < 10) {
+    tips.push({
+      id: "low-command-usage",
+      severity: "info",
+      title: "Chat commands are quiet",
+      detail: "Pin a !commands message in chat or call out a fun one (!loot, !steal) on stream to get viewers exploring.",
+    });
+  }
+  if (uniques < 5 && totalLoot > 0) {
+    tips.push({
+      id: "few-active-chatters",
+      severity: "info",
+      title: "Only a handful of chatters earned coins",
+      detail: "Try a Quick Prize drop on a quiet viewer — it surfaces the bot to the rest of chat.",
+    });
+  }
+  if (totalLoot === 0) {
+    tips.push({
+      id: "no-loot-drops",
+      severity: "warn",
+      title: "No loot has dropped",
+      detail: "Make sure Loot Drops are enabled in Forge → Economy & Loot, then nudge chat with !loot.",
+    });
+  }
+  if (totalCmds > 0 && totalLoot > 0 && uniques >= 5 && totalGiv >= 1) {
+    tips.push({
+      id: "healthy",
+      severity: "info",
+      title: "Engagement looks healthy",
+      detail: "Consider saving your current giveaway as a preset so you can re-launch with one click next stream.",
+    });
+  }
+
+  res.json({
+    range,
+    since: since?.toISOString() ?? null,
+    metrics: {
+      totalLoot,
+      totalCommands: totalCmds,
+      totalGiveaways: totalGiv,
+      uniqueChatters: uniques,
+    },
+    tips,
+  });
+});
+
+// Suppress unused-import warning for `and` (kept available for future joins).
+void and;
 
 export default router;

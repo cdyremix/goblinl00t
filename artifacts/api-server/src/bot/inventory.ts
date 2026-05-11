@@ -252,15 +252,20 @@ export async function sellInventoryItem(opts: {
       }
     }
 
-    const coinsEarned = item.coinValue * multiplier;
+    const requested = item.coinValue * multiplier;
+    // HARD coin-cap: clamp the credited amount so balance never exceeds cap.
+    const { clampCoinAwardTx } = await import("./points");
+    const coinsEarned = await clampCoinAwardTx(tx, ch, opts.username, requested);
     await tx.delete(userInventoryTable).where(eq(userInventoryTable.id, item.id));
-    await tx.insert(lootDropsTable).values({
-      channel: ch,
-      username: opts.username,
-      item: `Sold: ${item.item}`,
-      rarity: item.rarity,
-      points: coinsEarned,
-    });
+    if (coinsEarned > 0) {
+      await tx.insert(lootDropsTable).values({
+        channel: ch,
+        username: opts.username,
+        item: `Sold: ${item.item}`,
+        rarity: item.rarity,
+        points: coinsEarned,
+      });
+    }
     return { ok: true, item, coinsEarned };
   });
 }

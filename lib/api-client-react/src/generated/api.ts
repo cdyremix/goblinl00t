@@ -25,15 +25,23 @@ import type {
   ChatUser,
   CommandStat,
   ConnectSteam200,
+  CreateGiveawayPreset,
+  DeleteGiveawayPreset200,
   DisconnectSteam200,
+  EngagementReport,
+  GetCommandStatsParams,
+  GetEngagementReportParams,
   GetRecentLootParams,
+  GetStatsOverviewParams,
   GetTopLootersParams,
   Giveaway,
   GiveawayEntry,
   GiveawayInput,
+  GiveawayPreset,
   GiveawayResult,
   GiveawayWithEntries,
   HealthStatus,
+  LaunchGiveawayPreset201,
   ListGiveawaysParams,
   LootDrop,
   ManualDropRequest,
@@ -44,6 +52,7 @@ import type {
   SellItemResult,
   StatsOverview,
   SteamInventory,
+  StreamStatus,
   TradeFulfillment,
   UpdateBotSettings,
   UpdateTradeFulfillment,
@@ -1474,41 +1483,60 @@ export function useGetRecentLoot<
 /**
  * @summary Get dashboard overview stats
  */
-export const getGetStatsOverviewUrl = () => {
-  return `/api/stats/overview`;
+export const getGetStatsOverviewUrl = (params?: GetStatsOverviewParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stats/overview?${stringifiedParams}`
+    : `/api/stats/overview`;
 };
 
 export const getStatsOverview = async (
+  params?: GetStatsOverviewParams,
   options?: RequestInit,
 ): Promise<StatsOverview> => {
-  return customFetch<StatsOverview>(getGetStatsOverviewUrl(), {
+  return customFetch<StatsOverview>(getGetStatsOverviewUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetStatsOverviewQueryKey = () => {
-  return [`/api/stats/overview`] as const;
+export const getGetStatsOverviewQueryKey = (
+  params?: GetStatsOverviewParams,
+) => {
+  return [`/api/stats/overview`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetStatsOverviewQueryOptions = <
   TData = Awaited<ReturnType<typeof getStatsOverview>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getStatsOverview>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetStatsOverviewParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStatsOverview>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetStatsOverviewQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStatsOverviewQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getStatsOverview>>
-  > = ({ signal }) => getStatsOverview({ signal, ...requestOptions });
+  > = ({ signal }) => getStatsOverview(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getStatsOverview>>,
@@ -1529,15 +1557,18 @@ export type GetStatsOverviewQueryError = ErrorType<unknown>;
 export function useGetStatsOverview<
   TData = Awaited<ReturnType<typeof getStatsOverview>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getStatsOverview>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetStatsOverviewQueryOptions(options);
+>(
+  params?: GetStatsOverviewParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStatsOverview>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStatsOverviewQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -1549,41 +1580,57 @@ export function useGetStatsOverview<
 /**
  * @summary Get command usage statistics
  */
-export const getGetCommandStatsUrl = () => {
-  return `/api/stats/commands`;
+export const getGetCommandStatsUrl = (params?: GetCommandStatsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stats/commands?${stringifiedParams}`
+    : `/api/stats/commands`;
 };
 
 export const getCommandStats = async (
+  params?: GetCommandStatsParams,
   options?: RequestInit,
 ): Promise<CommandStat[]> => {
-  return customFetch<CommandStat[]>(getGetCommandStatsUrl(), {
+  return customFetch<CommandStat[]>(getGetCommandStatsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetCommandStatsQueryKey = () => {
-  return [`/api/stats/commands`] as const;
+export const getGetCommandStatsQueryKey = (params?: GetCommandStatsParams) => {
+  return [`/api/stats/commands`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetCommandStatsQueryOptions = <
   TData = Awaited<ReturnType<typeof getCommandStats>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getCommandStats>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetCommandStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCommandStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetCommandStatsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetCommandStatsQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommandStats>>> = ({
     signal,
-  }) => getCommandStats({ signal, ...requestOptions });
+  }) => getCommandStats(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getCommandStats>>,
@@ -1604,15 +1651,18 @@ export type GetCommandStatsQueryError = ErrorType<unknown>;
 export function useGetCommandStats<
   TData = Awaited<ReturnType<typeof getCommandStats>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getCommandStats>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetCommandStatsQueryOptions(options);
+>(
+  params?: GetCommandStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCommandStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCommandStatsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -1714,6 +1764,672 @@ export function useGetTopLooters<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get engagement tips and metrics for the selected window
+ */
+export const getGetEngagementReportUrl = (
+  params?: GetEngagementReportParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stats/engagement?${stringifiedParams}`
+    : `/api/stats/engagement`;
+};
+
+export const getEngagementReport = async (
+  params?: GetEngagementReportParams,
+  options?: RequestInit,
+): Promise<EngagementReport> => {
+  return customFetch<EngagementReport>(getGetEngagementReportUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetEngagementReportQueryKey = (
+  params?: GetEngagementReportParams,
+) => {
+  return [`/api/stats/engagement`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetEngagementReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEngagementReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetEngagementReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEngagementReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetEngagementReportQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getEngagementReport>>
+  > = ({ signal }) =>
+    getEngagementReport(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getEngagementReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetEngagementReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEngagementReport>>
+>;
+export type GetEngagementReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get engagement tips and metrics for the selected window
+ */
+
+export function useGetEngagementReport<
+  TData = Awaited<ReturnType<typeof getEngagementReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetEngagementReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEngagementReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEngagementReportQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get the caller's current stream session status
+ */
+export const getGetStreamStatusUrl = () => {
+  return `/api/stream/status`;
+};
+
+export const getStreamStatus = async (
+  options?: RequestInit,
+): Promise<StreamStatus> => {
+  return customFetch<StreamStatus>(getGetStreamStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStreamStatusQueryKey = () => {
+  return [`/api/stream/status`] as const;
+};
+
+export const getGetStreamStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStreamStatus>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getStreamStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStreamStatusQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStreamStatus>>> = ({
+    signal,
+  }) => getStreamStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStreamStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStreamStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStreamStatus>>
+>;
+export type GetStreamStatusQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the caller's current stream session status
+ */
+
+export function useGetStreamStatus<
+  TData = Awaited<ReturnType<typeof getStreamStatus>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getStreamStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStreamStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark the caller's stream session as started (timestamps now)
+ */
+export const getStartStreamSessionUrl = () => {
+  return `/api/stream/start`;
+};
+
+export const startStreamSession = async (
+  options?: RequestInit,
+): Promise<StreamStatus> => {
+  return customFetch<StreamStatus>(getStartStreamSessionUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getStartStreamSessionMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startStreamSession>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startStreamSession>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["startStreamSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startStreamSession>>,
+    void
+  > = () => {
+    return startStreamSession(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StartStreamSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof startStreamSession>>
+>;
+
+export type StartStreamSessionMutationError = ErrorType<void>;
+
+/**
+ * @summary Mark the caller's stream session as started (timestamps now)
+ */
+export const useStartStreamSession = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startStreamSession>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof startStreamSession>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getStartStreamSessionMutationOptions(options));
+};
+
+/**
+ * @summary Clear the caller's stream session (sets streamStartedAt to null)
+ */
+export const getEndStreamSessionUrl = () => {
+  return `/api/stream/end`;
+};
+
+export const endStreamSession = async (
+  options?: RequestInit,
+): Promise<StreamStatus> => {
+  return customFetch<StreamStatus>(getEndStreamSessionUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getEndStreamSessionMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof endStreamSession>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof endStreamSession>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["endStreamSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof endStreamSession>>,
+    void
+  > = () => {
+    return endStreamSession(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EndStreamSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof endStreamSession>>
+>;
+
+export type EndStreamSessionMutationError = ErrorType<void>;
+
+/**
+ * @summary Clear the caller's stream session (sets streamStartedAt to null)
+ */
+export const useEndStreamSession = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof endStreamSession>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof endStreamSession>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getEndStreamSessionMutationOptions(options));
+};
+
+/**
+ * @summary List the caller's saved giveaway presets
+ */
+export const getListGiveawayPresetsUrl = () => {
+  return `/api/giveaway-presets`;
+};
+
+export const listGiveawayPresets = async (
+  options?: RequestInit,
+): Promise<GiveawayPreset[]> => {
+  return customFetch<GiveawayPreset[]>(getListGiveawayPresetsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListGiveawayPresetsQueryKey = () => {
+  return [`/api/giveaway-presets`] as const;
+};
+
+export const getListGiveawayPresetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listGiveawayPresets>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listGiveawayPresets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListGiveawayPresetsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listGiveawayPresets>>
+  > = ({ signal }) => listGiveawayPresets({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listGiveawayPresets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListGiveawayPresetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listGiveawayPresets>>
+>;
+export type ListGiveawayPresetsQueryError = ErrorType<void>;
+
+/**
+ * @summary List the caller's saved giveaway presets
+ */
+
+export function useListGiveawayPresets<
+  TData = Awaited<ReturnType<typeof listGiveawayPresets>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listGiveawayPresets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListGiveawayPresetsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Save a new giveaway preset
+ */
+export const getCreateGiveawayPresetUrl = () => {
+  return `/api/giveaway-presets`;
+};
+
+export const createGiveawayPreset = async (
+  createGiveawayPreset: CreateGiveawayPreset,
+  options?: RequestInit,
+): Promise<GiveawayPreset> => {
+  return customFetch<GiveawayPreset>(getCreateGiveawayPresetUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createGiveawayPreset),
+  });
+};
+
+export const getCreateGiveawayPresetMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createGiveawayPreset>>,
+    TError,
+    { data: BodyType<CreateGiveawayPreset> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createGiveawayPreset>>,
+  TError,
+  { data: BodyType<CreateGiveawayPreset> },
+  TContext
+> => {
+  const mutationKey = ["createGiveawayPreset"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createGiveawayPreset>>,
+    { data: BodyType<CreateGiveawayPreset> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createGiveawayPreset(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateGiveawayPresetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createGiveawayPreset>>
+>;
+export type CreateGiveawayPresetMutationBody = BodyType<CreateGiveawayPreset>;
+export type CreateGiveawayPresetMutationError = ErrorType<void>;
+
+/**
+ * @summary Save a new giveaway preset
+ */
+export const useCreateGiveawayPreset = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createGiveawayPreset>>,
+    TError,
+    { data: BodyType<CreateGiveawayPreset> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createGiveawayPreset>>,
+  TError,
+  { data: BodyType<CreateGiveawayPreset> },
+  TContext
+> => {
+  return useMutation(getCreateGiveawayPresetMutationOptions(options));
+};
+
+/**
+ * @summary Delete a saved preset
+ */
+export const getDeleteGiveawayPresetUrl = (id: number) => {
+  return `/api/giveaway-presets/${id}`;
+};
+
+export const deleteGiveawayPreset = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeleteGiveawayPreset200> => {
+  return customFetch<DeleteGiveawayPreset200>(getDeleteGiveawayPresetUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteGiveawayPresetMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGiveawayPreset>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteGiveawayPreset>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteGiveawayPreset"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteGiveawayPreset>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteGiveawayPreset(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteGiveawayPresetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteGiveawayPreset>>
+>;
+
+export type DeleteGiveawayPresetMutationError = ErrorType<void>;
+
+/**
+ * @summary Delete a saved preset
+ */
+export const useDeleteGiveawayPreset = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGiveawayPreset>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteGiveawayPreset>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteGiveawayPresetMutationOptions(options));
+};
+
+/**
+ * @summary Create a new pending giveaway from a preset
+ */
+export const getLaunchGiveawayPresetUrl = (id: number) => {
+  return `/api/giveaway-presets/${id}/launch`;
+};
+
+export const launchGiveawayPreset = async (
+  id: number,
+  options?: RequestInit,
+): Promise<LaunchGiveawayPreset201> => {
+  return customFetch<LaunchGiveawayPreset201>(getLaunchGiveawayPresetUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getLaunchGiveawayPresetMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof launchGiveawayPreset>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof launchGiveawayPreset>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["launchGiveawayPreset"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof launchGiveawayPreset>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return launchGiveawayPreset(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LaunchGiveawayPresetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof launchGiveawayPreset>>
+>;
+
+export type LaunchGiveawayPresetMutationError = ErrorType<void>;
+
+/**
+ * @summary Create a new pending giveaway from a preset
+ */
+export const useLaunchGiveawayPreset = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof launchGiveawayPreset>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof launchGiveawayPreset>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getLaunchGiveawayPresetMutationOptions(options));
+};
 
 /**
  * @summary List all bot commands and their status

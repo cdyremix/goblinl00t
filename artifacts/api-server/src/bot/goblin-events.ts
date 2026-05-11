@@ -1,7 +1,7 @@
 import { db, lootDropsTable, pointRedemptionsTable, goblinEventsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
-import { getPointsBalance } from "./points";
+import { getPointsBalance, clampCoinAward } from "./points";
 
 type SayFn = (channel: string, message: string) => void;
 
@@ -67,7 +67,11 @@ function randomAmount(): number {
 }
 
 async function fireDrop(channel: string, target: string): Promise<void> {
-  const amount = randomAmount();
+  const requested = randomAmount();
+  // Honor the channel's coin cap so random goblin gifts can't push viewers
+  // past the configured ceiling (silently skip if they're already at cap).
+  const amount = await clampCoinAward(channel, target, requested);
+  if (amount <= 0) return;
   await db.insert(lootDropsTable).values({
     channel,
     username: target,

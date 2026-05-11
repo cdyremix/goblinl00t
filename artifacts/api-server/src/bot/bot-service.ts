@@ -27,6 +27,13 @@ interface BuiltInCommand {
   description: string;
   cooldownSeconds: number;
   theme: CommandTheme;
+  /**
+   * If set, this command is an alias for another canonical command. Aliases
+   * are NOT listed by /commands (the Spells page) — they share enabled state
+   * and cooldown with their canonical and toggle together. The handler block
+   * below already routes both names to the same logic.
+   */
+  aliasOf?: string;
 }
 
 const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
@@ -36,20 +43,28 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
   "!inventory":  { description: "List your loot inventory slots",           cooldownSeconds: 15, theme: "both"   },
   "!sell":       { description: "Sell an inventory item — !sell <slot> or !sell all", cooldownSeconds: 5, theme: "both" },
   "!use":        { description: "Activate a buff item from your inventory — !use <slot>", cooldownSeconds: 5, theme: "both" },
-  "!goblin":     { description: "Summon the goblin for a random response",  cooldownSeconds: 10, theme: "goblin" },
-  "!steal":      { description: "Attempt to steal from another viewer",     cooldownSeconds: 20, theme: "goblin" },
-  "!hoard":      { description: "Check your goblin coin balance",           cooldownSeconds: 15, theme: "goblin" },
-  "!feedgoblin": { description: "Feed the goblin a snack",                  cooldownSeconds: 10, theme: "goblin" },
-  // CS2 flavor commands — mirror the goblin set with CS2 personality.
-  "!skin":       { description: "Summon the bot for a CS2-flavored take",   cooldownSeconds: 10, theme: "cs2" },
-  "!scam":       { description: "Try to scam a sus trade off another viewer", cooldownSeconds: 20, theme: "cs2" },
-  "!stash":      { description: "Check your skin stash coin balance",       cooldownSeconds: 15, theme: "cs2" },
-  "!case":       { description: "Open a case to feed the bot — RNG decides if it's nutritious", cooldownSeconds: 10, theme: "cs2" },
+  "!goblin":     { description: "Summon the bot for a themed taunt (alias: !skin)",  cooldownSeconds: 10, theme: "goblin" },
+  "!steal":      { description: "Attempt to mug another viewer (alias: !scam)",     cooldownSeconds: 20, theme: "goblin" },
+  "!hoard":      { description: "Check your coin balance (alias: !stash)",          cooldownSeconds: 15, theme: "goblin" },
+  "!feedgoblin": { description: "Feed the bot a snack (alias: !case)",              cooldownSeconds: 10, theme: "goblin" },
+  // CS2 flavor commands — pure aliases of the goblin set; share toggle/cooldown.
+  "!skin":       { description: "Alias of !goblin", cooldownSeconds: 10, theme: "cs2", aliasOf: "!goblin" },
+  "!scam":       { description: "Alias of !steal", cooldownSeconds: 20, theme: "cs2", aliasOf: "!steal" },
+  "!stash":      { description: "Alias of !hoard", cooldownSeconds: 15, theme: "cs2", aliasOf: "!hoard" },
+  "!case":       { description: "Alias of !feedgoblin", cooldownSeconds: 10, theme: "cs2", aliasOf: "!feedgoblin" },
   "!tradeurl":   { description: "Submit your Steam trade URL after winning a skin", cooldownSeconds: 10, theme: "cs2" },
   "!redeem":     { description: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", cooldownSeconds: 5, theme: "both" },
-  "!points":     { description: "Check your coin balance",                  cooldownSeconds: 10, theme: "both" },
-  "!coins":      { description: "Check your coin balance",                  cooldownSeconds: 10, theme: "both" },
+  "!points":     { description: "Check your coin balance (alias: !coins)", cooldownSeconds: 10, theme: "both" },
+  "!coins":      { description: "Alias of !points", cooldownSeconds: 10, theme: "both", aliasOf: "!points" },
 };
+
+/** Reverse map canonical → aliases. */
+const COMMAND_ALIASES: Record<string, string[]> = {};
+for (const [name, meta] of Object.entries(BUILT_IN_COMMANDS)) {
+  if (meta.aliasOf) {
+    (COMMAND_ALIASES[meta.aliasOf] ??= []).push(name);
+  }
+}
 
 interface CustomCommandCacheEntry {
   id: number;
@@ -526,14 +541,20 @@ export function getBotState(): BotState {
 }
 
 export function getCommandConfig() {
-  const builtIns = Object.entries(BUILT_IN_COMMANDS).map(([name, meta]) => ({
-    name,
-    description: meta.description,
-    enabled: COMMAND_ENABLED[name] ?? true,
-    cooldownSeconds: COMMAND_COOLDOWN_SECONDS[name] ?? 10,
-    theme: meta.theme,
-    isCustom: false as const,
-  }));
+  // Hide alias entries — they share enabled/cooldown with their canonical and
+  // toggling them via the Spells page would be confusing. The canonical's
+  // description already mentions the alias in parens.
+  const builtIns = Object.entries(BUILT_IN_COMMANDS)
+    .filter(([, meta]) => !meta.aliasOf)
+    .map(([name, meta]) => ({
+      name,
+      description: meta.description,
+      enabled: COMMAND_ENABLED[name] ?? true,
+      cooldownSeconds: COMMAND_COOLDOWN_SECONDS[name] ?? 10,
+      theme: meta.theme,
+      aliases: COMMAND_ALIASES[name] ?? [],
+      isCustom: false as const,
+    }));
   const customs = Array.from(CUSTOM_COMMANDS.entries()).map(([name, c]) => ({
     id: c.id,
     name,
@@ -555,8 +576,17 @@ export function toggleCommandEnabled(name: string): boolean {
     return custom.enabled;
   }
   if (!(name in COMMAND_ENABLED)) throw new Error(`Unknown command: ${name}`);
-  COMMAND_ENABLED[name] = !COMMAND_ENABLED[name];
-  return COMMAND_ENABLED[name]!;
+  // Resolve to canonical if an alias was passed in (defensive — UI hides
+  // aliases, but direct API callers might still hit one).
+  const canonical = BUILT_IN_COMMANDS[name]?.aliasOf ?? name;
+  COMMAND_ENABLED[canonical] = !COMMAND_ENABLED[canonical];
+  // Propagate the new state to every alias so the bot's `command in COMMAND_ENABLED`
+  // checks see a consistent value regardless of which name was typed in chat.
+  const next = COMMAND_ENABLED[canonical]!;
+  for (const alias of COMMAND_ALIASES[canonical] ?? []) {
+    COMMAND_ENABLED[alias] = next;
+  }
+  return next;
 }
 
 export function isBuiltInCommand(name: string): boolean {

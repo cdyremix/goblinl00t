@@ -489,6 +489,12 @@ export const getRecentLootQueryLimitDefault = 50;
 
 export const GetRecentLootQueryParams = zod.object({
   limit: zod.coerce.number().default(getRecentLootQueryLimitDefault),
+  since: zod
+    .enum(["day", "week", "month", "year", "stream"])
+    .optional()
+    .describe(
+      "Time window filter. `stream` resolves to caller's streamStartedAt.",
+    ),
 });
 
 export const GetRecentLootResponseItem = zod.object({
@@ -505,6 +511,17 @@ export const GetRecentLootResponse = zod.array(GetRecentLootResponseItem);
 /**
  * @summary Get dashboard overview stats
  */
+export const getStatsOverviewQueryRangeDefault = `all`;
+
+export const GetStatsOverviewQueryParams = zod.object({
+  range: zod
+    .enum(["day", "week", "month", "year", "all", "stream"])
+    .default(getStatsOverviewQueryRangeDefault)
+    .describe(
+      "Time window for stats. `stream` filters since the caller's streamStartedAt.",
+    ),
+});
+
 export const GetStatsOverviewResponse = zod.object({
   totalGiveaways: zod.number(),
   activeGiveaway: zod.boolean(),
@@ -517,6 +534,17 @@ export const GetStatsOverviewResponse = zod.object({
 /**
  * @summary Get command usage statistics
  */
+export const getCommandStatsQueryRangeDefault = `all`;
+
+export const GetCommandStatsQueryParams = zod.object({
+  range: zod
+    .enum(["day", "week", "month", "year", "all", "stream"])
+    .default(getCommandStatsQueryRangeDefault)
+    .describe(
+      "Time window for stats. `stream` filters since the caller's streamStartedAt.",
+    ),
+});
+
 export const GetCommandStatsResponseItem = zod.object({
   command: zod.string(),
   usageCount: zod.number(),
@@ -528,9 +556,16 @@ export const GetCommandStatsResponse = zod.array(GetCommandStatsResponseItem);
  * @summary Get top users by loot count
  */
 export const getTopLootersQueryLimitDefault = 10;
+export const getTopLootersQueryRangeDefault = `all`;
 
 export const GetTopLootersQueryParams = zod.object({
   limit: zod.coerce.number().default(getTopLootersQueryLimitDefault),
+  range: zod
+    .enum(["day", "week", "month", "year", "all", "stream"])
+    .default(getTopLootersQueryRangeDefault)
+    .describe(
+      "Time window for stats. `stream` filters since the caller's streamStartedAt.",
+    ),
 });
 
 export const GetTopLootersResponseItem = zod.object({
@@ -540,6 +575,120 @@ export const GetTopLootersResponseItem = zod.object({
   bestRarity: zod.string(),
 });
 export const GetTopLootersResponse = zod.array(GetTopLootersResponseItem);
+
+/**
+ * @summary Get engagement tips and metrics for the selected window
+ */
+export const getEngagementReportQueryRangeDefault = `all`;
+
+export const GetEngagementReportQueryParams = zod.object({
+  range: zod
+    .enum(["day", "week", "month", "year", "all", "stream"])
+    .default(getEngagementReportQueryRangeDefault)
+    .describe(
+      "Time window for stats. `stream` filters since the caller's streamStartedAt.",
+    ),
+});
+
+export const GetEngagementReportResponse = zod.object({
+  range: zod.string(),
+  since: zod.string().nullish(),
+  metrics: zod.object({
+    totalLoot: zod.number(),
+    totalCommands: zod.number(),
+    totalGiveaways: zod.number(),
+    uniqueChatters: zod.number(),
+  }),
+  tips: zod.array(
+    zod.object({
+      id: zod.string(),
+      severity: zod.enum(["info", "warn"]),
+      title: zod.string(),
+      detail: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get the caller's current stream session status
+ */
+export const GetStreamStatusResponse = zod.object({
+  streamStartedAt: zod.string().nullable(),
+  isLive: zod.boolean(),
+});
+
+/**
+ * @summary Mark the caller's stream session as started (timestamps now)
+ */
+export const StartStreamSessionResponse = zod.object({
+  streamStartedAt: zod.string().nullable(),
+  isLive: zod.boolean(),
+});
+
+/**
+ * @summary Clear the caller's stream session (sets streamStartedAt to null)
+ */
+export const EndStreamSessionResponse = zod.object({
+  streamStartedAt: zod.string().nullable(),
+  isLive: zod.boolean(),
+});
+
+/**
+ * @summary List the caller's saved giveaway presets
+ */
+export const ListGiveawayPresetsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  prize: zod.string(),
+  prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+  prizeBotCoins: zod.number().nullish(),
+  prizeBotRarity: zod.string().nullish(),
+  keyword: zod.string(),
+  requireFollower: zod.boolean(),
+  subscriberOnly: zod.boolean(),
+  minSubTier: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListGiveawayPresetsResponse = zod.array(
+  ListGiveawayPresetsResponseItem,
+);
+
+/**
+ * @summary Save a new giveaway preset
+ */
+export const CreateGiveawayPresetBody = zod.object({
+  title: zod.string(),
+  description: zod.string().optional(),
+  prize: zod.string(),
+  prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]).optional(),
+  prizeBotCoins: zod.number().optional(),
+  prizeBotRarity: zod
+    .enum(["common", "uncommon", "rare", "epic", "legendary"])
+    .optional(),
+  keyword: zod.string().optional(),
+  requireFollower: zod.boolean().optional(),
+  subscriberOnly: zod.boolean().optional(),
+  minSubTier: zod.enum(["1000", "2000", "3000"]).optional(),
+});
+
+/**
+ * @summary Delete a saved preset
+ */
+export const DeleteGiveawayPresetParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteGiveawayPresetResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Create a new pending giveaway from a preset
+ */
+export const LaunchGiveawayPresetParams = zod.object({
+  id: zod.coerce.number(),
+});
 
 /**
  * @summary List all bot commands and their status

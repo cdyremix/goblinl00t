@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, Users2, BookOpen,
+  LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { OnboardingTour } from "@/components/onboarding-tour";
@@ -72,9 +72,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   // "The Scroll" (account page) used to sit in the main nav; it now lives
   // inside the expandable user menu as "Account Settings".
+  // Chat Users used to be its own sidebar entry; it now lives as a tab inside
+  // Operations (`/dashboard`). The `/users` route still works for deep links.
   const allLinks = [
     { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
-    { href: "/users", label: "Chat Users", icon: Users2 },
     { href: "/giveaway", label: "Loot Hoard", icon: Gift },
     { href: "/stats", label: "Ledger", icon: BarChart3 },
     { href: "/settings", label: "Forge", icon: Settings2 },

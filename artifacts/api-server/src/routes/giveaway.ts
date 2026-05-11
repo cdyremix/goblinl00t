@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { addInventoryItem, rollLootDrop } from "../bot/inventory";
+import { clampCoinAward } from "../bot/points";
 import {
   CreateGiveawayBody,
   GetGiveawayParams,
@@ -237,37 +238,33 @@ router.post("/giveaway/:id/end", async (req, res) => {
   // Award bot prizes directly; only CS2 prizes need streamer-managed delivery.
   const prizeKind = (giveaway.prizeKind ?? "cs2") as "cs2" | "bot_item" | "bot_coins";
   const bonusCoins = Math.max(0, giveaway.prizeBotCoins ?? 0);
+  // HARD coin-cap helper: every coin-credit insert below clamps so balance ≤ cap.
+  type LootRarity = ReturnType<typeof rollLootDrop>["rarity"];
+  async function awardCoins(item: string, points: number, rarity: LootRarity = "epic") {
+    const credited = await clampCoinAward(giveaway!.channel, winner.username, points);
+    if (credited > 0) {
+      await db.insert(lootDropsTable).values({
+        channel: giveaway!.channel,
+        username: winner.username,
+        item,
+        rarity,
+        points: credited,
+      });
+    }
+  }
   if (prizeKind === "bot_coins") {
     const amount = Math.max(1, giveaway.prizeBotCoins ?? 0);
-    await db.insert(lootDropsTable).values({
-      channel: giveaway.channel,
-      username: winner.username,
-      item: `Giveaway Prize: ${giveaway.title}`,
-      rarity: "epic",
-      points: amount,
-    });
+    await awardCoins(`Giveaway Prize: ${giveaway.title}`, amount);
   } else if (prizeKind === "bot_item") {
     const loot = rollLootDrop({ luckBuffActive: true, theme: getActiveTheme() });
     const result = await addInventoryItem(giveaway.channel, winner.username, loot);
     if (!result.ok) {
       // Inventory full — fall back to coin compensation so the prize is never silently dropped.
-      await db.insert(lootDropsTable).values({
-        channel: giveaway.channel,
-        username: winner.username,
-        item: `Giveaway Prize (pouch was full): ${loot.item}`,
-        rarity: loot.rarity,
-        points: loot.coinValue,
-      });
+      await awardCoins(`Giveaway Prize (pouch was full): ${loot.item}`, loot.coinValue, loot.rarity);
     }
     // Optional combo prize: bonus coins on top of the loot drop.
     if (bonusCoins > 0) {
-      await db.insert(lootDropsTable).values({
-        channel: giveaway.channel,
-        username: winner.username,
-        item: `Giveaway Bonus: ${giveaway.title}`,
-        rarity: "epic",
-        points: bonusCoins,
-      });
+      await awardCoins(`Giveaway Bonus: ${giveaway.title}`, bonusCoins);
     }
   } else {
     void db.insert(tradeFulfillmentsTable).values({
@@ -278,13 +275,7 @@ router.post("/giveaway/:id/end", async (req, res) => {
     }).onConflictDoNothing();
     // Optional combo prize: bonus coins on top of the CS2 skin.
     if (bonusCoins > 0) {
-      await db.insert(lootDropsTable).values({
-        channel: giveaway.channel,
-        username: winner.username,
-        item: `Giveaway Bonus: ${giveaway.title}`,
-        rarity: "epic",
-        points: bonusCoins,
-      });
+      await awardCoins(`Giveaway Bonus: ${giveaway.title}`, bonusCoins);
     }
   }
 

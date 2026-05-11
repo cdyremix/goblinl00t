@@ -535,6 +535,124 @@ export interface AdjustCoinsResponse {
   balance: number;
 }
 
+export interface StreamStatus {
+  /** @nullable */
+  streamStartedAt: string | null;
+  isLive: boolean;
+}
+
+export type EngagementTipSeverity =
+  (typeof EngagementTipSeverity)[keyof typeof EngagementTipSeverity];
+
+export const EngagementTipSeverity = {
+  info: "info",
+  warn: "warn",
+} as const;
+
+export interface EngagementTip {
+  id: string;
+  severity: EngagementTipSeverity;
+  title: string;
+  detail: string;
+}
+
+export type EngagementReportMetrics = {
+  totalLoot: number;
+  totalCommands: number;
+  totalGiveaways: number;
+  uniqueChatters: number;
+};
+
+export interface EngagementReport {
+  range: string;
+  /** @nullable */
+  since?: string | null;
+  metrics: EngagementReportMetrics;
+  tips: EngagementTip[];
+}
+
+export type GiveawayPresetPrizeKind =
+  (typeof GiveawayPresetPrizeKind)[keyof typeof GiveawayPresetPrizeKind];
+
+export const GiveawayPresetPrizeKind = {
+  cs2: "cs2",
+  bot_item: "bot_item",
+  bot_coins: "bot_coins",
+} as const;
+
+export interface GiveawayPreset {
+  id: number;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  prize: string;
+  prizeKind: GiveawayPresetPrizeKind;
+  /** @nullable */
+  prizeBotCoins?: number | null;
+  /** @nullable */
+  prizeBotRarity?: string | null;
+  keyword: string;
+  requireFollower: boolean;
+  subscriberOnly: boolean;
+  /** @nullable */
+  minSubTier?: string | null;
+  createdAt: string;
+}
+
+export type CreateGiveawayPresetPrizeKind =
+  (typeof CreateGiveawayPresetPrizeKind)[keyof typeof CreateGiveawayPresetPrizeKind];
+
+export const CreateGiveawayPresetPrizeKind = {
+  cs2: "cs2",
+  bot_item: "bot_item",
+  bot_coins: "bot_coins",
+} as const;
+
+export type CreateGiveawayPresetPrizeBotRarity =
+  (typeof CreateGiveawayPresetPrizeBotRarity)[keyof typeof CreateGiveawayPresetPrizeBotRarity];
+
+export const CreateGiveawayPresetPrizeBotRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
+export type CreateGiveawayPresetMinSubTier =
+  (typeof CreateGiveawayPresetMinSubTier)[keyof typeof CreateGiveawayPresetMinSubTier];
+
+export const CreateGiveawayPresetMinSubTier = {
+  NUMBER_1000: "1000",
+  NUMBER_2000: "2000",
+  NUMBER_3000: "3000",
+} as const;
+
+export interface CreateGiveawayPreset {
+  title: string;
+  description?: string;
+  prize: string;
+  prizeKind?: CreateGiveawayPresetPrizeKind;
+  prizeBotCoins?: number;
+  prizeBotRarity?: CreateGiveawayPresetPrizeBotRarity;
+  keyword?: string;
+  requireFollower?: boolean;
+  subscriberOnly?: boolean;
+  minSubTier?: CreateGiveawayPresetMinSubTier;
+}
+
+export type StatsRangeParameter =
+  (typeof StatsRangeParameter)[keyof typeof StatsRangeParameter];
+
+export const StatsRangeParameter = {
+  day: "day",
+  week: "week",
+  month: "month",
+  year: "year",
+  all: "all",
+  stream: "stream",
+} as const;
+
 export type ListGiveawaysParams = {
   status?: ListGiveawaysStatus;
   limit?: number;
@@ -551,10 +669,59 @@ export const ListGiveawaysStatus = {
 
 export type GetRecentLootParams = {
   limit?: number;
+  /**
+   * Time window filter. `stream` resolves to caller's streamStartedAt.
+   */
+  since?: GetRecentLootSince;
+};
+
+export type GetRecentLootSince =
+  (typeof GetRecentLootSince)[keyof typeof GetRecentLootSince];
+
+export const GetRecentLootSince = {
+  day: "day",
+  week: "week",
+  month: "month",
+  year: "year",
+  stream: "stream",
+} as const;
+
+export type GetStatsOverviewParams = {
+  /**
+   * Time window for stats. `stream` filters since the caller's streamStartedAt.
+   */
+  range?: StatsRangeParameter;
+};
+
+export type GetCommandStatsParams = {
+  /**
+   * Time window for stats. `stream` filters since the caller's streamStartedAt.
+   */
+  range?: StatsRangeParameter;
 };
 
 export type GetTopLootersParams = {
   limit?: number;
+  /**
+   * Time window for stats. `stream` filters since the caller's streamStartedAt.
+   */
+  range?: StatsRangeParameter;
+};
+
+export type GetEngagementReportParams = {
+  /**
+   * Time window for stats. `stream` filters since the caller's streamStartedAt.
+   */
+  range?: StatsRangeParameter;
+};
+
+export type DeleteGiveawayPreset200 = {
+  ok: boolean;
+};
+
+export type LaunchGiveawayPreset201 = {
+  giveawayId: number;
+  status: string;
 };
 
 export type ConnectSteam200 = {

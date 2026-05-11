@@ -26,5 +26,9 @@ export const usersTable = pgTable("users", {
   wheelMode: text("wheel_mode").notNull().default("auto"),
   // Animation pacing: 'slow' | 'medium' | 'fast'.
   wheelSpeed: text("wheel_speed").notNull().default("medium"),
+  // When the streamer marks a stream as live (Operations -> Start Stream).
+  // Drives the "this stream" filter on dashboard stats + live loot feed.
+  // null = no active session; clear by calling /stream/end.
+  streamStartedAt: timestamp("stream_started_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

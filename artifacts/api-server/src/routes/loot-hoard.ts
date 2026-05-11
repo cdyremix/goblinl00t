@@ -4,6 +4,7 @@ import { db, usersTable, lootDropsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { addInventoryItem, rollLootDrop } from "../bot/inventory";
 import { LOOT_TABLE, type Rarity, type LootTheme } from "../bot/loot-tables";
+import { clampCoinAward } from "../bot/points";
 
 const router: IRouter = Router();
 
@@ -58,21 +59,25 @@ router.post("/loot-hoard/drop", async (req, res) => {
       res.status(400).json({ error: "coins must be a positive integer" });
       return;
     }
-    await db.insert(lootDropsTable).values({
-      channel,
-      username,
-      item: "Streamer Drop",
-      rarity: "epic",
-      points: amount,
-    });
+    const credited = await clampCoinAward(channel, username, amount);
+    if (credited > 0) {
+      await db.insert(lootDropsTable).values({
+        channel,
+        username,
+        item: "Streamer Drop",
+        rarity: "epic",
+        points: credited,
+      });
+    }
     res.json({
       ok: true,
       kind: "coins" as const,
       username,
-      coinsAwarded: amount,
+      coinsAwarded: credited,
       itemAwarded: null,
       rarity: null,
       inventoryFull: false,
+      cappedAt: credited < amount ? credited : undefined,
     });
     return;
   }
@@ -102,18 +107,21 @@ router.post("/loot-hoard/drop", async (req, res) => {
   const result = await addInventoryItem(channel, username, loot);
   if (!result.ok) {
     // Pouch full → fall back to coin credit equal to the rolled item's value.
-    await db.insert(lootDropsTable).values({
-      channel,
-      username,
-      item: `Streamer Drop (pouch was full): ${loot.item}`,
-      rarity: loot.rarity,
-      points: loot.coinValue,
-    });
+    const credited = await clampCoinAward(channel, username, loot.coinValue);
+    if (credited > 0) {
+      await db.insert(lootDropsTable).values({
+        channel,
+        username,
+        item: `Streamer Drop (pouch was full): ${loot.item}`,
+        rarity: loot.rarity,
+        points: credited,
+      });
+    }
     res.json({
       ok: true,
       kind: "item" as const,
       username,
-      coinsAwarded: loot.coinValue,
+      coinsAwarded: credited,
       itemAwarded: loot.item,
       rarity: loot.rarity,
       inventoryFull: true,

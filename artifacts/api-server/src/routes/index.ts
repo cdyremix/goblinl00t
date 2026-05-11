@@ -14,6 +14,8 @@ import pointsRouter from "./points";
 import inventoryRouter from "./inventory";
 import lootHoardRouter from "./loot-hoard";
 import chatUsersRouter from "./chat-users";
+import streamRouter from "./stream";
+import giveawayPresetsRouter from "./giveaway-presets";
 
 const router: IRouter = Router();
 
@@ -32,5 +34,7 @@ router.use(pointsRouter);
 router.use(inventoryRouter);
 router.use(lootHoardRouter);
 router.use(chatUsersRouter);
+router.use(streamRouter);
+router.use(giveawayPresetsRouter);
 
 export default router;

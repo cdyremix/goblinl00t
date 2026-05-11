@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { db, usersTable, lootDropsTable, pointRedemptionsTable, userInventoryTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { getPointsBalance } from "../bot/points";
+import { getPointsBalance, clampCoinAward } from "../bot/points";
 
 const router: IRouter = Router();
 
@@ -103,13 +103,17 @@ router.post("/chat-users/:username/coins", async (req, res) => {
   if (delta > 0) {
     // Positive adjustment → award via loot_drops so it flows through the
     // standard balance/leaderboard pipeline (same path streamer Quick Prize uses).
-    await db.insert(lootDropsTable).values({
-      channel: ch.channel,
-      username,
-      item: reason ? `Streamer Adjustment: ${reason}` : "Streamer Adjustment",
-      rarity: "epic",
-      points: delta,
-    });
+    // HARD coin-cap: clamp positive adjustments so they cannot push past the cap.
+    const credited = await clampCoinAward(ch.channel, username, delta);
+    if (credited > 0) {
+      await db.insert(lootDropsTable).values({
+        channel: ch.channel,
+        username,
+        item: reason ? `Streamer Adjustment: ${reason}` : "Streamer Adjustment",
+        rarity: "epic",
+        points: credited,
+      });
+    }
   } else {
     // Negative adjustment → record a point_redemption so the balance subtracts
     // it. We use kind='streamer_adjustment' to distinguish from real redemptions.

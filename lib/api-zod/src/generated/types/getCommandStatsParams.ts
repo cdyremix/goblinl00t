@@ -7,8 +7,7 @@
  */
 import type { StatsRangeParameter } from "./statsRangeParameter";
 
-export type GetTopLootersParams = {
-  limit?: number;
+export type GetCommandStatsParams = {
   /**
    * Time window for stats. `stream` filters since the caller's streamStartedAt.
    */
