@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useAuth } from "@clerk/react";
+import { useAuth, useClerk } from "@clerk/react";
 import { Sparkles, Wrench, Mail, LogIn, ShieldCheck } from "lucide-react";
 
 interface MaintenanceStatus {
@@ -235,16 +235,38 @@ function MaintenanceModal() {
 
         <div className="mt-6 pt-5 border-t border-[#1c2421] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#9e9585]">
           <span>Dev / testing access only</span>
-          <a
-            href={`${basePath}/sign-in`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[#2a3530] bg-[#1a221e] hover:bg-[#222e28] px-3 py-1.5 text-xs font-medium text-[#e8e0d0] transition-colors"
-            data-testid="link-dev-login"
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            Dev login
-          </a>
+          <DevLoginButton />
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The maintenance wall is shown to non-admins, but a non-admin viewer
+ * may already be signed in — in which case clicking through to
+ * `/sign-in` causes Clerk to immediately redirect to `afterSignIn`
+ * (single-session apps can't render `<SignIn/>` while signed in), which
+ * loops them right back onto this wall. So when a session exists, sign
+ * out FIRST, then route to `/sign-in` so the form actually renders.
+ */
+function DevLoginButton() {
+  const { isSignedIn } = useAuth();
+  const { signOut } = useClerk();
+  const handleClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isSignedIn) return;
+    e.preventDefault();
+    await signOut({ redirectUrl: `${basePath}/sign-in` });
+  };
+  return (
+    <a
+      href={`${basePath}/sign-in`}
+      onClick={handleClick}
+      className="inline-flex items-center gap-1.5 rounded-md border border-[#2a3530] bg-[#1a221e] hover:bg-[#222e28] px-3 py-1.5 text-xs font-medium text-[#e8e0d0] transition-colors"
+      data-testid="link-dev-login"
+    >
+      <LogIn className="w-3.5 h-3.5" />
+      Dev login
+    </a>
   );
 }
