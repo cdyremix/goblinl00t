@@ -247,6 +247,16 @@ router.patch("/admin/users/:id", async (req, res) => {
     return;
   }
 
+  // Snapshot the previous twitchUsername BEFORE the update so we can
+  // part the bot from the old channel and join the new one if an admin
+  // renames a streamer's Twitch link. Without this the bot keeps
+  // listening on a channel that's no longer associated with any user.
+  const [before] = await db
+    .select({ twitchUsername: usersTable.twitchUsername })
+    .from(usersTable)
+    .where(eq(usersTable.id, id))
+    .limit(1);
+
   const [updated] = await db
     .update(usersTable)
     .set(updates)
@@ -256,6 +266,43 @@ router.patch("/admin/users/:id", async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+
+  // Reconcile bot membership + per-channel caches whenever the linked
+  // twitchUsername key actually changed. Covers all three transitions
+  // an admin can perform:
+  //   - rename:  before "alice"  → updates "bob"   (part old, join new)
+  //   - link:    before null     → updates "alice" (join new)
+  //   - unlink:  before "alice"  → updates null    (part old)
+  // Note: `"twitchUsername" in updates` is true even when the value is
+  // null (Zod parse keeps the key), so we check explicitly.
+  const twitchKeyChanged =
+    "twitchUsername" in updates && before?.twitchUsername !== updates.twitchUsername;
+  if (twitchKeyChanged) {
+    const oldCh = before?.twitchUsername ?? null;
+    const newCh = (updates.twitchUsername as string | null | undefined) ?? null;
+    try {
+      const { partChannel, joinChannel, reloadCustomCommands } = await import("../bot/bot-service");
+      const { invalidateChannelTheme } = await import("../bot/channel-theme");
+      const { invalidateChannelSettings } = await import("../bot/channel-settings");
+      if (oldCh) {
+        await partChannel(oldCh);
+        invalidateChannelTheme(oldCh);
+        invalidateChannelSettings(oldCh);
+      }
+      if (newCh) {
+        await joinChannel(newCh);
+        invalidateChannelTheme(newCh);
+        invalidateChannelSettings(newCh);
+      }
+      // Custom-command cache is keyed on twitchUsername, so a rename
+      // (or link/unlink) requires a reload or the user's customs would
+      // either fire on the wrong channel or stop firing entirely.
+      await reloadCustomCommands();
+    } catch (err) {
+      req.log.warn({ err, userId: id }, "admin: bot join/part after twitchUsername change failed");
+    }
+  }
+
   res.json({ user: updated });
 });
 
@@ -430,6 +477,20 @@ router.delete("/admin/users/:id", async (req, res) => {
   }
   // 3) DB delete. FK cascades handle dependent rows.
   await db.delete(usersTable).where(eq(usersTable.id, id));
+
+  // 4) Drop the bot from the deleted streamer's chat so it stops
+  //    listening on a channel with no associated account. Best-effort:
+  //    a failure here doesn't undo the cascade above.
+  if (user.twitchUsername) {
+    try {
+      const { partChannel, reloadCustomCommands } = await import("../bot/bot-service");
+      await partChannel(user.twitchUsername);
+      await reloadCustomCommands();
+    } catch (err) {
+      req.log.warn({ err, userId: id }, "admin: bot part after delete failed");
+    }
+  }
+
   res.json({ ok: true });
 });
 

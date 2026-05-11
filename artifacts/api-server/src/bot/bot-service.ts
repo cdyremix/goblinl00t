@@ -1,10 +1,11 @@
 import tmi from "tmi.js";
 import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable, customCommandsTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { getRarityEmoji } from "./loot-tables";
 import { pickRandom, formatMessage } from "./goblin-phrases";
-import { getThemePhrases, setActiveTheme, getActiveTheme, type BotTheme } from "./bot-themes";
+import { type BotTheme } from "./bot-themes";
+import { getChannelTheme, getChannelThemePhrases } from "./channel-theme";
 import { getPointsBalance, REDEEM_COST_PER_ENTRY, redeemEntriesForUser } from "./points";
 import { getChannelSettings } from "./channel-settings";
 import { checkGating, type Gateable } from "./gating";
@@ -204,7 +205,19 @@ export async function reloadCustomCommands(): Promise<void> {
 
 export interface BotState {
   connected: boolean;
+  /**
+   * Primary/legacy channel — kept for back-compat with the single-tenant
+   * dashboard surface (`/api/bot/status` consumers and admin readouts).
+   * Resolved from `TWITCH_CHANNEL` env or the first joined channel.
+   */
   channel: string;
+  /**
+   * Full list of currently-joined channels. The bot now multi-joins —
+   * one entry per linked streamer's `twitchUsername`. Mutated by
+   * `joinChannel` / `partChannel` so the dashboard can reflect live
+   * membership without a restart.
+   */
+  channels: string[];
   username: string;
   startedAt: Date | null;
   lastMessageAt: Date | null;
@@ -226,6 +239,7 @@ let client: tmi.Client | null = null;
 let botState: BotState = {
   connected: false,
   channel: process.env["TWITCH_CHANNEL"] ?? "goblinl00t",
+  channels: [],
   username: process.env["TWITCH_BOT_USERNAME"] ?? "GoblinL00tBot",
   startedAt: null,
   lastMessageAt: null,
@@ -267,6 +281,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
   // Custom commands — channel-scoped lookup so a custom from streamer A
   // never fires in streamer B's channel.
   const channelKey = channel.replace(/^#/, "").toLowerCase();
+  // Theme is per-channel (read from `usersTable.botTheme` for the
+  // channel's owner). Resolved once per message and threaded into every
+  // handler that branches on theme — replaces the previous module-global
+  // `getActiveTheme()` which would have leaked one streamer's theme
+  // selection into every other channel the bot serves.
+  const channelTheme = await getChannelTheme(channelKey);
   const channelCustoms = CUSTOM_COMMANDS.get(channelKey);
   const custom = channelCustoms?.get(command);
   if (custom) {
@@ -295,7 +315,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
   void logCommand(command, username, channel);
   botState.lastMessageAt = new Date();
 
-  const phrases = getThemePhrases();
+  const phrases = await getChannelThemePhrases(channelKey);
 
   try {
     if (command === "!loot") {
@@ -305,7 +325,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const loot = rollLootDrop({
         luckBuffActive: luckActive,
         allowBuffs: settings.lootDropsEnabled,
-        theme: getActiveTheme(),
+        theme: channelTheme,
       });
       // Charge consumption is atomic with the insert — a "full" result will
       // not burn the buff (see addInventoryItem).
@@ -493,10 +513,10 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
     if (command === "!help") {
       const ch = channel.replace(/^#/, "");
-      const list = await buildHelpCommandList(ch, getActiveTheme());
+      const list = await buildHelpCommandList(ch, channelTheme);
       const custom = await getCustomResponseFor(ch, "!help");
       const reply = custom
-        ? renderTemplate(custom, { user: `@${username}`, commands: list, theme: getActiveTheme() })
+        ? renderTemplate(custom, { user: `@${username}`, commands: list, theme: channelTheme })
         : `${username}: ${list} — full guide in the dashboard.`;
       void client?.say(channel, reply);
     }
@@ -667,7 +687,7 @@ export async function announceGiveawayStart(giveaway: {
   channel: string;
 }): Promise<void> {
   if (!client || !botState.connected) return;
-  const phrases = getThemePhrases();
+  const phrases = await getChannelThemePhrases(giveaway.channel);
   const phrase = formatMessage(pickRandom(phrases.giveawayStart), {
     prize: giveaway.prize,
     keyword: giveaway.keyword,
@@ -682,7 +702,7 @@ export async function announceGiveawayEnd(giveaway: {
   entryCount: number;
 }): Promise<void> {
   if (!client || !botState.connected) return;
-  const phrases = getThemePhrases();
+  const phrases = await getChannelThemePhrases(giveaway.channel);
   const phrase = formatMessage(pickRandom(phrases.giveawayEnd), {
     prize: giveaway.prize,
     winner: giveaway.winner,
@@ -776,17 +796,105 @@ export function isCommandCustomizable(canonical: string): boolean {
   return Boolean(BUILT_IN_COMMANDS[canonical]?.customizable);
 }
 
-export { setActiveTheme, getActiveTheme };
 export type { BotTheme };
 
 let _activeBotName = "GoblinL00t";
 export function setActiveBotName(name: string): void { _activeBotName = name; }
 export function getActiveBotName(): string { return _activeBotName; }
 
+function normalizeChannel(name: string): string {
+  return name.replace(/^#/, "").trim().toLowerCase();
+}
+
+/**
+ * Build the canonical list of channels the bot should join on connect.
+ * Sources, in order of preference, deduped + lowercased:
+ *   1. Every linked streamer in `usersTable.twitchUsername` (the live
+ *      multi-tenant signup roster).
+ *   2. The legacy `TWITCH_CHANNEL` env var (kept for back-compat with
+ *      single-tenant deployments and local dev).
+ *   3. The `goblinl00t` fallback so dev mode without any DB rows still
+ *      lands somewhere chat-visible.
+ *
+ * Failure to read the DB falls back to (2) + (3) so the bot still boots.
+ */
+async function loadJoinableChannels(): Promise<string[]> {
+  const set = new Set<string>();
+  try {
+    const rows = await db
+      .select({ twitchUsername: usersTable.twitchUsername })
+      .from(usersTable)
+      .where(isNotNull(usersTable.twitchUsername));
+    for (const row of rows) {
+      const ch = row.twitchUsername ? normalizeChannel(row.twitchUsername) : "";
+      if (ch) set.add(ch);
+    }
+  } catch (err) {
+    logger.error({ err }, "Failed to load streamer channel list — falling back to env");
+  }
+  const envChannel = process.env["TWITCH_CHANNEL"];
+  if (envChannel) set.add(normalizeChannel(envChannel));
+  set.add("goblinl00t");
+  return [...set];
+}
+
+/**
+ * Dynamically join a Twitch channel after the bot is already connected.
+ * Called from the Twitch-link auth callback (`routes/auth.ts`) so a
+ * brand-new streamer's bot starts working immediately, no restart
+ * required. No-ops gracefully if the bot is offline (no OAuth token in
+ * dev) or already joined.
+ */
+export async function joinChannel(name: string): Promise<void> {
+  const ch = normalizeChannel(name);
+  if (!ch) return;
+  if (botState.channels.includes(ch)) return;
+  // Offline mode (no OAuth token / not yet connected): record the
+  // intended membership so the next `startBot()` reload picks it up,
+  // then bail. The DB-backed `loadJoinableChannels()` is the source of
+  // truth on cold boot, so this assignment mostly matters for the
+  // dashboard `BotState` readout.
+  if (!client || !botState.connected) {
+    botState.channels = [...botState.channels, ch];
+    return;
+  }
+  try {
+    await client.join(ch);
+    botState.channels = [...botState.channels, ch];
+    logger.info({ channel: ch }, "Bot joined channel");
+  } catch (err) {
+    logger.error({ err, channel: ch }, "Failed to join channel");
+  }
+}
+
+/**
+ * Dynamically leave a Twitch channel. Called from admin user-delete and
+ * twitchUsername-rename flows so the bot doesn't keep watching chats
+ * for streamers who no longer have an account.
+ */
+export async function partChannel(name: string): Promise<void> {
+  const ch = normalizeChannel(name);
+  if (!ch) return;
+  // Offline mode: just drop from the local list — there's no live tmi
+  // session to leave anyway.
+  if (!client || !botState.connected) {
+    botState.channels = botState.channels.filter((c) => c !== ch);
+    return;
+  }
+  try {
+    await client.part(ch);
+    botState.channels = botState.channels.filter((c) => c !== ch);
+    logger.info({ channel: ch }, "Bot parted channel");
+  } catch (err) {
+    logger.error({ err, channel: ch }, "Failed to part channel");
+  }
+}
+
 export async function startBot(): Promise<void> {
   const oauthToken = process.env["TWITCH_OAUTH_TOKEN"];
-  const channel = process.env["TWITCH_CHANNEL"] ?? "goblinl00t";
   const username = process.env["TWITCH_BOT_USERNAME"] ?? "GoblinL00tBot";
+  const channels = await loadJoinableChannels();
+  const primaryChannel = normalizeChannel(process.env["TWITCH_CHANNEL"] ?? channels[0] ?? "goblinl00t");
 
   await reloadCustomCommands();
 
@@ -799,8 +907,8 @@ export async function startBot(): Promise<void> {
   startGoblinEvents();
 
   if (!oauthToken) {
-    logger.warn("TWITCH_OAUTH_TOKEN not set — bot running in offline mode (dashboard only)");
-    botState = { ...botState, connected: false, channel, username, startedAt: null };
+    logger.warn({ channels }, "TWITCH_OAUTH_TOKEN not set — bot running in offline mode (dashboard only)");
+    botState = { ...botState, connected: false, channel: primaryChannel, channels, username, startedAt: null };
     return;
   }
 
@@ -814,7 +922,7 @@ export async function startBot(): Promise<void> {
     client = new tmi.Client({
       options: { debug: false },
       identity: { username, password: token },
-      channels: [channel],
+      channels,
     });
 
     client.on("message", (ch, tags, message) => {
@@ -822,8 +930,13 @@ export async function startBot(): Promise<void> {
     });
 
     client.on("connected", () => {
-      botState = { connected: true, channel, username, startedAt: new Date(), lastMessageAt: null };
-      logger.info({ channel, username }, "Bot connected to Twitch!");
+      // Merge the connect-time snapshot with any live mutations that
+      // landed during the (async) connect — e.g. a Twitch-link callback
+      // calling joinChannel() while we were still negotiating. Without
+      // this merge those joins would be silently clobbered.
+      const merged = Array.from(new Set([...channels, ...botState.channels]));
+      botState = { connected: true, channel: primaryChannel, channels: merged, username, startedAt: new Date(), lastMessageAt: null };
+      logger.info({ channels: merged, username }, "Bot connected to Twitch!");
     });
 
     client.on("disconnected", (reason) => {

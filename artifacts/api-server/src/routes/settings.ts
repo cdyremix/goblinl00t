@@ -2,9 +2,10 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { setActiveTheme, type BotTheme } from "../bot/bot-themes";
+import { type BotTheme } from "../bot/bot-themes";
 import { setActiveBotName } from "../bot/bot-service";
 import { invalidateChannelSettings } from "../bot/channel-settings";
+import { invalidateChannelTheme } from "../bot/channel-theme";
 import { userHasFeature } from "../lib/tier-helpers";
 
 const router = Router();
@@ -99,7 +100,8 @@ router.put("/settings", async (req, res) => {
       return;
     }
     updates.botTheme = body.botTheme;
-    setActiveTheme(body.botTheme as BotTheme);
+    // Per-channel theme cache is invalidated below (after the DB write
+    // returns) so we know the streamer's twitchUsername.
   }
 
   if (body.botName !== undefined) {
@@ -182,9 +184,15 @@ router.put("/settings", async (req, res) => {
     .where(eq(usersTable.clerkUserId, userId))
     .returning();
 
-  // Invalidate channel cache for the linked twitch username so chat sees changes.
+  // Invalidate channel caches for the linked twitch username so chat
+  // sees changes without a restart. Theme cache only matters when
+  // botTheme actually changed, but invalidating unconditionally is
+  // cheap (next read repopulates from DB).
   const ch = updated?.twitchUsername ?? before.twitchUsername;
-  if (ch) invalidateChannelSettings(ch);
+  if (ch) {
+    invalidateChannelSettings(ch);
+    invalidateChannelTheme(ch);
+  }
 
   res.json(serializeSettings(updated!));
 });

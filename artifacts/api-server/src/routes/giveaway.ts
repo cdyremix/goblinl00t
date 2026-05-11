@@ -18,7 +18,7 @@ import {
   ListGiveawaysQueryParams,
 } from "@workspace/api-zod";
 import { announceGiveawayStart, announceGiveawayEnd } from "../bot/bot-service";
-import { getActiveTheme } from "../bot/bot-themes";
+import { getChannelTheme } from "../bot/channel-theme";
 import { fireDiscordWebhook } from "../lib/discord-webhook";
 import { requireStreamerChannel, resolveStreamerChannelForRead } from "../lib/auth-helpers";
 import { userHasFeature } from "../lib/tier-helpers";
@@ -625,7 +625,7 @@ router.post("/giveaway/:id/end", async (req, res) => {
     const amount = Math.max(1, giveaway.prizeBotCoins ?? 0);
     await awardCoins(`Giveaway Prize: ${giveaway.title}`, amount);
   } else if (prizeKind === "bot_item") {
-    const loot = rollLootDrop({ luckBuffActive: true, theme: getActiveTheme() });
+    const loot = rollLootDrop({ luckBuffActive: true, theme: await getChannelTheme(giveaway.channel) });
     const result = await addInventoryItem(giveaway.channel, winner.username, loot);
     if (!result.ok) {
       // Inventory full — fall back to coin compensation so the prize is never silently dropped.
