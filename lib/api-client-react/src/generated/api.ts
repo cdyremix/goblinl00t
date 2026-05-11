@@ -896,6 +896,92 @@ export const useRerollGiveaway = <
 };
 
 /**
+ * Dev/test helper. Ends any currently active giveaway for the caller's
+channel, creates a fresh `active` giveaway with a coin prize, and
+inserts ~30 fake entries with varied ticket counts so the streamer
+can immediately try the elimination wheel.
+
+ * @summary Create an active test giveaway pre-loaded with dummy entries
+ */
+export const getSeedTestGiveawayUrl = () => {
+  return `/api/giveaway/seed-test`;
+};
+
+export const seedTestGiveaway = async (
+  options?: RequestInit,
+): Promise<Giveaway> => {
+  return customFetch<Giveaway>(getSeedTestGiveawayUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSeedTestGiveawayMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof seedTestGiveaway>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof seedTestGiveaway>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["seedTestGiveaway"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof seedTestGiveaway>>,
+    void
+  > = () => {
+    return seedTestGiveaway(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SeedTestGiveawayMutationResult = NonNullable<
+  Awaited<ReturnType<typeof seedTestGiveaway>>
+>;
+
+export type SeedTestGiveawayMutationError = ErrorType<void>;
+
+/**
+ * @summary Create an active test giveaway pre-loaded with dummy entries
+ */
+export const useSeedTestGiveaway = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof seedTestGiveaway>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof seedTestGiveaway>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getSeedTestGiveawayMutationOptions(options));
+};
+
+/**
  * @summary Get entries for a giveaway
  */
 export const getGetGiveawayEntriesUrl = (id: number) => {

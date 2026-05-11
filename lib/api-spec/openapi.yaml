@@ -204,6 +204,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/GiveawayResult"
 
+  /giveaway/seed-test:
+    post:
+      operationId: seedTestGiveaway
+      tags: [giveaway]
+      summary: Create an active test giveaway pre-loaded with dummy entries
+      description: |
+        Dev/test helper. Ends any currently active giveaway for the caller's
+        channel, creates a fresh `active` giveaway with a coin prize, and
+        inserts ~30 fake entries with varied ticket counts so the streamer
+        can immediately try the elimination wheel.
+      responses:
+        "201":
+          description: Test giveaway created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Giveaway"
+        "401":
+          description: Unauthorized
+
   /giveaway/{id}/entries:
     get:
       operationId: getGiveawayEntries

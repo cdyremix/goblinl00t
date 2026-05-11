@@ -1,7 +1,9 @@
 import {
   useListGiveaways, useCreateGiveaway, getListGiveawaysQueryKey, useGetCurrentGiveaway,
+  getGetCurrentGiveawayQueryKey,
   useListGiveawayPresets, useCreateGiveawayPreset, useDeleteGiveawayPreset, useLaunchGiveawayPreset,
   getListGiveawayPresetsQueryKey,
+  useSeedTestGiveaway,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,7 @@ import * as z from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
-import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins, Bookmark, Rocket, Trash2 } from "lucide-react";
+import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins, Bookmark, Rocket, Trash2, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { InventoryPicker, type PickedItem } from "@/components/inventory-picker";
@@ -56,6 +58,33 @@ export function Giveaways() {
   const { data: currentGiveaway } = useGetCurrentGiveaway();
 
   const createMutation = useCreateGiveaway();
+  // Dev/test seeder — drops an active giveaway with ~30 fake entries so the
+  // streamer can try the elimination wheel without waiting on real chat.
+  const seedTestMutation = useSeedTestGiveaway({
+    mutation: {
+      onSuccess: (data) => {
+        toast({
+          title: "Test giveaway ready",
+          description: "30 dummy entries seeded. Open it and spin the wheel.",
+        });
+        queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetCurrentGiveawayQueryKey() });
+        // Best-effort: nudge the user toward the new giveaway detail page.
+        if (data?.id) {
+          window.setTimeout(() => {
+            window.location.assign(`/giveaway/${data.id}`);
+          }, 400);
+        }
+      },
+      onError: () => {
+        toast({
+          title: "Seeding failed",
+          description: "The goblin sneezed mid-incantation. Try again.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -137,9 +166,22 @@ export function Giveaways() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-4xl font-bold tracking-tight text-primary">Loot Hoard</h1>
-        <p className="text-muted-foreground mt-2 text-lg">Manage your giveaways and hand out the goods.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight text-primary">Loot Hoard</h1>
+          <p className="text-muted-foreground mt-2 text-lg">Manage your giveaways and hand out the goods.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => seedTestMutation.mutate()}
+          disabled={seedTestMutation.isPending}
+          className="gap-2 border-dashed border-primary/40 text-primary hover:bg-primary/10"
+          data-testid="button-seed-test-giveaway"
+        >
+          <FlaskConical className="w-4 h-4" />
+          {seedTestMutation.isPending ? "Brewing…" : "Seed Test Giveaway"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

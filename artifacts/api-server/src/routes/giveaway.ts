@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable } from "@workspace/db";
+import { getAuth } from "@clerk/express";
+import { db, usersTable, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
 import { addInventoryItem, rollLootDrop } from "../bot/inventory";
 import { clampCoinAward } from "../bot/points";
@@ -88,6 +89,106 @@ router.post("/giveaway", async (req, res) => {
     })
     .returning();
   res.status(201).json(serializeGiveaway(giveaway!, 0));
+});
+
+/**
+ * POST /giveaway/seed-test — dev/test helper.
+ *
+ * The streamer needs a fast way to try the elimination wheel without waiting
+ * for real chatters to enter. This:
+ *   1. Ends any currently active giveaway on the caller's channel (mirrors the
+ *      one-active-at-a-time invariant enforced by `/giveaway/:id/start`).
+ *   2. Creates a fresh `active` giveaway with a coin prize (no Steam asset
+ *      needed, no manual fulfillment).
+ *   3. Bulk-inserts ~30 fake entries with varied ticket counts so the wheel
+ *      has a juicy field to chew through.
+ *
+ * Auth-scoped to the caller's `usersTable.twitchUsername` (falls back to
+ * "goblinl00t" so unauthed dev calls still seed against the legacy default
+ * channel — matches the rest of giveaway.ts' channel resolution).
+ */
+router.post("/giveaway/seed-test", async (req, res) => {
+  const { userId } = getAuth(req);
+  let channel = "goblinl00t";
+  if (userId) {
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.clerkUserId, userId))
+      .limit(1);
+    if (user?.twitchUsername) channel = user.twitchUsername.toLowerCase();
+  }
+
+  // End any currently active giveaway (matches /giveaway/:id/start behavior so
+  // the "currently active" UI never has two rows competing for the spotlight).
+  await db
+    .update(giveawaysTable)
+    .set({ status: "ended", endedAt: new Date() })
+    .where(eq(giveawaysTable.status, "active"));
+
+  const now = new Date();
+  const [giveaway] = await db
+    .insert(giveawaysTable)
+    .values({
+      title: "Test Giveaway — Elimination Wheel Demo",
+      prize: "500 Goblin Coins",
+      prizeKind: "bot_coins",
+      prizeBotCoins: 500,
+      description: "Dummy entries seeded so you can try the wheel without waiting for chat.",
+      status: "active",
+      channel,
+      keyword: "!enter",
+      requireFollower: false,
+      subscriberOnly: false,
+      startedAt: now,
+    })
+    .returning();
+
+  // Hand-rolled cast of fake viewers — varied vibes so the wheel feels alive.
+  // Ticket counts are weighted: most viewers have 1 ticket, a handful are
+  // whales with 3-7, exercising the elimination wheel's odds calculations too.
+  const FAKE_VIEWERS: Array<{ name: string; tickets: number }> = [
+    { name: "loot_pirate", tickets: 5 },
+    { name: "neon_cat", tickets: 1 },
+    { name: "speedrun_sam", tickets: 3 },
+    { name: "vapor_witch", tickets: 2 },
+    { name: "pixel_paladin", tickets: 1 },
+    { name: "midnight_moose", tickets: 1 },
+    { name: "crit_kitty", tickets: 4 },
+    { name: "boss_battle_bri", tickets: 1 },
+    { name: "noscope_nina", tickets: 7 },
+    { name: "rage_quit_ron", tickets: 1 },
+    { name: "frag_master_flex", tickets: 2 },
+    { name: "tilted_tom", tickets: 1 },
+    { name: "lucky_lola", tickets: 6 },
+    { name: "casual_carl", tickets: 1 },
+    { name: "speedy_steve", tickets: 1 },
+    { name: "sniper_sue", tickets: 3 },
+    { name: "boss_baby_b", tickets: 1 },
+    { name: "wizard_winston", tickets: 2 },
+    { name: "ninja_nora", tickets: 1 },
+    { name: "loot_lurker", tickets: 1 },
+    { name: "ghost_glenda", tickets: 4 },
+    { name: "tank_tilly", tickets: 1 },
+    { name: "healer_hank", tickets: 1 },
+    { name: "dps_diana", tickets: 2 },
+    { name: "buff_bart", tickets: 1 },
+    { name: "rng_randy", tickets: 5 },
+    { name: "minmax_milo", tickets: 1 },
+    { name: "afk_alex", tickets: 1 },
+    { name: "clutch_clara", tickets: 3 },
+    { name: "yolo_yara", tickets: 1 },
+  ];
+
+  await db.insert(giveawayEntriesTable).values(
+    FAKE_VIEWERS.map((v) => ({
+      giveawayId: giveaway!.id,
+      username: v.name,
+      tickets: v.tickets,
+    }))
+  );
+
+  res.status(201).json(serializeGiveaway(giveaway!, FAKE_VIEWERS.length));
 });
 
 router.get("/giveaway/current", async (_req, res) => {
