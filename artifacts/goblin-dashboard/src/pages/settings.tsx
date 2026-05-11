@@ -3,8 +3,9 @@ import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings2, Crosshair, Sword, Save, CheckCircle2,
-  AlertCircle, User2, ShieldCheck, Unlink, Terminal, Plus, Trash2, Clock
+  AlertCircle, User2, ShieldCheck, Unlink, Terminal, Plus, Trash2, Clock, ChevronDown
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -455,10 +456,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Commands */}
-      <CommandsSection activeTheme={activeTheme} />
-
-      {/* CS2-specific settings */}
+      {/* CS2-specific settings (rendered above Chat Commands when CS2 is active) */}
       {isCS2 && (
         <section className="space-y-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
           <div className="flex items-center gap-2">
@@ -573,6 +571,9 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
+
+      {/* Commands (collapsible, rendered after CS2 settings) */}
+      <CommandsSection activeTheme={activeTheme} />
 
       </TabsContent>
       </Tabs>
@@ -722,25 +723,44 @@ function useCommands() {
 function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
   const { query, toggle, createCustom, remove } = useCommands();
   const [showForm, setShowForm] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const visible = (query.data ?? []).filter(
     (c) => c.theme === "both" || c.theme === activeTheme,
   );
   const builtIns = visible.filter((c) => !c.isCustom);
   const customs = visible.filter((c) => c.isCustom);
+  const totalCount = visible.length;
+  const enabledCount = visible.filter((c) => c.enabled).length;
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Label className="text-lg font-semibold text-foreground flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-primary" />
-          Chat Commands
-        </Label>
-        <Hint
-          text="Toggle which commands the bot responds to in chat. Only commands relevant to your selected theme are shown. You can also add your own custom commands."
-          side="right"
-        />
-      </div>
+    <Collapsible open={open} onOpenChange={setOpen} asChild>
+      <section className="space-y-3 rounded-xl border border-border bg-card/40 p-4">
+        <CollapsibleTrigger
+          className="flex w-full items-center justify-between gap-3 group"
+          data-testid="toggle-commands-section"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Label className="text-lg font-semibold text-foreground flex items-center gap-2 cursor-pointer">
+              <Terminal className="w-4 h-4 text-primary" />
+              Chat Commands
+            </Label>
+            <Hint
+              text="Toggle which commands the bot responds to in chat. Only commands relevant to your selected theme are shown. You can also add your own custom commands."
+              side="right"
+            />
+            {!query.isLoading && (
+              <span className="text-xs text-muted-foreground font-mono ml-1">
+                {enabledCount}/{totalCount} on
+              </span>
+            )}
+          </div>
+          <ChevronDown
+            className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </CollapsibleTrigger>
+
+        <CollapsibleContent className="space-y-3 data-[state=closed]:hidden">
       <p className="text-xs text-muted-foreground">
         Showing commands available in <span className="text-foreground font-medium">{activeTheme === "cs2" ? "CS2 Arms Deal" : "Goblin Hoard"}</span> mode.
       </p>
@@ -850,7 +870,9 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
           </div>
         )}
       </div>
-    </section>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   );
 }
 
