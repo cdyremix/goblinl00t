@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useUser, useClerk, useAuth } from "@clerk/react";
+import { useUser, useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+
+type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
+type ClerkEmail = ClerkUser["emailAddresses"][number];
 import { useToast } from "@/hooks/use-toast";
 import { Hint } from "@/components/hint";
 import { UserAvatar } from "@/components/user-avatar";
 import { AVATAR_PRESETS } from "@/lib/avatar-presets";
 import {
-  Crown, Sword, Shield, Tv, CheckCircle2, XCircle, Gem, KeyRound, Mail, Pencil
+  Crown, Sword, Shield, Tv, CheckCircle2, XCircle, Gem, KeyRound, Mail, Pencil, AlertCircle, Loader2
 } from "lucide-react";
 
 interface UserProfile {
@@ -94,11 +98,12 @@ const PLANS = [
 
 export function Account() {
   const { user: clerkUser, isLoaded } = useUser();
-  const { openUserProfile } = useClerk();
   const { getToken } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   async function authedFetch(path: string, init: RequestInit = {}) {
     const token = await getToken();
@@ -242,10 +247,10 @@ export function Account() {
                   <Hint text="Email and password changes need verification, so they're handled in a secure pop-up." />
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openUserProfile()}>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEmailDialogOpen(true)}>
                     <Mail className="w-3.5 h-3.5" /> Change Email
                   </Button>
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openUserProfile()}>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setPasswordDialogOpen(true)}>
                     <KeyRound className="w-3.5 h-3.5" /> Change Password
                   </Button>
                 </div>
@@ -392,6 +397,26 @@ export function Account() {
         </p>
       </div>
 
+      {/* Email change dialog */}
+      {clerkUser && (
+        <ChangeEmailDialog
+          open={emailDialogOpen}
+          onOpenChange={setEmailDialogOpen}
+          user={clerkUser}
+          onSuccess={() => toast({ title: "Email updated", description: "Your primary email has been changed." })}
+        />
+      )}
+
+      {/* Password change dialog */}
+      {clerkUser && (
+        <ChangePasswordDialog
+          open={passwordDialogOpen}
+          onOpenChange={setPasswordDialogOpen}
+          user={clerkUser}
+          onSuccess={() => toast({ title: "Password updated", description: "Your password has been changed." })}
+        />
+      )}
+
       {/* Avatar picker dialog */}
       <Dialog open={avatarPickerOpen} onOpenChange={setAvatarPickerOpen}>
         <DialogContent className="sm:max-w-md">
@@ -424,6 +449,306 @@ export function Account() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+type DialogProps = {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  user: ClerkUser;
+  onSuccess: () => void;
+};
+
+function clerkErrorMessage(err: unknown): string {
+  const e = err as { errors?: Array<{ message?: string; longMessage?: string }>; message?: string };
+  return e.errors?.[0]?.longMessage ?? e.errors?.[0]?.message ?? e.message ?? "Something went wrong.";
+}
+
+function ChangeEmailDialog({ open, onOpenChange, user, onSuccess }: DialogProps) {
+  const [step, setStep] = useState<"input" | "verify">("input");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [pendingEmail, setPendingEmail] = useState<ClerkEmail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function discardPending() {
+    if (!pendingEmail) return;
+    try {
+      await pendingEmail.destroy();
+    } catch {
+      // Best-effort cleanup; ignore if Clerk rejects (already verified, network, etc.)
+    }
+  }
+
+  function reset() {
+    setStep("input");
+    setEmail("");
+    setCode("");
+    setPendingEmail(null);
+    setError(null);
+    setBusy(false);
+  }
+
+  async function handleStart(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const created = await user.createEmailAddress({ email: email.trim() });
+      await created.prepareVerification({ strategy: "email_code" });
+      setPendingEmail(created);
+      setStep("verify");
+    } catch (err) {
+      setError(clerkErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pendingEmail) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await pendingEmail.attemptVerification({ code: code.trim() });
+      await user.update({ primaryEmailAddressId: pendingEmail.id });
+      onSuccess();
+      // Successful — no need to discard; clear pendingEmail so close-handler doesn't destroy it.
+      setPendingEmail(null);
+      onOpenChange(false);
+      reset();
+    } catch (err) {
+      setError(clerkErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleBack() {
+    await discardPending();
+    setPendingEmail(null);
+    setCode("");
+    setError(null);
+    setStep("input");
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={async (v) => {
+        if (busy) return;
+        if (!v) {
+          await discardPending();
+          reset();
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-medieval flex items-center gap-2">
+            <Mail className="w-4 h-4 text-primary" /> Change email
+          </DialogTitle>
+          <DialogDescription>
+            {step === "input"
+              ? "Enter your new email. We'll send a verification code to confirm."
+              : `Enter the 6-digit code we sent to ${email}.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {step === "input" ? (
+          <form onSubmit={handleStart} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-email">New email</Label>
+              <Input
+                id="new-email"
+                type="email"
+                autoFocus
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="goblin@cave.gg"
+              />
+            </div>
+            {error && (
+              <p role="alert" aria-live="polite" className="text-xs text-destructive flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" /> {error}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy || !email.trim()} className="gap-1.5">
+                {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Send code
+              </Button>
+            </DialogFooter>
+          </form>
+        ) : (
+          <form onSubmit={handleVerify} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email-code">Verification code</Label>
+              <Input
+                id="email-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="123456"
+                maxLength={6}
+                pattern="[0-9]{6}"
+              />
+            </div>
+            {error && (
+              <p role="alert" aria-live="polite" className="text-xs text-destructive flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" /> {error}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="ghost" disabled={busy} onClick={handleBack}>Back</Button>
+              <Button type="submit" disabled={busy || code.length !== 6} className="gap-1.5">
+                {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Verify & save
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ChangePasswordDialog({ open, onOpenChange, user, onSuccess }: DialogProps) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [signOutOthers, setSignOutOthers] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function reset() {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setSignOutOthers(true);
+    setError(null);
+    setBusy(false);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation don't match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const params: { newPassword: string; signOutOfOtherSessions: boolean; currentPassword?: string } = {
+        newPassword,
+        signOutOfOtherSessions: signOutOthers,
+      };
+      if (user.passwordEnabled) params.currentPassword = currentPassword;
+      await user.updatePassword(params);
+      onSuccess();
+      onOpenChange(false);
+      reset();
+    } catch (err) {
+      setError(clerkErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (busy) return;
+        onOpenChange(v);
+        if (!v) reset();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-medieval flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-primary" /> Change password
+          </DialogTitle>
+          <DialogDescription>
+            {user.passwordEnabled
+              ? "Enter your current password and choose a new one."
+              : "Set a password for your account."}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {user.passwordEnabled && (
+            <div className="space-y-1.5">
+              <Label htmlFor="current-password">Current password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="new-password">New password</Label>
+            <Input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={signOutOthers}
+              onChange={(e) => setSignOutOthers(e.target.checked)}
+              className="rounded border-border"
+            />
+            Sign out of other sessions
+          </label>
+          {error && (
+            <p role="alert" aria-live="polite" className="text-xs text-destructive flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5" /> {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={busy} className="gap-1.5">
+              {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Save password
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
