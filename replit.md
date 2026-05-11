@@ -127,6 +127,16 @@ Bot needs three env vars to go live: `TWITCH_OAUTH_TOKEN`, `TWITCH_BOT_USERNAME`
 - **Discord webhook** (`lib/discord-webhook.ts`) — host-allowlisted (`discord.com` / `discordapp.com`); `catch` logs only `errName` + `errMessage` + `channel` (never raw `err` — fetch errors can leak the secret URL). Settings UI regex matches the server-side allowlist.
 - **Health endpoints** — `/api/healthz` (always 200) and `/api/readyz` (db ping) for uptime monitors.
 
+## Maintenance Mode
+
+Public-facing launch wall toggled via the `MAINTENANCE_MODE` env var (any non-empty value other than `"0"`/`"false"`/`"off"`/`"no"` = ON). Resolved per-request in `routes/maintenance.ts` so flipping the env in the deployment takes effect on next page load without a redeploy.
+
+- `GET /api/maintenance/status` (public; reads optional Clerk session) → `{ enabled, isAdmin }`. `isAdmin` is server-resolved from `usersTable.isAdmin`, never trusted from the client.
+- `POST /api/waitlist` (public; rate-limited 5/min/IP) — body `{ email, source? }`, idempotent on email via `onConflictDoNothing`. Always returns `{ ok: true }` on success so probes can't enumerate the list. Stored in `waitlist_emails` (id, email unique, source, createdAt).
+- Server-side enforcement via `lib/maintenance-guard.ts` (mounted at `/api` AFTER `clerkMiddleware`). When ON, every `/api/*` request returns `503 {error, maintenance:true}` EXCEPT: (a) the allowlist `maintenance/status`, `waitlist`, `healthz`, `readyz`, `users/me`, and `auth/*` (Twitch OAuth round-trip); (b) authenticated callers whose `usersTable.isAdmin === true`. Stripe webhook is pre-mounted before the guard so payment events keep landing. `/sign-up`, `/stripe/checkout`, etc. are deliberately NOT allowlisted — closed beta during maintenance.
+- Frontend `<MaintenanceGate>` (`components/maintenance-gate.tsx`) wraps `<AppRouter />` inside the Clerk + QueryClient providers. Behavior: status off → pass-through; status loading → neutral splash (no flash of app); status query errored → **fail closed** (renders the wall, since the API is unreachable); status on + admin → slim amber banner + full app; status on + non-admin → full-screen modal with notify-me form + Dev Login link to `/sign-in`. Allowed-through paths (`/sign-in`, `/terms`, `/privacy`) render normally so admins can authenticate and the legal footer keeps working. Status refetches every 60s + on focus so an admin demotion / mode flip propagates.
+- To toggle: set `MAINTENANCE_MODE=true` (on) or unset / `MAINTENANCE_MODE=false` (off). No restart needed (resolved per-request server-side).
+
 ## Important Gotchas
 
 - `pnpm run typecheck:libs` after editing `lib/db/src/schema/` before checking artifacts.

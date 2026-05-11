@@ -25,6 +25,7 @@ import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useSubscriptionTier } from "@/hooks/use-tier";
+import { MaintenanceGate } from "@/components/maintenance-gate";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -295,7 +296,13 @@ function ClerkProviderWithRoutes() {
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
         <TooltipProvider>
-          <AppRouter />
+          {/* MaintenanceGate sits inside ClerkProvider so it can resolve
+              the caller's auth token (admins bypass) and inside the
+              QueryClientProvider so its status fetch is cached + retried
+              like every other query in the app. */}
+          <MaintenanceGate>
+            <AppRouter />
+          </MaintenanceGate>
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>

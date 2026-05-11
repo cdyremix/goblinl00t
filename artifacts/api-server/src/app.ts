@@ -11,6 +11,7 @@ import {
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { processStripeWebhook } from "./lib/stripe-webhook-handlers";
+import { maintenanceGuard } from "./lib/maintenance-guard";
 
 const app: Express = express();
 
@@ -73,6 +74,11 @@ app.use(
     ),
   })),
 );
+
+// Maintenance guard runs after clerkMiddleware (so getAuth resolves) and
+// before the API router. When MAINTENANCE_MODE is OFF this is a no-op.
+// When ON, only the allowlisted endpoints + super-user calls pass through.
+app.use("/api", maintenanceGuard);
 
 app.use("/api", router);
 

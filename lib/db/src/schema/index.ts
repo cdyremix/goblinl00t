@@ -9,3 +9,4 @@ export * from "./point_redemptions";
 export * from "./user_inventory";
 export * from "./goblin_events";
 export * from "./giveaway_presets";
+export * from "./waitlist_emails";
