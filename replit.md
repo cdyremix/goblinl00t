@@ -4,145 +4,119 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080, served at `/api`)
-- `pnpm --filter @workspace/goblin-dashboard run dev` — run the React dashboard (served at `/`)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
+- `pnpm --filter @workspace/api-server run dev` — API server (port 8080, served at `/api`)
+- `pnpm --filter @workspace/goblin-dashboard run dev` — React dashboard (served at `/`)
+- `pnpm run typecheck` / `pnpm run build` — across all packages
+- `pnpm --filter @workspace/api-spec run codegen` — regen API hooks + Zod schemas from OpenAPI
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm run typecheck:libs` — rebuild composite lib declarations (run after DB schema changes)
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5 + pino logger
-- DB: PostgreSQL + Drizzle ORM (lib/db)
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec in lib/api-spec)
-- Build: esbuild (CJS bundle)
-- Frontend: React 18 + Vite, TailwindCSS v4, shadcn/ui, Wouter routing, React Query
+pnpm workspaces, Node 24, TS 5.9. API: Express 5 + pino. DB: Postgres + Drizzle ORM (`lib/db`, composite). Validation: Zod (`zod/v4`) + drizzle-zod. Codegen: Orval. Build: esbuild (CJS). Frontend: React 18 + Vite + TailwindCSS v4 + shadcn/ui + Wouter + React Query. Proxy: `/api` → api-server, `/` → dashboard.
 
-## Where things live
+## Layout
 
 - `lib/db/src/schema/` — DB schema (giveaways, giveaway_entries, loot_drops, command_logs, user_inventory, goblin_events, users, giveaway_presets)
-  - `usersTable.streamStartedAt` (nullable timestamp) — **deprecated** (the manual Start/End Stream UI was removed). Still read by `routes/stats.ts` (range=stream) and `routes/loot.ts` (since=stream) when present; falls back to the last 12h otherwise. Safe to ignore from new code.
-  - `usersTable.eliminationFlavorEnabled` (boolean, default true) — when true, the elimination wheel modal renders an RPG-style flavor banner on each elimination (e.g. "@user was struck by a goblin's club!"). Purely cosmetic — never reaches Twitch chat. Toggled from the ⚙️ gear popover inside the wheel modal itself, not the Forge page.
-  - `usersTable.commandResponses` (jsonb, default `{}`) — per-channel custom reply templates keyed by canonical command name (e.g. `{"!help": "...", "!hoard": "..."}`). Empty string clears. Cached by `bot/command-responses.ts`; **all writes must call `invalidateCommandResponses(channel)`**. Tokens are rendered by `renderTemplate(template, vars)` (e.g. `{user}` → `@username`, `{balance}`, `{commands}`, `{theme}`).
-  - `giveaway_presets` — saved giveaway templates per streamer (title, description, prize, prizeKind, prizeBotCoins, prizeBotRarity, keyword, requireFollower, subscriberOnly, minSubTier).
-- `lib/api-spec/openapi.yaml` — OpenAPI source of truth for all endpoints
-- `lib/api-client-react/src/generated/` — generated React Query hooks (do not edit)
-- `artifacts/api-server/src/` — Express API + bot service
-  - `src/bot/bot-service.ts` — tmi.js Twitch bot (offline mode if no token)
-  - `src/bot/loot-tables.ts` — rarity tiers + item pools (LOOT_TABLE). Each item has a `theme: "goblin" | "cs2"` field; `rollLootDrop` filters the pool by active theme (passed via `opts.theme`) with a fallback to any-theme pool if a tier is empty. **All call sites must thread the active theme**: `bot-service.ts` (`!loot`) and `routes/giveaway.ts` (`bot_item` award) use `getActiveTheme()`; `routes/loot-hoard.ts` (manual Quick Prize) reads `user.botTheme`. Forgetting the `theme` option silently defaults to "goblin" — CS2 streamers will get goblin items.
-  - `src/bot/inventory.ts` — 5-slot inventory service: rollLootDrop (luck buff bumps rarity), addInventoryItem (per-user advisory lock), sellInventoryItem (coins-buff 2× multiplier in same txn), useInventoryItem, consumeBuffCharge, hasActiveBuff
-  - `src/bot/goblin-events.ts` — 5–15 min jitter scheduler, picks random recent chatter, fires drop (loot_drops insert) or steal (point_redemptions kind='goblin_steal', capped to balance); gated by usersTable.goblinEventsEnabled
-  - `src/routes/` — giveaway, loot, stats, commands, bot, inventory, settings, chat-users routes
-  - `src/routes/chat-users.ts` — `GET /chat-users` aggregates every distinct username from `loot_drops`, `point_redemptions`, and `user_inventory` for the streamer's channel and returns `{username, coins, inventoryCount, inventory[]}`. The `inventory[].slot` is **synthesized** (1-based index over rows sorted by `id`) because `user_inventory` has no `slot` column. `POST /chat-users/:username/coins {delta, reason?}` writes positive deltas as a `loot_drops` row (`item: "Streamer Adjustment[: <reason>]"`, rarity epic, points = delta) and negative deltas as a `point_redemptions` row (`kind: "streamer_adjustment"`, `points: |delta|`, `ticketsAdded: 0`). Both flow through `getPointsBalance()` so the leaderboard, `!coins`, and the coin-cap clip remain consistent.
-- `artifacts/goblin-dashboard/src/` — React frontend
-  - `src/pages/` — home, dashboard, giveaways, giveaway-detail, stats, commands, account, settings, trade-office, help, chat-users
-  - `src/components/layout.tsx` — sidebar layout: brand logo → expandable user menu (Collapsible: Account Settings + Sign Out) → main nav (Operations, Chat Users, Loot Hoard, Ledger, Forge, Trade Office) → pinned Help & Guide link at the bottom (separated by a top border). Mounts `<OnboardingTour />` on every authed page. The user menu auto-opens when on `/account`.
-  - `src/components/onboarding-tour.tsx` — first-visit 4-step welcome modal (paginated dots + Skip/Next/Got it). Dismissal persists in localStorage as `goblin-loot-onboarded:<clerkUserId>` so it never replays for the same account on the same browser. Clear that key to force the tour to reappear during testing.
-  - `src/index.css` — dark goblin cave theme (gold/amber primary, purple epic, green uncommon)
+- `lib/api-spec/openapi.yaml` — source of truth; `lib/api-client-react/src/generated/` = auto-generated hooks (do not edit)
+- `artifacts/api-server/src/`
+  - `bot/bot-service.ts` — tmi.js bot (offline if no `TWITCH_OAUTH_TOKEN`)
+  - `bot/loot-tables.ts` — `LOOT_TABLE`, themed pools (goblin/cs2)
+  - `bot/inventory.ts` — 5-slot inventory, `addInventoryItem` (advisory lock), buffs
+  - `bot/goblin-events.ts` — random drop/steal scheduler (5–15min jitter)
+  - `bot/points.ts` — `redeemEntriesForUser`, `getPointsBalance`, `clampCoinAward`
+  - `routes/` — giveaway, loot, stats, commands, bot, inventory, settings, chat-users, auth, steam, health
+  - `lib/auth-helpers.ts` — `requireStreamerChannel` (strict, for writes), `resolveStreamerChannelForRead` (dev-fallback to `goblinl00t`), `rateLimit`
+  - `lib/discord-webhook.ts` — fires winner embeds; host-allowlisted; never logs raw err
+- `artifacts/goblin-dashboard/src/`
+  - `pages/` — home, dashboard, giveaways (`/giveaway`), giveaway-detail, stats, commands, account, settings, trade-office, help, chat-users, pricing, terms, privacy
+  - `components/layout.tsx` — sidebar (logo → user menu → nav → pinned Help) + footer (Help/Pricing/Discord/Terms/Privacy) + `<OnboardingTour />`
+  - `components/onboarding-checklist.tsx` — dashboard checklist (Twitch link / Steam / first command / first giveaway)
+  - `components/error-boundary.tsx` — wraps `<App>`; goblin-themed Reload card
+  - `components/elimination-wheel.tsx` + `pixel-fight-scene.tsx` — see Elimination Wheel below
 
-## Architecture decisions
+## Key DB Columns (on `usersTable`)
 
-- OpenAPI-first: all endpoints defined in `lib/api-spec/openapi.yaml`; React Query hooks and Zod schemas auto-generated via Orval.
-- Bot runs in offline mode (dashboard-only) when `TWITCH_OAUTH_TOKEN` env is not set — graceful degradation.
-- `lib/db` is a composite lib; always run `pnpm run typecheck:libs` after schema changes before typechecking artifacts.
-- Proxy routes at `/api` → api-server (port 8080), `/` → goblin-dashboard.
-- Commands toggled via `/api/commands/:name/toggle` and cached in-memory in the bot service.
+- `streamStartedAt` — **deprecated** (manual Start/End Stream removed). Read by `routes/stats.ts` (`range=stream`) and `routes/loot.ts` (`since=stream`); falls back to last 12h.
+- `eliminationFlavorEnabled` (bool, default true) — RPG flavor banner in wheel modal (cosmetic, never reaches chat). Toggled in modal's ⚙️ popover.
+- `commandResponses` (jsonb) — per-channel `{"!cmd": "template"}`. Cached by `bot/command-responses.ts`; **all writes must call `invalidateCommandResponses(channel)`**. Tokens via `renderTemplate` (`{user}`, `{balance}`, `{commands}`, `{theme}`).
+- `discordWebhookUrl` — fired on giveaway end (see Security).
+- Channel runtime settings (`lootDropsEnabled`, `coinRedemptionEnabled`, `coinCap`, `goblinEventsEnabled`, `wheelMode`, `wheelSpeed`) — cached by `bot/channel-settings.ts`; settings PUT MUST call `invalidateChannelSettings(twitchUsername)`.
+- `steamTradeUrl` — auto-populated when streamer connects Steam (manual input removed; bot uses winner trade URLs from `tradeFulfillmentsTable.steamTradeUrl` collected via `!tradeurl`).
 
-## Product
+## Product Surfaces
 
-- **Home page** (`/`): Public landing page with feature overview and chat command reference.
-- **Dashboard / Operations** (`/dashboard`): Two tabs — **Overview** (bot status, stats, **Recent Winners** hall of fame, live loot feed, scoped to the current stream window) and **Chat Users** (full coin/inventory roster, formerly `/users`). Stats and the live loot feed pass `range=stream` / `since=stream`, which the API resolves to `usersTable.streamStartedAt` if present, else the last 12 hours. The Start/End Stream control was removed — the panel passively shows the stream window with a banner. The "Current Hoard" / active-giveaway card was removed because it duplicated the Loot Hoard SpotlightCard; in its place is a **Recent Winners** card that lists the last 5 ended giveaways with their winner + prize (each row deep-links to the giveaway detail page). The standalone `/users` route still works for deep links.
-- **Loot Horde** (`/giveaway`): Hero-led redesign so the streamer never has to bounce into a detail page just to draw a winner. Page header carries a 🧪 **Create Test Giveaway** button (`TestGiveawayButton`, calls `useSeedTestGiveaway` → `POST /giveaway/seed-test`, dev-gated server-side) that's always visible regardless of whether a giveaway already exists. The list section now opens with a **Your Giveaways** subheader + description above the All/Active/Pending/Ended filter pills. Per-row delete uses a styled `AlertDialog` (shadcn) instead of `window.confirm` — the trash icon opens the dialog, "Delete forever" calls `useDeleteGiveaway`. Note: the visible page title changed from "Loot Hoard" → "Loot Horde" along with most user-facing copy; the route path (`/giveaway`), API path (`/api/loot-hoard/drop`), and chat command names (`!hoard`, `!stash`) intentionally kept their original spelling to avoid breaking existing links and chat muscle memory. **`SpotlightCard`** at the top features the live giveaway (or, if none, the most recent pending) with the primary action front-and-center — Pending → Start, Active → 🎡 Spin Wheel (opens the `EliminationWheel` modal **inline**, no navigation). When entries < 5, both the spotlight and each list row expose a dashed-border **+ Test** button that calls `POST /giveaway/:id/seed-entries` (idempotent: bulk-inserts 30 fake viewers via `onConflictDoNothing` on the (giveawayId, username) unique index). The `useSeedTestGiveaway` (`POST /giveaway/seed-test`) hook still creates a fresh test giveaway from scratch; both routes share a module-scope `FAKE_VIEWERS` constant in `routes/giveaway.ts`. Below the hero: the create form (left col) + a collapsed **Quick Prize Drop** panel + filterable list of `GiveawayRow` cards with inline Start / + Test / 🗑️ Delete buttons (the trash icon calls `useDeleteGiveaway` → `DELETE /giveaway/:id`, which cascades the entry + trade-fulfillment rows; it does NOT claw back coins already credited to a winner). The Saved Presets panel + Save Preset button were **removed** in the latest pass — streamers asked to drop it because the create form is fast enough on its own. The `giveaway_presets` table and `/giveaway-presets` routes still exist for back-compat with any pre-existing rows but no UI surfaces them.
-- **Giveaway Detail** (`/giveaway/:id`): Start, end (pick winner), reroll. Shows winner banner and full entry list.
-- **Ledger** (`/stats`): Day / Week / Month / Year / All-time range tabs that filter overview cards, top looters, and command usage. Includes an **Engagement Tips** card driven by `GET /stats/engagement` — lightweight heuristics (no giveaways in window, low command usage, few unique chatters, no loot drops, healthy) that surface 0–5 actionable suggestions, never auto-actions.
-- **Spells** (`/commands`): Toggle individual chat commands on/off with live cooldown display.
-- **Forge** (`/settings`): Bot display name, theme picker (goblin/cs2), Economy & Loot toggles (Random Goblin Events, Special-Item Loot Drops, Coin Redemption, Coin Balance Cap), Steam trade URL, Steam ID 64 with CS2 inventory grid. (Elimination Wheel settings — mode / speed / RPG flavor toggle — moved to a ⚙️ gear-icon popover inside the wheel modal itself; see `components/elimination-wheel.tsx#WheelSettingsPopover`.)
-- **Trade Office** (`/trade-office`): Manage CS2 skin delivery to giveaway winners — track trade URLs, mark trade-locked items, add notes, update status (pending → sent).
-- **Chat Users** (`/users`): List every viewer who has ever earned coins, redeemed coins, or held inventory in the streamer's channel. Shows current coin balance + 5-slot pouch preview, with an "Adjust Coins" dialog (+/- delta with optional reason) for streamer corrections.
-- **Help & Guide** (`/help`): Static reference page with feature walkthroughs and the full chat command table. Linked from a pinned button at the bottom of the sidebar.
-- **Loot Hoard Quick Prize panel**: streamer-only manual drop (coins or random item) on `/giveaway` page, no giveaway needed. Items roll into the viewer's pouch via `addInventoryItem`; falls back to a coin credit equal to the item's value if the pouch is full.
-- **Elimination Wheel**: when ending a giveaway, opens a modal that animates through entries and eliminates one per round until the server-chosen winner remains. Settings: `wheelMode` (auto/manual) and `wheelSpeed` (slow/medium/fast).
+- **Home** (`/`) — public landing.
+- **Dashboard / Operations** (`/dashboard`) — Overview tab (bot status, stats, **Recent Winners**, live loot feed; scoped to stream window) + Chat Users tab. Mounts `OnboardingChecklist` at top.
+- **Loot Horde** (`/giveaway`) — hero `SpotlightCard` (Pending → Start, Active → 🎡 Spin Wheel inline) + create form + Quick Prize Drop + filterable list. Per-row delete uses shadcn `AlertDialog`. 🧪 **Create Test Giveaway** (page header) and **+ Test** (when entries < 5) call dev-gated seed routes (`POST /giveaway/seed-test`, `POST /giveaway/:id/seed-entries`); both share `FAKE_VIEWERS` in `routes/giveaway.ts`. Page title says "Loot Horde" but route/API/chat names kept original "Hoard" spelling.
+- **Giveaway Detail** (`/giveaway/:id`) — Start, end (pick winner), reroll.
+- **Ledger** (`/stats`) — Day/Week/Month/Year/All tabs. Engagement Tips card via `GET /stats/engagement`. CSV export (channel-scoped) via `/stats/export?range=&kind=loot|commands|giveaways`.
+- **Spells** (`/commands`) — toggle commands; live cooldowns; inline custom-response editor for `customizable: true` commands.
+- **Forge** (`/settings`) — bot name, theme picker (goblin/cs2), Economy & Loot toggles, Discord webhook URL, Steam connection + CS2 inventory grid.
+- **Trade Office** (`/trade-office`) — manage CS2 skin delivery (trade URLs, locked items, status pending → sent).
+- **Chat Users** (`/users`) — every viewer who's earned/redeemed coins or held inventory; Adjust Coins dialog.
+- **Help & Guide** (`/help`) — static reference + chat command table.
+- **Pricing / Terms / Privacy** (`/pricing`, `/terms`, `/privacy`) — public; no API calls.
 
 ## Bot Commands
 
-Canonical commands (the Spells page lists only these — aliases share toggle, cooldown, and handler with their canonical):
+Canonicals (Spells page lists only these; aliases share toggle/cooldown/handler):
 - `!loot`, `!enter`, `!inventory`, `!sell <slot|all>`, `!use <slot>`, `!giveaway`, `!redeem`, `!tradeurl`
-- `!help` — short, theme-aware list of currently-enabled commands (customizable; tokens: `{user}`, `{commands}`, `{theme}`)
-- `!points` (alias: `!coins`) — show your coin balance (customizable; tokens: `{user}`, `{balance}`)
-- `!goblin` (alias: `!skin`) — random themed taunt (customizable; tokens: `{user}`, `{theme}`)
-- `!steal` (alias: `!scam`) — try to mug another viewer
-- `!hoard` (alias: `!stash`) — show your coin balance (customizable; tokens: `{user}`, `{balance}`)
-- `!feedgoblin` (alias: `!case`) — feed / open-case flavor response (customizable; tokens: `{user}`, `{theme}`)
+- `!help` (customizable; tokens `{user}` `{commands}` `{theme}`)
+- `!points` / `!coins` (customizable; `{user}` `{balance}`)
+- `!hoard` / `!stash` (customizable; `{user}` `{balance}`)
+- `!goblin` / `!skin` (customizable; `{user}` `{theme}`)
+- `!feedgoblin` / `!case` (customizable; `{user}` `{theme}`)
+- `!steal` / `!scam`
 
-**Customizable command responses** (Forge → Chat Commands): each `BUILT_IN_COMMANDS[name]` entry can opt in via `customizable: true`, `availableTokens: string[]`, and `defaultResponse: string`. The Spells/Forge UI renders an inline textarea + token-chip palette for those rows; the streamer's override is persisted to `usersTable.commandResponses` (jsonb) via `PUT /commands/:name/response` (empty body string clears). `getCommandConfig({channel})` is async and resolves the canonical name + the streamer's override; the bot calls `getCustomResponseFor(channel, canonical)` and renders with `renderTemplate(template, vars)`. `routes/commands.ts` MUST call `invalidateCommandResponses(channel)` after writes — the bot reads from the cache on every chat message. Adding a new customizable command: tag it in `BUILT_IN_COMMANDS`, swap the handler's hardcoded reply for `renderTemplate(getCustomResponseFor(channel, name) ?? DEFAULT, vars)`, and document the available tokens here.
-
-`bot/bot-service.ts` defines aliases via `BUILT_IN_COMMANDS[name].aliasOf`. `getCommandConfig()` filters them out (only canonicals show up in the API + Spells page) and emits `aliases: string[]` on the canonical so the UI can hint them. `toggleCommandEnabled()` resolves to the canonical and propagates the new state to every alias so the bot's `command in COMMAND_ENABLED` check always sees a consistent value regardless of which name was typed.
+Aliases declared via `BUILT_IN_COMMANDS[name].aliasOf`; `getCommandConfig()` filters them out and emits `aliases[]` on the canonical. `toggleCommandEnabled()` propagates state to all aliases. **To add a customizable command**: tag `customizable: true`, `availableTokens`, `defaultResponse`; swap handler to `renderTemplate(getCustomResponseFor(channel, name) ?? DEFAULT, vars)`; document tokens in this README.
 
 ## Twitch Integration
 
-Bot requires three env vars to go live in chat:
-- `TWITCH_OAUTH_TOKEN` — OAuth token for the bot account
-- `TWITCH_BOT_USERNAME` — bot's Twitch username
-- `TWITCH_CHANNEL` — channel name to join
-
-Without them, the API and dashboard work fully; the bot just won't connect to Twitch.
+Bot needs three env vars to go live: `TWITCH_OAUTH_TOKEN`, `TWITCH_BOT_USERNAME`, `TWITCH_CHANNEL`. Without them the API/dashboard work fully — bot just stays offline.
 
 ## Streamer Account Linking (OAuth)
 
-- **Twitch sign-in** (`routes/auth.ts`): real Twitch OAuth. Frontend (`pages/account.tsx#startTwitchConnect`) calls `GET /api/auth/twitch` via authed fetch, server returns `{url}`, browser does `window.location.assign(url)`. **Do not** convert this back to a top-level `<a href>` — Clerk's session cookie isn't reliably sent to the API origin under the proxy, so the route would 401. Callback redirects to `/account?tab=channel&connected=twitch`. Requires `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_REDIRECT_URI`.
-- **Steam sign-in** (`routes/steam.ts`): real Steam OpenID 2.0. Frontend (`pages/settings.tsx#useSteamConnection.connect`) calls `POST /api/steam/auth/init`, server sets a signed `steam_oauth_clerk` cookie (HMAC-SHA256 of `clerkUserId.exp` keyed on `SESSION_SECRET`, 10-min TTL, `httpOnly`/`secure`/`sameSite=lax` so it survives the top-level redirect back from Steam), and returns `{url}`. Steam redirects to `GET /api/steam/auth/callback`, which echoes the `openid.*` params back with `mode=check_authentication` to verify the assertion, parses SteamID64 out of `openid.claimed_id`, fetches the public profile name from `steamcommunity.com/profiles/<id>/?xml=1` (no API key), and writes `usersTable.steamId64` + `steamUsername`. Then redirects to `/settings?connected=steam`. The legacy `MOCK_STEAM_ID64` short-circuit is still honored by `/steam/inventory` so the existing mock account keeps working in dev.
-- **Account page tab** (`pages/account.tsx`): `Tabs defaultValue` reads `?tab=identity|channel|rank` from the URL once on mount. The sidebar's "Connect Twitch" reminder banner (`components/layout.tsx#ConnectTwitchReminder`) and the Twitch OAuth callback both deep-link to `/account?tab=channel`.
+- **Twitch sign-in** (`routes/auth.ts`) — real Twitch OAuth. Frontend (`pages/account.tsx#startTwitchConnect`) calls `GET /api/auth/twitch` via authed fetch, server returns `{url}`, browser does `window.location.assign(url)`. **Do NOT** convert this to a top-level `<a href>` — Clerk's session cookie isn't reliably sent to the API origin under the proxy. Callback redirects to `/account?tab=channel&connected=twitch`. State is HMAC-SHA256 signed (keyed on `SESSION_SECRET`); callback constant-time verifies before exchanging code. Init endpoint rate-limited to 10/min per Clerk user. Requires `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_REDIRECT_URI`.
+- **Steam sign-in** (`routes/steam.ts`) — real Steam OpenID 2.0. Frontend posts to `/api/steam/auth/init`, server sets signed `steam_oauth_clerk` cookie (HMAC, 10-min TTL, httpOnly/secure/sameSite=lax) and returns `{url}`. Callback verifies via `mode=check_authentication`, parses SteamID64 from `openid.claimed_id`, fetches profile name via `steamcommunity.com/profiles/<id>/?xml=1` (no API key), writes `steamId64` + `steamUsername` + `steamTradeUrl`, redirects to `/settings?connected=steam`. Init endpoint rate-limited. `MOCK_STEAM_ID64` short-circuit still honored by `/steam/inventory` for dev.
+- **Account page tab** (`pages/account.tsx`) — `Tabs defaultValue` reads `?tab=identity|channel|rank` once on mount.
 
-## Gotchas
+## Security & Multi-Tenancy
 
-- Always run `pnpm run typecheck:libs` after editing `lib/db/src/schema/` before checking artifacts.
-- Do not run `pnpm dev` at root — use workflows or `pnpm --filter` commands.
-- The `getGiveawayEntries` endpoint does NOT have a `limit` query param (removed to avoid TS2308 collision with path param).
-- `currentGiveaway.giveaway` can be null — always optional-chain as `currentGiveaway?.giveaway?.id`.
-- `giveaway_entries` has a unique index on `(giveaway_id, username)` — always insert tickets via `onConflictDoUpdate` (see `bot/points.ts#redeemEntriesForUser`), never read-modify-write.
-- All point-redemption flows MUST go through `redeemEntriesForUser()` (serializable transaction). Do not write `point_redemptions` + `giveaway_entries` directly from a route or bot handler.
-- `POST /giveaway/:id/redeem` is Clerk-authed and operates on the caller's linked `usersTable.twitchUsername` — it cannot redeem for another user.
-- Sub-tier detection reads `tags.badges?.subscriber` (only `"2000"` / `"3000"` indicate Tier 2 / 3; anything else is Tier 1). `badges-raw` and `badge-info` are NOT reliable for tier.
-- Follower gating is best-effort and falls open when `TWITCH_CLIENT_ID` / `TWITCH_OAUTH_TOKEN` aren't set or the broadcaster has no stored `twitchUserId`. For strict enforcement, configure a real Twitch app token.
-- Giveaway prizes have three kinds (`prizeKind`), selected via a Prize Source dropdown on the create form: `cs2` (🔫 CS2 Skin — manual streamer delivery via Trade Office), `bot_item` (👺 Goblin Hoard — auto-rolls into winner's inventory; falls back to coin credit if pouch is full), `bot_coins` (🪙 Coins — credits `prizeBotCoins` directly to the winner via `loot_drops`). The labels stay goblin-themed regardless of `botTheme`; CS2 mode just rolls CS2-themed items at runtime because `rollLootDrop` filters `LOOT_TABLE` by active theme. Always serialize/deserialize all three new fields (`prizeKind`, `prizeBotCoins`, `prizeBotRarity`). **Combo prizes**: `prizeBotCoins` carries through for ALL kinds — main reward for `bot_coins`, optional bonus on top of the skin/loot for `cs2` and `bot_item` (winner gets both, awarded as a separate `loot_drops` insert with item label `"Giveaway Bonus: <title>"`). `prizeBotRarity` is meaningful for `bot_item` (biases the random roll) and cosmetic on `cs2` (the picked skin asset is what's actually delivered).
-- Inventory is capped at 5 slots per (channel, username). All inserts MUST go through `addInventoryItem()` — it takes a per-user `pg_advisory_xact_lock` to enforce the cap under concurrency. The luck-buff charge consumption is atomic with the insert (pass `consumeLuckOnSuccess: true`); a "full" result never burns the charge.
-- Ticket buff (`!enter`) is consumed only after the entry insert lands. The insert uses `onConflictDoNothing` on `(giveaway_id, username)` so a concurrent duplicate entry won't burn the buff either.
-- New chat-driven inventory paths normalize username via `tags.username` (lowercase). Historical `loot_drops` / `point_redemptions` rows may be mixed-case, so balance lookups can split across casings until backfilled — known limitation, not a regression.
-- `getPointsBalance(username, channel?)` takes an **optional** channel filter. Bot/leaderboard call sites omit it (legacy global-by-username, single-channel deployment). The Chat Users dashboard route always passes the streamer's channel so the same handle on different channels stays separate. Pass the channel any time you're operating in a multi-channel context; otherwise leave it off to match historical behavior.
-- `Random Goblin Events` (settings toggle, default ON) picks from an in-memory `RECENT_CHATTERS` map per channel, so it activates only after viewers have spoken since the bot started. Steals are silently skipped when balance ≤ 0; events are logged in `goblin_events`.
-- Per-channel runtime settings (`lootDropsEnabled`, `coinRedemptionEnabled`, `coinCap`, `goblinEventsEnabled`, `wheelMode`, `wheelSpeed`) live on `usersTable` and are cached in-memory by `bot/channel-settings.ts`. The settings PUT handler MUST call `invalidateChannelSettings(twitchUsername)` after writing — the bot reads the cache on every chat command.
-- `usersTable.steamTradeUrl` is auto-populated when the streamer connects Steam (`routes/steam.ts`); the manual settings input has been removed because the bot delivers prizes to **winners'** trade URLs (collected via `!tradeurl` → `tradeFulfillmentsTable.steamTradeUrl`), not the streamer's own.
-- `coinCap` is a **HARD limit** enforced per-channel. `bot/points.ts#clampCoinAward(channel, username, requested)` (and `clampCoinAwardTx`) reads the **streamer's** `usersTable.coinCap` (looked up by `twitchUsername == channel`, NOT the viewer's row — viewers aren't in usersTable), computes the viewer's current channel-scoped balance, and returns the max award that won't push past the ceiling. Every coin-credit insert MUST go through it: `bot/inventory.ts#sellInventoryItem` (uses `clampCoinAwardTx` inside the existing tx via dynamic import to avoid a circular module load), `bot/goblin-events.ts#fireDrop` (random goblin gifts), `routes/loot-hoard.ts` (manual coin drops + pouch-full item fallback), `routes/chat-users.ts` (positive streamer adjustments), and `routes/giveaway.ts#awardCoins` (covers `bot_coins` main reward, `bot_item` pouch-full fallback, and bonus combos for `cs2`/`bot_item`). `getPointsBalance(username, channel?)` only resolves a non-null `cap` when `channel` is supplied — without it (legacy `!coins`/leaderboard call sites) the read path returns `cap: null` and skips the defensive clip; the WRITE path is the source of truth either way.
-- `!loot` and the manual `/loot-hoard/drop` route both pass `allowBuffs: false` to `rollLootDrop()` when `lootDropsEnabled` is OFF (or for streamer manual drops, since buffs would be confusing as a "Quick Prize"). Quick Prize items honor an optional rarity hint and re-pick from the matching tier of `LOOT_TABLE`.
-- `!redeem` (chat) and `POST /giveaway/:id/redeem` (dashboard) both gate on `coinRedemptionEnabled` before reaching `redeemEntriesForUser()`. Disable both paths from a single toggle.
-- Elimination wheel (`components/elimination-wheel.tsx`) is purely cosmetic: the server still picks the winner via `useEndGiveaway`. **Each ticket gets its own slot card** on the wheel — viewers with more tickets occupy more board real estate (`buildSlots(entries)` expands `WheelEntry.tickets` into `${username}-${idx}` slot keys). One of the winner's slots is randomly chosen as THE winning slot (`winningSlotKey`); every other slot — including the winner's other duplicate tickets — is shuffled into `eliminationOrder` and knocked out one by one. The 🔀 **Shuffle** button reshuffles the unprocessed tail of `eliminationOrder` for re-rolling drama. `wheelMode === "manual"` requires the streamer to click "Spin" between rounds; "auto" paces itself with `speedMs = {slow:1500, medium:900, fast:450}`. The "final two" phase always pauses for dramatic effect regardless of mode. **RPG flavor banner**: when `flavorEnabled` (driven by `usersTable.eliminationFlavorEnabled`), each elimination renders a random themed line from `components/elimination-flavors.ts` (`pickEliminationFlavor` / `pickFinalTwoFlavor` / `pickVictoryFlavor`). Banner color shifts purple → rose → amber across spinning / final-two / revealed phases. **Wheel settings live IN the modal** via the `WheelSettingsPopover` (⚙️ gear icon in the header) — Mode / Speed / Flavor toggle all `useUpdateBotSettings` and invalidate `getGetBotSettingsQueryKey()`. The Forge page no longer carries a wheel section. Required `EliminationWheel` props now include `flavorEnabled: boolean` — every caller must pass it (sourced from `useGetBotSettings`).
+- **`requireStreamerChannel(req, res)`** — strict; 401 if unauthed, 403 if Twitch not linked. Use for ALL mutations.
+- **`resolveStreamerChannelForRead(req, res)`** — read-only convenience: in `NODE_ENV !== "production"` falls back to `"goblinl00t"` for unlinked accounts so the dashboard isn't a 403 wall during onboarding/dev. Production behaves identically to `requireStreamerChannel`. Use for GET routes that should show *something* before linking; **NEVER** for writes.
+- **Giveaway routes are channel-scoped**: GETs (`/giveaway`, `/current`, `/:id`, `/:id/entries`) use `resolveStreamerChannelForRead` and filter by `ctx.channel`; cross-channel `:id` returns 404 (don't leak existence). POST `/giveaway` uses `requireStreamerChannel` and ignores body-supplied `channel`. Mutations (start/end/reroll/delete) verify ownership against `existing.channel`. The unlinked-`goblinl00t` exception in mutations is gated to `NODE_ENV !== "production"` (dev seed-flow convenience only).
+- **Stats CSV export** is `requireStreamerChannel`-scoped and filters by `ctx.channel`. Other `/stats/*` aggregates remain global by design (legacy single-tenant Ledger view) — scope them too if you ever expose multi-tenant Ledger.
+- **Discord webhook** (`lib/discord-webhook.ts`) — host-allowlisted (`discord.com` / `discordapp.com`); `catch` logs only `errName` + `errMessage` + `channel` (never raw `err` — fetch errors can leak the secret URL). Settings UI regex matches the server-side allowlist.
+- **Health endpoints** — `/api/healthz` (always 200) and `/api/readyz` (db ping) for uptime monitors.
 
-## Security & multi-tenancy
+## Important Gotchas
 
-- **`lib/auth-helpers.ts`** — `requireStreamerChannel(req, res)` resolves the caller's `usersTable` row + canonical lowercase `twitchUsername`, writing 401/403 + returning `null` if the caller is unauthed or hasn't linked Twitch. Every per-channel route MUST early-return on `null`. Also exports `rateLimit(key, {max, windowMs})` — single-process token-bucket used by OAuth init endpoints (10/min) on `routes/auth.ts` (Twitch) and `routes/steam.ts` (Steam).
-- **Twitch OAuth CSRF**: `routes/auth.ts` issues an HMAC-SHA256 signed `state` (keyed on `SESSION_SECRET`) instead of a base64-readable token; callback re-derives + constant-time compares before exchanging the code.
-- **Giveaway routes are strictly channel-scoped** (`routes/giveaway.ts`): GET `/giveaway`, `/current`, `/:id`, `/:id/entries` and POST `/giveaway` all call `requireStreamerChannel` and filter by `ctx.channel`. POST `/giveaway` ignores any body-supplied `channel` and forces the caller's. Cross-channel `:id` access returns 404 (don't leak existence). Mutations (start/end/reroll/delete) verify ownership against `existing.channel`. The "unlinked goblinl00t exception" used by the seed flow is **gated to `NODE_ENV !== "production"`** — in dev it lets unlinked accounts poke the legacy seed channel, in prod it's off and ownership is strict.
-- **Stats CSV export** (`GET /stats/export?range=&kind=loot|commands|giveaways`) is `requireStreamerChannel`-scoped and filters every query by `ctx.channel`. Other `/stats/*` aggregates remain global by design (legacy single-tenant Ledger view) — if you ever expose multi-tenant Ledger you must scope those too.
-- **Discord webhook** (`lib/discord-webhook.ts`): host-allowlisted to `discord.com`/`discordapp.com`; `catch` block logs **only** `errName` + `errMessage` + `channel`, **never** raw `err` (fetch errors can include the secret webhook URL on some node versions). UI input regex on `pages/settings.tsx#DiscordWebhookSection` matches the server-side allowlist.
-- **`/healthz`** (always 200) and **`/readyz`** (db ping) live in `routes/health.ts` for uptime monitors.
-- **Username case backfill**: ran one-shot lowercase pass over `loot_drops.username`, `point_redemptions.username`, `user_inventory.username` (18 loot rows fixed; others already lowercase). New chat inserts already normalize via `tags.username.toLowerCase()`, so this should not need to repeat.
+- `pnpm run typecheck:libs` after editing `lib/db/src/schema/` before checking artifacts.
+- Don't run `pnpm dev` at root — use workflows or `pnpm --filter`.
+- `getGiveawayEntries` does NOT have a `limit` query param (TS2308 collision with path param).
+- `currentGiveaway.giveaway` can be null — always `currentGiveaway?.giveaway?.id`.
+- `giveaway_entries` has unique `(giveaway_id, username)` — always insert via `onConflictDoUpdate` (see `bot/points.ts#redeemEntriesForUser`); never read-modify-write.
+- ALL point-redemption flows MUST go through `redeemEntriesForUser()` (serializable txn). Do not write `point_redemptions` + `giveaway_entries` directly.
+- `POST /giveaway/:id/redeem` is Clerk-authed and operates on caller's linked `twitchUsername` only.
+- Sub-tier detection: `tags.badges?.subscriber` (`"2000"` / `"3000"` = T2/T3, anything else = T1). `badges-raw` and `badge-info` are NOT reliable.
+- Follower gating is best-effort; falls open without `TWITCH_CLIENT_ID` / `TWITCH_OAUTH_TOKEN` or stored `twitchUserId`.
+- **`prizeKind`** has three values: `cs2` (manual delivery via Trade Office), `bot_item` (auto-rolls into pouch; falls back to coin credit if full), `bot_coins` (direct credit via `loot_drops`). Always serialize all three fields (`prizeKind`, `prizeBotCoins`, `prizeBotRarity`). **Combo prizes**: `prizeBotCoins` carries through for ALL kinds — main reward for `bot_coins`, optional bonus on top for `cs2`/`bot_item` (separate `loot_drops` row labeled `"Giveaway Bonus: <title>"`). `prizeBotRarity` biases the `bot_item` roll, cosmetic on `cs2`.
+- **Theme threading**: `rollLootDrop` filters `LOOT_TABLE` by `opts.theme`; **all call sites must pass it** (`bot-service.ts !loot`, `routes/giveaway.ts bot_item` use `getActiveTheme()`; `routes/loot-hoard.ts` reads `user.botTheme`). Forgetting silently defaults to goblin items even on CS2 channels.
+- **Inventory cap** is 5 slots per (channel, username). All inserts MUST go through `addInventoryItem()` (per-user `pg_advisory_xact_lock`). Luck-buff consumption is atomic via `consumeLuckOnSuccess: true`; "full" never burns the charge. Ticket buff (`!enter`) consumed only after entry insert lands.
+- **Username casing**: chat inserts normalize via `tags.username.toLowerCase()`. Historical mixed-case rows in `loot_drops` / `point_redemptions` / `user_inventory` were backfilled to lowercase once — should not need to repeat.
+- **`getPointsBalance(username, channel?)`** — channel is **optional**. Bot/leaderboard call sites omit it (legacy global-by-username); Chat Users dashboard always passes the channel for multi-tenant correctness. Pass it any time you're operating in a multi-channel context.
+- **`coinCap`** is a HARD per-channel limit. `clampCoinAward(channel, username, requested)` (and `clampCoinAwardTx`) reads the **streamer's** `usersTable.coinCap` (looked up by `twitchUsername == channel`, NOT the viewer's row). EVERY coin-credit insert MUST go through it: `bot/inventory.ts#sellInventoryItem` (uses `clampCoinAwardTx` via dynamic import for circular-load avoidance), `bot/goblin-events.ts#fireDrop`, `routes/loot-hoard.ts`, `routes/chat-users.ts` (positive adjustments), `routes/giveaway.ts#awardCoins` (covers `bot_coins` main, `bot_item` pouch-full fallback, and bonus combos). `getPointsBalance` only resolves a non-null `cap` when `channel` is supplied; the WRITE path is the source of truth either way.
+- `!loot` and manual `/loot-hoard/drop` pass `allowBuffs: false` when `lootDropsEnabled` is OFF or for streamer manual drops.
+- `!redeem` (chat) and `POST /giveaway/:id/redeem` (dashboard) both gate on `coinRedemptionEnabled`.
+- Random Goblin Events use in-memory `RECENT_CHATTERS` per channel — only fires after viewers have spoken since bot start. Steals silently skipped when balance ≤ 0.
 
-## Frontend infrastructure
+## Elimination Wheel (`components/elimination-wheel.tsx`)
 
-- **`components/error-boundary.tsx`** wraps `<App>` in `App.tsx`. Renders a goblin-themed Reload card when any descendant throws — no whitescreens.
-- **`components/onboarding-checklist.tsx`** mounts on `/dashboard`; ticks off Twitch link / Steam link (optional) / first command / first giveaway by reading `useGetMe` + `useGetStatsOverview`. Auto-collapses when complete (persists in localStorage).
-- **`components/pixel-fight-scene.tsx`** is the CSS-pixel-sprite fight animation triggered by `EliminationWheel` when `phase === "final-two"` and the streamer hits **Final Spin**. ~5s sequence (face-off → exchange → loser falls → winner cheers); `prefers-reduced-motion` short-circuits to immediate `onDone`. `EliminationWheel` re-invokes `revealWinner` via `setTimeout(50)` after `onDone` — do not remove that micro-defer or React batching will swallow the phase transition.
-- **Public legal/marketing routes**: `/pricing`, `/terms`, `/privacy` rendered without auth (no API calls, no data leaks). Linked from sidebar footer + home page. Sidebar footer also has Help, Discord (placeholder URL — replace `https://discord.gg/` when the real invite exists), Pricing, Terms, Privacy.
-- **`index.html`**: title/meta description for marketability + emoji-SVG favicon data-uri (no asset request needed).
+Purely cosmetic — server still picks the winner via `useEndGiveaway`. Each ticket gets its own slot card (viewers with more tickets get more board real estate; `buildSlots(entries)` expands `WheelEntry.tickets` into `${username}-${idx}` keys). One winner-slot is randomly chosen as `winningSlotKey`; everything else (including winner's duplicate tickets) is shuffled into `eliminationOrder` and knocked out one by one. 🔀 **Shuffle** reshuffles the unprocessed tail. Modes: `manual` (streamer clicks Spin between rounds) vs `auto` (`speedMs = {slow:1500, medium:900, fast:450}`). Final-two pause is unconditional. RPG flavor banner (`flavorEnabled` ← `usersTable.eliminationFlavorEnabled`) renders themed lines from `components/elimination-flavors.ts`; banner color shifts purple → rose → amber across spinning / final-two / revealed. Wheel settings (mode/speed/flavor) live IN the modal via `WheelSettingsPopover` (⚙️ in header), NOT on the Forge page. **`flavorEnabled` is required** on `EliminationWheel` props — every caller passes it from `useGetBotSettings`.
+
+**Pixel-fight final spin** (`components/pixel-fight-scene.tsx`) — when `phase === "final-two"` and the streamer hits **Final Spin**, the modal renders a ~5s CSS-pixel-sprite fight (face-off → exchange → loser falls → winner cheers). `prefers-reduced-motion` short-circuits to immediate `onDone`. After `onDone` the wheel re-invokes `revealWinner` via `setTimeout(50)` — **do not remove that micro-defer** or React batching will swallow the phase transition.
 
 ## User preferences
 
 _Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details

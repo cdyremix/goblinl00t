@@ -38,6 +38,40 @@ export async function requireStreamerChannel(
 }
 
 /**
+ * Like `requireStreamerChannel` but READ-friendly: in non-production we
+ * fall back to the legacy seed-test channel ("goblinl00t") for callers
+ * who are signed in but haven't linked Twitch yet, so the dashboard isn't
+ * a 403 wall during onboarding / local dev. In production we still require
+ * a linked Twitch account (writes the same 401/403 + returns null).
+ *
+ * Use this for GET routes that should show the user *something* before
+ * they finish linking. NEVER use it for mutations — those must go through
+ * `requireStreamerChannel` so cross-channel writes stay impossible.
+ */
+export async function resolveStreamerChannelForRead(
+  req: Request,
+  res: Response,
+): Promise<{ channel: string } | null> {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  const [user] = await db
+    .select({ twitchUsername: usersTable.twitchUsername })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId))
+    .limit(1);
+  const linked = user?.twitchUsername?.trim().toLowerCase();
+  if (linked) return { channel: linked };
+  if (process.env["NODE_ENV"] !== "production") {
+    return { channel: "goblinl00t" };
+  }
+  res.status(403).json({ error: "Connect your Twitch account first." });
+  return null;
+}
+
+/**
  * Naive in-memory token-bucket rate limiter keyed by an arbitrary string
  * (typically the Clerk userId or remote IP). Single-process only — fine
  * for the current single-server deployment, would need Redis if we ever

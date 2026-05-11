@@ -16,7 +16,7 @@ import {
 import { announceGiveawayStart, announceGiveawayEnd } from "../bot/bot-service";
 import { getActiveTheme } from "../bot/bot-themes";
 import { fireDiscordWebhook } from "../lib/discord-webhook";
-import { requireStreamerChannel } from "../lib/auth-helpers";
+import { requireStreamerChannel, resolveStreamerChannelForRead } from "../lib/auth-helpers";
 
 /**
  * Resolve the calling streamer's channel handle (lowercase Twitch username).
@@ -70,8 +70,9 @@ function serializeGiveaway(g: typeof giveawaysTable.$inferSelect, entryCount: nu
 
 router.get("/giveaway", async (req, res) => {
   // Multi-tenancy: scope to the caller's own channel so two streamers can't
-  // see each other's giveaways.
-  const ctx = await requireStreamerChannel(req, res);
+  // see each other's giveaways. Read-friendly variant falls back to the
+  // legacy seed-test channel ("goblinl00t") in dev for unlinked accounts.
+  const ctx = await resolveStreamerChannelForRead(req, res);
   if (!ctx) return;
   const query = ListGiveawaysQueryParams.safeParse(req.query);
   const status = query.success ? query.data.status : undefined;
@@ -285,8 +286,8 @@ const FAKE_VIEWERS: Array<{ name: string; tickets: number }> = [
 
 router.get("/giveaway/current", async (req, res) => {
   // Scope "current giveaway" to the caller's channel — otherwise streamer A
-  // sees streamer B's active giveaway.
-  const ctx = await requireStreamerChannel(req, res);
+  // sees streamer B's active giveaway. Dev: falls back to seed channel.
+  const ctx = await resolveStreamerChannelForRead(req, res);
   if (!ctx) return;
   const [active] = await db
     .select()
@@ -325,7 +326,7 @@ router.get("/giveaway/current", async (req, res) => {
 });
 
 router.get("/giveaway/:id", async (req, res) => {
-  const ctx = await requireStreamerChannel(req, res);
+  const ctx = await resolveStreamerChannelForRead(req, res);
   if (!ctx) return;
   const { id } = GetGiveawayParams.parse({ id: Number(req.params["id"]) });
   const [giveaway] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
@@ -656,7 +657,7 @@ router.post("/giveaway/:id/reroll", async (req, res) => {
 });
 
 router.get("/giveaway/:id/entries", async (req, res) => {
-  const ctx = await requireStreamerChannel(req, res);
+  const ctx = await resolveStreamerChannelForRead(req, res);
   if (!ctx) return;
   const { id } = GetGiveawayEntriesParams.parse({ id: Number(req.params["id"]) });
   // Verify the giveaway belongs to the caller before listing entries —
