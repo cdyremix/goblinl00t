@@ -4,6 +4,7 @@ import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
+  Plug, X,
 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { OnboardingTour } from "@/components/onboarding-tour";
@@ -237,9 +238,79 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative">
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
         <div className="relative z-10 p-8 max-w-7xl mx-auto min-h-full">
+          <ConnectTwitchReminder
+            show={!profileQuery.isLoading && profileQuery.data !== undefined && !twitchUsername && !location.startsWith("/account")}
+            userId={user?.id}
+          />
           {children}
         </div>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Top-of-page reminder shown to authed streamers who haven't connected a Twitch
+ * account yet. Without it, the bot has no channel to join, every command rolls
+ * up to "Unknown Goblin", and stats stay empty — so this is a hard gate on the
+ * product working at all.
+ *
+ * Dismissed copies live in sessionStorage (per Clerk userId) so the banner
+ * doesn't nag mid-session, but reappears on next visit until they actually
+ * connect. We always hide it on `/account` itself — they're already there.
+ */
+function ConnectTwitchReminder({ show, userId }: { show: boolean; userId: string | null | undefined }) {
+  const dismissKey = `goblin-loot-twitch-reminder-dismissed:${userId ?? "anon"}`;
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(dismissKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  if (!show || dismissed) return null;
+
+  function dismiss() {
+    try {
+      sessionStorage.setItem(dismissKey, "1");
+    } catch {
+      // ignore quota / private mode
+    }
+    setDismissed(true);
+  }
+
+  return (
+    <div
+      className="mb-6 flex items-start gap-3 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 shadow-[0_0_30px_rgba(255,180,0,0.08)]"
+      role="status"
+      data-testid="banner-connect-twitch"
+    >
+      <div className="w-9 h-9 rounded-md bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+        <Plug className="w-4 h-4 text-primary" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-foreground">Connect Twitch to bring the goblin into your chat</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          The bot needs your Twitch channel before it can join, drop loot, or run giveaways. Takes about 30 seconds.
+        </p>
+      </div>
+      <Link
+        href="/account"
+        className="shrink-0 inline-flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-bold px-3 py-1.5 rounded-md hover:brightness-110 transition-all"
+        data-testid="link-connect-twitch"
+      >
+        Connect Twitch
+      </Link>
+      <button
+        type="button"
+        onClick={dismiss}
+        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-1 -m-1"
+        aria-label="Dismiss reminder for this session"
+        data-testid="button-dismiss-twitch-reminder"
+      >
+        <X className="w-4 h-4" />
+      </button>
     </div>
   );
 }

@@ -128,7 +128,7 @@ export function Home() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
               </span>
-              Live in Twitch chat — free during beta
+              Live in Twitch chat
             </div>
 
             <h1 className="font-medieval text-5xl md:text-7xl font-bold tracking-tight leading-[0.95] mb-6">
@@ -138,7 +138,8 @@ export function Home() {
 
             <p className="text-lg text-muted-foreground max-w-xl lg:mx-0 mx-auto mb-8 leading-relaxed">
               Goblin L00t turns your Twitch chat into a loot economy — viewers earn coins, roll for drops,
-              and battle through an elimination wheel for CS2 skins, custom prizes, and chaos.
+              and battle through an elimination wheel for whatever prize you put on the line. Pick a theme
+              like Goblin Hoard or CS2 Arms Deal, or stick with the classic goblin chaos.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 lg:justify-start justify-center mb-6">
@@ -202,8 +203,8 @@ export function Home() {
         <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <ProofStat value="2 min" label="Average setup time" />
           <ProofStat value="14" label="Built-in chat commands" />
-          <ProofStat value="5-slot" label="Per-viewer loot pouch" />
-          <ProofStat value="100%" label="Free during beta" />
+          <ProofStat value="2" label="Themes (more on the way)" />
+          <ProofStat value="Free" label="Tier — no card required" />
         </div>
       </section>
 
@@ -261,8 +262,8 @@ export function Home() {
             />
             <HeroFeature
               icon={<Package className="w-7 h-7 text-blue-400" />}
-              title="CS2 skin drops"
-              desc="Connect your Steam inventory and run skin giveaways. The Trade Office tracks delivery from winner to trade URL."
+              title="Themed prizes"
+              desc="Goblin Hoard for chaos and custom rewards, CS2 Arms Deal for skin giveaways with Steam inventory + a Trade Office to track delivery. More themes coming."
               accent="blue"
             />
           </div>
@@ -335,7 +336,7 @@ export function Home() {
         <div className="relative max-w-2xl mx-auto">
           <h2 className="text-4xl font-bold text-foreground mb-4">Ready to run your first giveaway?</h2>
           <p className="text-muted-foreground mb-8 text-lg">
-            Sign up free, point the bot at your channel, and let chat fight for the loot.
+            Sign up on the free tier, point the bot at your channel, and let chat fight for the loot.
           </p>
           {isLoaded && isSignedIn ? (
             <Link href="/dashboard" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(255,180,0,0.25)]" data-testid="cta-dashboard">
@@ -344,7 +345,7 @@ export function Home() {
             </Link>
           ) : (
             <Link href="/sign-up" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(255,180,0,0.25)]" data-testid="cta-dashboard">
-              Connect your channel — free
+              Get started — free tier
               <ChevronRight className="w-5 h-5" />
             </Link>
           )}
