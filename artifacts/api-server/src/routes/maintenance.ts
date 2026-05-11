@@ -3,22 +3,9 @@ import { getAuth } from "@clerk/express";
 import { db, usersTable, waitlistEmailsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { rateLimit } from "../lib/auth-helpers";
+import { getMaintenanceEnabled } from "../lib/maintenance-state";
 
 const router = Router();
-
-/**
- * Maintenance mode is toggled by the `MAINTENANCE_MODE` env var. Any
- * truthy value other than the explicit OFF strings ("0", "false",
- * "off", empty) is treated as ON so a typo doesn't accidentally expose
- * the app during a launch window. Resolved per-request (not cached) so
- * an env-var flip inside the deployment takes effect on the next
- * request without a redeploy.
- */
-function isMaintenanceModeEnabled(): boolean {
-  const raw = (process.env["MAINTENANCE_MODE"] ?? "").trim().toLowerCase();
-  if (!raw) return false;
-  return !["0", "false", "off", "no"].includes(raw);
-}
 
 /**
  * GET /maintenance/status — public, no auth required.
@@ -30,7 +17,7 @@ function isMaintenanceModeEnabled(): boolean {
  * not trusted from any client claim.
  */
 router.get("/maintenance/status", async (req, res) => {
-  const enabled = isMaintenanceModeEnabled();
+  const enabled = await getMaintenanceEnabled();
   let isAdmin = false;
   try {
     const { userId } = getAuth(req);

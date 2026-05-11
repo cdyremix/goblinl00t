@@ -2,16 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
-
-/**
- * Mirrors `routes/maintenance.ts#isMaintenanceModeEnabled` — kept in
- * lockstep so the env flag has one truthiness rule across the codebase.
- */
-function isMaintenanceModeEnabled(): boolean {
-  const raw = (process.env["MAINTENANCE_MODE"] ?? "").trim().toLowerCase();
-  if (!raw) return false;
-  return !["0", "false", "off", "no"].includes(raw);
-}
+import { getMaintenanceEnabled } from "./maintenance-state";
 
 /**
  * Endpoints that stay reachable even while maintenance mode is on.
@@ -57,7 +48,7 @@ export async function maintenanceGuard(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  if (!isMaintenanceModeEnabled()) {
+  if (!(await getMaintenanceEnabled())) {
     next();
     return;
   }

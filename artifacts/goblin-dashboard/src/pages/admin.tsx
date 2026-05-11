@@ -3,7 +3,7 @@ import { useAuth } from "@clerk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
-  Pencil, Mail, Key, Receipt, ExternalLink, Loader2,
+  Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -201,6 +201,8 @@ export function Admin() {
         <StatCard label="Pro subs" value={stats?.pro ?? "—"} icon={<Crown className="w-4 h-4 text-amber-400" />} />
       </div>
 
+      <MaintenanceToggleCard />
+
       <Card className="border-border/50">
         <CardHeader className="border-b border-border/50">
           <CardTitle className="flex items-center gap-2 font-medieval text-xl">
@@ -283,6 +285,127 @@ export function Admin() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/**
+ * Toggles the public-facing maintenance wall on/off. Persists to the
+ * `app_settings` singleton via `/admin/maintenance`. When the deploy
+ * env has `MAINTENANCE_MODE` truthy, the env override wins server-side
+ * and we lock the switch + show why so the admin doesn't think it's
+ * broken when their click "doesn't take".
+ */
+function MaintenanceToggleCard() {
+  const { getToken } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const stateQuery = useQuery<{ enabled: boolean; envOverride: boolean }>({
+    queryKey: ["admin", "maintenance"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/admin/maintenance", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load maintenance state");
+      return res.json();
+    },
+  });
+
+  const toggle = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const token = await getToken();
+      const res = await fetch("/api/admin/maintenance", {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ enabled }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error ?? "Failed to update maintenance mode");
+      }
+      return json as { enabled: boolean; envOverride: boolean };
+    },
+    onSuccess: (json) => {
+      qc.setQueryData(["admin", "maintenance"], json);
+      // Bust the public status query so the admin's own banner / wall
+      // reflects the new state without a manual refresh.
+      qc.invalidateQueries({ queryKey: ["maintenance", "status"] });
+      toast({
+        title: json.enabled ? "Maintenance mode ON" : "Maintenance mode OFF",
+        description: json.enabled
+          ? "Public visitors will see the launch wall."
+          : "Site is now public.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not update", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const enabled = stateQuery.data?.enabled ?? false;
+  const envOverride = stateQuery.data?.envOverride ?? false;
+  const loading = stateQuery.isLoading;
+
+  return (
+    <Card className="border-border/50">
+      <CardHeader className="border-b border-border/50">
+        <CardTitle className="flex items-center gap-2 font-medieval text-xl">
+          <Wrench className="w-5 h-5 text-amber-400" />
+          Maintenance Mode
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Label htmlFor="maintenance-toggle" className="text-base font-semibold">
+                Public launch wall
+              </Label>
+              {enabled ? (
+                <Badge variant="default" className="bg-amber-500 text-black hover:bg-amber-500">
+                  ON
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground">
+                  OFF
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              When ON, public visitors see the "Goblin L00t is testing" modal with the
+              notify-me email form. Admins (you) bypass it automatically. Sign-in stays
+              reachable so you can keep working.
+            </p>
+            {envOverride && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  The <code className="px-1 py-0.5 rounded bg-black/30">MAINTENANCE_MODE</code> env var
+                  is forcing this ON. Toggling here is disabled until that env var is
+                  unset on the server.
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {(toggle.isPending || loading) && (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            )}
+            <Switch
+              id="maintenance-toggle"
+              checked={enabled}
+              disabled={loading || envOverride || toggle.isPending}
+              onCheckedChange={(v) => toggle.mutate(v)}
+              data-testid="switch-maintenance-mode"
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -711,4 +711,47 @@ router.get("/admin/stats", async (req, res) => {
   res.json({ stats: counts ?? null });
 });
 
+/**
+ * GET /admin/maintenance — current state of the launch wall.
+ * `envOverride: true` means the deployment env is forcing it ON
+ * regardless of the DB toggle (so the UI can disable the switch +
+ * explain why it can't be turned off from the dashboard).
+ */
+router.get("/admin/maintenance", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const { getMaintenanceEnabled } = await import("../lib/maintenance-state");
+  const envRaw = (process.env["MAINTENANCE_MODE"] ?? "").trim().toLowerCase();
+  const envOverride = envRaw !== "" && !["0", "false", "off", "no"].includes(envRaw);
+  const enabled = await getMaintenanceEnabled();
+  res.json({ enabled, envOverride });
+});
+
+/**
+ * PUT /admin/maintenance — flip the launch wall. Body `{ enabled: bool }`.
+ * Writes to the `app_settings` singleton and busts the in-process cache
+ * so the next request sees the new value immediately.
+ */
+router.put("/admin/maintenance", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const body = req.body as { enabled?: unknown };
+  if (typeof body.enabled !== "boolean") {
+    res.status(400).json({ error: "Body must include { enabled: boolean }." });
+    return;
+  }
+  const { setMaintenanceEnabled, getMaintenanceEnabled } = await import(
+    "../lib/maintenance-state"
+  );
+  await setMaintenanceEnabled(body.enabled);
+  const envRaw = (process.env["MAINTENANCE_MODE"] ?? "").trim().toLowerCase();
+  const envOverride = envRaw !== "" && !["0", "false", "off", "no"].includes(envRaw);
+  const effective = await getMaintenanceEnabled();
+  req.log.info(
+    { adminId: ctx.user.id, requested: body.enabled, effective },
+    "maintenance mode toggled",
+  );
+  res.json({ enabled: effective, envOverride });
+});
+
 export default router;
