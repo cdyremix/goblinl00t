@@ -227,20 +227,79 @@ paths:
     get:
       operationId: getMyPoints
       tags: [points]
-      summary: Get loot point balance for a Twitch username
-      parameters:
-        - name: username
-          in: query
-          required: true
-          schema:
-            type: string
+      summary: Get loot coin balance for the authenticated user
       responses:
         "200":
-          description: Points balance
+          description: Coin balance
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PointsBalance"
+        "401":
+          description: Unauthorized
+
+  /inventory/me:
+    get:
+      operationId: getMyInventory
+      tags: [inventory]
+      summary: List the authenticated user's loot inventory (capped)
+      responses:
+        "200":
+          description: Inventory items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInventory"
+        "401":
+          description: Unauthorized
+
+  /inventory/{itemId}/sell:
+    post:
+      operationId: sellInventoryItem
+      tags: [inventory]
+      summary: Sell an inventory item for coins
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sale completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellItemResult"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Item not found
+
+  /inventory/{itemId}/use:
+    post:
+      operationId: useInventoryItem
+      tags: [inventory]
+      summary: Activate a buff item
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Buff activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UseItemResult"
+        "400":
+          description: Item is not a buff
+        "401":
+          description: Unauthorized
+        "404":
+          description: Item not found
 
   /giveaway/{id}/redeem:
     post:
@@ -555,6 +614,14 @@ components:
           type: ["string", "null"]
         prizeIconUrl:
           type: ["string", "null"]
+        prizeKind:
+          type: string
+          enum: [cs2, bot_item, bot_coins]
+        prizeBotCoins:
+          type: ["integer", "null"]
+        prizeBotRarity:
+          type: ["string", "null"]
+          enum: [common, uncommon, rare, epic, legendary, null]
         description:
           type: ["string", "null"]
         status:
@@ -589,6 +656,9 @@ components:
         - prize
         - prizeAssetId
         - prizeIconUrl
+        - prizeKind
+        - prizeBotCoins
+        - prizeBotRarity
         - description
         - status
         - channel
@@ -616,6 +686,15 @@ components:
           type: string
         prizeIconUrl:
           type: string
+        prizeKind:
+          type: string
+          enum: [cs2, bot_item, bot_coins]
+        prizeBotCoins:
+          type: integer
+          minimum: 1
+        prizeBotRarity:
+          type: string
+          enum: [common, uncommon, rare, epic, legendary]
         description:
           type: string
         keyword:
@@ -791,12 +870,15 @@ components:
           type: ["string", "null"]
         steamUsername:
           type: ["string", "null"]
+        goblinEventsEnabled:
+          type: boolean
       required:
         - botTheme
         - botName
         - steamTradeUrl
         - steamId64
         - steamUsername
+        - goblinEventsEnabled
 
     UpdateBotSettings:
       type: object
@@ -812,6 +894,8 @@ components:
           type: ["string", "null"]
         steamUsername:
           type: ["string", "null"]
+        goblinEventsEnabled:
+          type: boolean
 
     TradeFulfillment:
       type: object
@@ -930,13 +1014,10 @@ components:
     RedeemEntriesInput:
       type: object
       properties:
-        username:
-          type: string
         entries:
           type: integer
           minimum: 1
       required:
-        - username
         - entries
 
     RedemptionResult:
@@ -952,3 +1033,82 @@ components:
         - ticketsAdded
         - pointsSpent
         - balanceAfter
+
+    UserInventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        item:
+          type: string
+        rarity:
+          type: string
+          enum: [common, uncommon, rare, epic, legendary]
+        kind:
+          type: string
+          enum: [item, buff]
+        buffEffect:
+          type: ["string", "null"]
+          enum: [luck, coins, tickets, null]
+        coinValue:
+          type: integer
+        chargesRemaining:
+          type: integer
+        isActive:
+          type: boolean
+        acquiredAt:
+          type: string
+      required:
+        - id
+        - item
+        - rarity
+        - kind
+        - buffEffect
+        - coinValue
+        - chargesRemaining
+        - isActive
+        - acquiredAt
+
+    UserInventory:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserInventoryItem"
+        cap:
+          type: integer
+        balance:
+          type: integer
+        costPerEntry:
+          type: integer
+      required:
+        - items
+        - cap
+        - balance
+        - costPerEntry
+
+    SellItemResult:
+      type: object
+      properties:
+        coinsEarned:
+          type: integer
+        balanceAfter:
+          type: integer
+      required:
+        - coinsEarned
+        - balanceAfter
+
+    UseItemResult:
+      type: object
+      properties:
+        item:
+          type: string
+        buffEffect:
+          type: string
+        chargesRemaining:
+          type: integer
+      required:
+        - item
+        - buffEffect
+        - chargesRemaining

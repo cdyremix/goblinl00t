@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GiveawayMinSubTier } from "./giveawayMinSubTier";
+import type { GiveawayPrizeBotRarity } from "./giveawayPrizeBotRarity";
+import type { GiveawayPrizeKind } from "./giveawayPrizeKind";
 import type { GiveawayStatus } from "./giveawayStatus";
 
 export interface Giveaway {
@@ -16,6 +18,11 @@ export interface Giveaway {
   prizeAssetId: string | null;
   /** @nullable */
   prizeIconUrl: string | null;
+  prizeKind: GiveawayPrizeKind;
+  /** @nullable */
+  prizeBotCoins: number | null;
+  /** @nullable */
+  prizeBotRarity: GiveawayPrizeBotRarity;
   /** @nullable */
   description: string | null;
   status: GiveawayStatus;

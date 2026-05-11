@@ -6,7 +6,7 @@ interface LootItem {
   points: number;
 }
 
-const LOOT_TABLE: LootItem[] = [
+export const LOOT_TABLE: LootItem[] = [
   // Common (50% chance)
   { item: "Rusty Nail", rarity: "common", points: 5 },
   { item: "Shiny Pebble", rarity: "common", points: 5 },

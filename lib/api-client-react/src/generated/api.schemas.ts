@@ -19,6 +19,30 @@ export interface BotStatus {
   lastMessageAt: string | null;
 }
 
+export type GiveawayPrizeKind =
+  (typeof GiveawayPrizeKind)[keyof typeof GiveawayPrizeKind];
+
+export const GiveawayPrizeKind = {
+  cs2: "cs2",
+  bot_item: "bot_item",
+  bot_coins: "bot_coins",
+} as const;
+
+/**
+ * @nullable
+ */
+export type GiveawayPrizeBotRarity =
+  | (typeof GiveawayPrizeBotRarity)[keyof typeof GiveawayPrizeBotRarity]
+  | null;
+
+export const GiveawayPrizeBotRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
 export type GiveawayStatus =
   (typeof GiveawayStatus)[keyof typeof GiveawayStatus];
 
@@ -49,6 +73,11 @@ export interface Giveaway {
   prizeAssetId: string | null;
   /** @nullable */
   prizeIconUrl: string | null;
+  prizeKind: GiveawayPrizeKind;
+  /** @nullable */
+  prizeBotCoins: number | null;
+  /** @nullable */
+  prizeBotRarity: GiveawayPrizeBotRarity;
   /** @nullable */
   description: string | null;
   status: GiveawayStatus;
@@ -70,6 +99,26 @@ export interface Giveaway {
   endedAt: string | null;
 }
 
+export type GiveawayInputPrizeKind =
+  (typeof GiveawayInputPrizeKind)[keyof typeof GiveawayInputPrizeKind];
+
+export const GiveawayInputPrizeKind = {
+  cs2: "cs2",
+  bot_item: "bot_item",
+  bot_coins: "bot_coins",
+} as const;
+
+export type GiveawayInputPrizeBotRarity =
+  (typeof GiveawayInputPrizeBotRarity)[keyof typeof GiveawayInputPrizeBotRarity];
+
+export const GiveawayInputPrizeBotRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
 export type GiveawayInputMinSubTier =
   (typeof GiveawayInputMinSubTier)[keyof typeof GiveawayInputMinSubTier];
 
@@ -86,6 +135,10 @@ export interface GiveawayInput {
   prize: string;
   prizeAssetId?: string;
   prizeIconUrl?: string;
+  prizeKind?: GiveawayInputPrizeKind;
+  /** @minimum 1 */
+  prizeBotCoins?: number;
+  prizeBotRarity?: GiveawayInputPrizeBotRarity;
   description?: string;
   /** @minLength 1 */
   keyword: string;
@@ -181,6 +234,7 @@ export interface BotSettings {
   steamId64: string | null;
   /** @nullable */
   steamUsername: string | null;
+  goblinEventsEnabled: boolean;
 }
 
 export type UpdateBotSettingsBotTheme =
@@ -200,6 +254,7 @@ export interface UpdateBotSettings {
   steamId64?: string | null;
   /** @nullable */
   steamUsername?: string | null;
+  goblinEventsEnabled?: boolean;
 }
 
 export type TradeFulfillmentStatus =
@@ -275,7 +330,6 @@ export interface PointsBalance {
 }
 
 export interface RedeemEntriesInput {
-  username: string;
   /** @minimum 1 */
   entries: number;
 }
@@ -284,6 +338,69 @@ export interface RedemptionResult {
   ticketsAdded: number;
   pointsSpent: number;
   balanceAfter: number;
+}
+
+export type UserInventoryItemRarity =
+  (typeof UserInventoryItemRarity)[keyof typeof UserInventoryItemRarity];
+
+export const UserInventoryItemRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
+export type UserInventoryItemKind =
+  (typeof UserInventoryItemKind)[keyof typeof UserInventoryItemKind];
+
+export const UserInventoryItemKind = {
+  item: "item",
+  buff: "buff",
+} as const;
+
+/**
+ * @nullable
+ */
+export type UserInventoryItemBuffEffect =
+  | (typeof UserInventoryItemBuffEffect)[keyof typeof UserInventoryItemBuffEffect]
+  | null;
+
+export const UserInventoryItemBuffEffect = {
+  luck: "luck",
+  coins: "coins",
+  tickets: "tickets",
+} as const;
+
+export interface UserInventoryItem {
+  id: number;
+  item: string;
+  rarity: UserInventoryItemRarity;
+  kind: UserInventoryItemKind;
+  /** @nullable */
+  buffEffect: UserInventoryItemBuffEffect;
+  coinValue: number;
+  chargesRemaining: number;
+  isActive: boolean;
+  acquiredAt: string;
+}
+
+export interface UserInventory {
+  items: UserInventoryItem[];
+  cap: number;
+  balance: number;
+  costPerEntry: number;
+}
+
+export interface SellItemResult {
+  coinsEarned: number;
+  balanceAfter: number;
+}
+
+export interface UseItemResult {
+  item: string;
+  buffEffect: string;
+  chargesRemaining: number;
 }
 
 export type ListGiveawaysParams = {
@@ -299,10 +416,6 @@ export const ListGiveawaysStatus = {
   active: "active",
   ended: "ended",
 } as const;
-
-export type GetMyPointsParams = {
-  username: string;
-};
 
 export type GetRecentLootParams = {
   limit?: number;

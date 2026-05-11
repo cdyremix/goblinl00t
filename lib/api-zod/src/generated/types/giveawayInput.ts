@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GiveawayInputMinSubTier } from "./giveawayInputMinSubTier";
+import type { GiveawayInputPrizeBotRarity } from "./giveawayInputPrizeBotRarity";
+import type { GiveawayInputPrizeKind } from "./giveawayInputPrizeKind";
 
 export interface GiveawayInput {
   /** @minLength 1 */
@@ -14,6 +16,10 @@ export interface GiveawayInput {
   prize: string;
   prizeAssetId?: string;
   prizeIconUrl?: string;
+  prizeKind?: GiveawayInputPrizeKind;
+  /** @minimum 1 */
+  prizeBotCoins?: number;
+  prizeBotRarity?: GiveawayInputPrizeBotRarity;
   description?: string;
   /** @minLength 1 */
   keyword: string;

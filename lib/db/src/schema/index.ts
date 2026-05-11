@@ -6,3 +6,5 @@ export * from "./users";
 export * from "./trade_fulfillments";
 export * from "./custom_commands";
 export * from "./point_redemptions";
+export * from "./user_inventory";
+export * from "./goblin_events";

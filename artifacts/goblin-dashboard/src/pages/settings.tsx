@@ -24,6 +24,7 @@ interface BotSettings {
   steamTradeUrl: string | null;
   steamId64: string | null;
   steamUsername: string | null;
+  goblinEventsEnabled: boolean;
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -286,6 +287,28 @@ export default function SettingsPage() {
             )}
             {themeChanged ? "Apply Theme" : "Apply"}
           </Button>
+        </div>
+      </section>
+
+      {/* Random Goblin Events */}
+      <section className="space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 max-w-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">👺</span>
+              <Label htmlFor="goblin-events" className="text-base font-semibold text-foreground">Random Goblin Events</Label>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+              Every 5–15 minutes, the goblin pops into chat to drop a fistful of coins on a recent chatter — or steal some! Off by default if you'd rather keep things quiet.
+            </p>
+          </div>
+          <Switch
+            id="goblin-events"
+            checked={settings?.goblinEventsEnabled ?? true}
+            disabled={mutation.isPending}
+            onCheckedChange={(v) => mutation.mutate({ goblinEventsEnabled: v })}
+            data-testid="switch-goblin-events"
+          />
         </div>
       </section>
 

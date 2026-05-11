@@ -2,11 +2,23 @@ import tmi from "tmi.js";
 import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable, customCommandsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
-import { rollLoot, getRarityEmoji } from "./loot-tables";
+import { getRarityEmoji } from "./loot-tables";
 import { pickRandom, formatMessage } from "./goblin-phrases";
 import { getThemePhrases, setActiveTheme, getActiveTheme, type BotTheme } from "./bot-themes";
 import { getPointsBalance, REDEEM_COST_PER_ENTRY, redeemEntriesForUser } from "./points";
 import { checkGating, type Gateable } from "./gating";
+import {
+  rollLootDrop,
+  addInventoryItem,
+  listInventory,
+  sellInventoryItem,
+  useInventoryItem,
+  consumeBuffCharge,
+  hasActiveBuff,
+  inventoryFullMessage,
+  INVENTORY_CAP,
+} from "./inventory";
+import { startGoblinEvents, setGoblinEventSink, trackChatter } from "./goblin-events";
 
 export type CommandTheme = "goblin" | "cs2" | "both";
 
@@ -17,17 +29,20 @@ interface BuiltInCommand {
 }
 
 const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
-  "!loot":       { description: "Roll for random loot with rarity tiers",   cooldownSeconds: 30, theme: "both"   },
+  "!loot":       { description: `Roll for a random inventory drop (cap ${INVENTORY_CAP})`, cooldownSeconds: 30, theme: "both"   },
   "!enter":      { description: "Enter the active giveaway",                cooldownSeconds: 5,  theme: "both"   },
   "!giveaway":   { description: "Check if a giveaway is running",           cooldownSeconds: 5,  theme: "both"   },
-  "!inventory":  { description: "Check your loot inventory",                cooldownSeconds: 15, theme: "both"   },
+  "!inventory":  { description: "List your loot inventory slots",           cooldownSeconds: 15, theme: "both"   },
+  "!sell":       { description: "Sell an inventory item — !sell <slot> or !sell all", cooldownSeconds: 5, theme: "both" },
+  "!use":        { description: "Activate a buff item from your inventory — !use <slot>", cooldownSeconds: 5, theme: "both" },
   "!goblin":     { description: "Summon the goblin for a random response",  cooldownSeconds: 10, theme: "goblin" },
   "!steal":      { description: "Attempt to steal from another viewer",     cooldownSeconds: 20, theme: "goblin" },
-  "!hoard":      { description: "Check your goblin hoard",                  cooldownSeconds: 15, theme: "goblin" },
+  "!hoard":      { description: "Check your goblin coin balance",           cooldownSeconds: 15, theme: "goblin" },
   "!feedgoblin": { description: "Feed the goblin a snack",                  cooldownSeconds: 10, theme: "goblin" },
   "!tradeurl":   { description: "Submit your Steam trade URL after winning a skin", cooldownSeconds: 10, theme: "cs2" },
-  "!redeem":     { description: "Redeem loot points for extra giveaway entries (100 pts = 1 entry)", cooldownSeconds: 5, theme: "both" },
-  "!points":     { description: "Check your loot point balance",            cooldownSeconds: 10, theme: "both" },
+  "!redeem":     { description: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", cooldownSeconds: 5, theme: "both" },
+  "!points":     { description: "Check your coin balance",                  cooldownSeconds: 10, theme: "both" },
+  "!coins":      { description: "Check your coin balance",                  cooldownSeconds: 10, theme: "both" },
 };
 
 interface CustomCommandCacheEntry {
@@ -114,7 +129,8 @@ async function logCommand(command: string, username: string, channel: string) {
 }
 
 async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: string) {
-  const username = tags["display-name"] ?? tags.username ?? "unknown";
+  const username = (tags.username ?? tags["display-name"] ?? "unknown").toLowerCase();
+  trackChatter(channel, username);
   const msg = message.trim();
   const parts = msg.split(/\s+/);
   const command = parts[0]?.toLowerCase();
@@ -148,20 +164,120 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
   try {
     if (command === "!loot") {
-      const loot = rollLoot();
+      const ch = channel.replace(/^#/, "");
+      const luckActive = await hasActiveBuff(ch, username, "luck");
+      const loot = rollLootDrop({ luckBuffActive: luckActive });
+      // Charge consumption is atomic with the insert — a "full" result will
+      // not burn the buff (see addInventoryItem).
+      const result = await addInventoryItem(ch, username, loot, {
+        consumeLuckOnSuccess: luckActive,
+      });
       const emoji = getRarityEmoji(loot.rarity);
       const flavor = pickRandom(phrases.lootResponses[loot.rarity]);
+
+      if (!result.ok) {
+        void client?.say(channel, inventoryFullMessage(username));
+        return;
+      }
+
+      // Mirror to loot_drops as activity log (coins=0; coins are credited only on !sell).
       await db.insert(lootDropsTable).values({
-        username,
-        item: loot.item,
-        rarity: loot.rarity,
-        points: loot.points,
-        channel: channel.replace("#", ""),
+        channel: ch, username, item: loot.item, rarity: loot.rarity, points: 0,
       });
-      void client?.say(
-        channel,
-        `${emoji} ${username} found [${loot.rarity.toUpperCase()}] ${loot.item}! (+${loot.points} pts) ${emoji} ${flavor}`
-      );
+
+      const slotMsg = `slot ${result.slot}/${INVENTORY_CAP}`;
+      if (loot.kind === "buff") {
+        void client?.say(
+          channel,
+          `${emoji} ${username} found a [BUFF] ${loot.item}! (${slotMsg}) — !use ${result.slot} to activate (${loot.flavor}, ${loot.charges} charges) or !sell ${result.slot} for ${loot.coinValue} coins.`
+        );
+      } else {
+        void client?.say(
+          channel,
+          `${emoji} ${username} found [${loot.rarity.toUpperCase()}] ${loot.item}! (${slotMsg}) — !sell ${result.slot} for ${loot.coinValue} coins. ${flavor}`
+        );
+      }
+    }
+
+    if (command === "!inventory") {
+      const ch = channel.replace(/^#/, "");
+      const items = await listInventory(ch, username);
+      if (items.length === 0) {
+        void client?.say(channel, `🎒 ${username}: Your goblin pouch is empty. Try !loot to grab something!`);
+      } else {
+        const lines = items.map((it, i) => {
+          const e = getRarityEmoji(it.rarity);
+          if (it.kind === "buff") {
+            const status = it.isActive ? `ACTIVE×${it.chargesRemaining}` : `${it.chargesRemaining} charges`;
+            return `[${i + 1}] ${e} ${it.item} (BUFF, ${status}, sell ${it.coinValue})`;
+          }
+          return `[${i + 1}] ${e} ${it.item} (${it.coinValue} coins)`;
+        });
+        void client?.say(channel, `🎒 ${username} (${items.length}/${INVENTORY_CAP}): ${lines.join(" • ")}`);
+      }
+    }
+
+    if (command === "!sell") {
+      const ch = channel.replace(/^#/, "");
+      const items = await listInventory(ch, username);
+      if (items.length === 0) {
+        void client?.say(channel, `${username}: Nothing to sell — your pouch is empty!`);
+        return;
+      }
+      const arg = (parts[1] ?? "").toLowerCase();
+      let totalCoins = 0;
+      let soldCount = 0;
+      let targetItems: typeof items = [];
+      if (arg === "all") {
+        targetItems = items.filter((i) => i.kind === "item");
+        if (targetItems.length === 0) {
+          void client?.say(channel, `${username}: All your items are buffs — !use them or !sell <slot> to dump one.`);
+          return;
+        }
+      } else {
+        const slot = Number.parseInt(arg, 10);
+        if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
+          void client?.say(channel, `${username}: Try !sell <slot 1-${items.length}> or !sell all`);
+          return;
+        }
+        targetItems = [items[slot - 1]!];
+      }
+      const soldNames: string[] = [];
+      for (const it of targetItems) {
+        const r = await sellInventoryItem({ channel: ch, username, itemId: it.id });
+        if (r.ok && r.coinsEarned !== undefined) {
+          totalCoins += r.coinsEarned;
+          soldCount += 1;
+          soldNames.push(it.item);
+        }
+      }
+      if (soldCount === 0) {
+        void client?.say(channel, `${username}: Sale failed — try !inventory and try again.`);
+        return;
+      }
+      const summary = soldCount === 1 ? soldNames[0] : `${soldCount} items`;
+      void client?.say(channel, `💰 ${username} sold ${summary} for ${totalCoins} coins!`);
+    }
+
+    if (command === "!use") {
+      const ch = channel.replace(/^#/, "");
+      const items = await listInventory(ch, username);
+      const slot = Number.parseInt(parts[1] ?? "", 10);
+      if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
+        void client?.say(channel, `${username}: Try !use <slot 1-${items.length || INVENTORY_CAP}> — buffs only.`);
+        return;
+      }
+      const target = items[slot - 1]!;
+      const r = await useInventoryItem({ channel: ch, username, itemId: target.id });
+      if (!r.ok) {
+        if (r.reason === "not_buff") {
+          void client?.say(channel, `${username}: ${target.item} isn't a buff — !sell ${slot} for ${target.coinValue} coins instead.`);
+        } else {
+          void client?.say(channel, `${username}: Couldn't activate that item.`);
+        }
+        return;
+      }
+      void client?.say(channel, `✨ ${username} activated ${r.item!.item}! (${r.item!.chargesRemaining} charges remaining)`);
     }
 
     if (command === "!enter") {
@@ -201,14 +317,34 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         return;
       }
 
-      await db.insert(giveawayEntriesTable).values({
-        giveawayId: active.id,
-        username,
-        tickets: 1,
-      });
+      const ch = channel.replace(/^#/, "");
+      let tickets = 1;
+      const ticketsBuff = await hasActiveBuff(ch, username, "tickets");
+
+      // Insert first; only consume the ticket buff once the entry actually lands.
+      const inserted = await db
+        .insert(giveawayEntriesTable)
+        .values({
+          giveawayId: active.id,
+          username,
+          tickets: ticketsBuff ? 2 : 1,
+        })
+        .onConflictDoNothing({ target: [giveawayEntriesTable.giveawayId, giveawayEntriesTable.username] })
+        .returning({ id: giveawayEntriesTable.id });
+
+      if (inserted.length === 0) {
+        // Concurrent insert won the race — treat as "already in", do not burn buff.
+        void client?.say(channel, phrases.enterAlreadyIn(username));
+        return;
+      }
+
+      if (ticketsBuff && (await consumeBuffCharge(ch, username, "tickets"))) {
+        tickets = 2;
+      }
 
       const phrase = formatMessage(pickRandom(phrases.enterResponses), { user: username });
-      void client?.say(channel, phrase);
+      const suffix = tickets > 1 ? ` 🧲 (Hoard Magnet: +1 ticket!)` : "";
+      void client?.say(channel, `${phrase}${suffix}`);
     }
 
     if (command === "!goblin") {
@@ -225,19 +361,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       void client?.say(channel, phrase);
     }
 
-    if (command === "!hoard" || command === "!inventory") {
-      const entries = await db
-        .select()
-        .from(lootDropsTable)
-        .where(eq(lootDropsTable.username, username));
-
-      const count = entries.length;
-      const totalPts = entries.reduce((sum, e) => sum + e.points, 0);
-
-      if (count === 0) {
+    if (command === "!hoard") {
+      const { balance, earned } = await getPointsBalance(username);
+      if (earned === 0) {
         void client?.say(channel, phrases.hoardEmpty(username));
       } else {
-        void client?.say(channel, phrases.hoardFull(username, count, totalPts));
+        void client?.say(channel, `🪙 ${username}: ${balance} coins in your hoard (${earned} earned all-time).`);
       }
     }
 
@@ -276,10 +405,10 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       void client?.say(channel, `✅ ${username}: Trade URL saved! The streamer will send your skin soon 🎁`);
     }
 
-    if (command === "!points") {
+    if (command === "!points" || command === "!coins") {
       const { balance } = await getPointsBalance(username);
       const entries = Math.floor(balance / REDEEM_COST_PER_ENTRY);
-      void client?.say(channel, `💰 ${username}: You have ${balance} loot points (worth ${entries} extra giveaway ${entries === 1 ? "entry" : "entries"} at ${REDEEM_COST_PER_ENTRY} pts each).`);
+      void client?.say(channel, `💰 ${username}: You have ${balance} coins (worth ${entries} extra giveaway ${entries === 1 ? "entry" : "entries"} at ${REDEEM_COST_PER_ENTRY} coins each).`);
     }
 
     if (command === "!redeem") {
@@ -309,14 +438,14 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (!result.ok) {
         if (result.code === "insufficient" && typeof result.balance === "number") {
           const affordable = Math.floor(result.balance / REDEEM_COST_PER_ENTRY);
-          void client?.say(channel, `${username}: Not enough points — ${result.message}. You can afford ${affordable} extra ${affordable === 1 ? "entry" : "entries"}.`);
+          void client?.say(channel, `${username}: Not enough coins — ${result.message}. You can afford ${affordable} extra ${affordable === 1 ? "entry" : "entries"}.`);
         } else {
           void client?.say(channel, `${username}: ${result.message}`);
         }
         return;
       }
 
-      void client?.say(channel, `🎟️ ${username} redeemed ${result.pointsSpent} pts for ${result.ticketsAdded} extra ${result.ticketsAdded === 1 ? "entry" : "entries"}! Balance: ${result.balanceAfter} pts.`);
+      void client?.say(channel, `🎟️ ${username} redeemed ${result.pointsSpent} coins for ${result.ticketsAdded} extra ${result.ticketsAdded === 1 ? "entry" : "entries"}! Balance: ${result.balanceAfter} coins.`);
     }
 
     if (command === "!giveaway") {
@@ -434,6 +563,14 @@ export async function startBot(): Promise<void> {
   const username = process.env["TWITCH_BOT_USERNAME"] ?? "GoblinL00tBot";
 
   await reloadCustomCommands();
+
+  // Wire goblin events to use this bot's say(), then start the scheduler.
+  setGoblinEventSink((ch, msg) => {
+    if (client && botState.connected) {
+      void client.say(ch, msg);
+    }
+  });
+  startGoblinEvents();
 
   if (!oauthToken) {
     logger.warn("TWITCH_OAUTH_TOKEN not set — bot running in offline mode (dashboard only)");

@@ -21,15 +21,21 @@ import { InventoryPicker, type PickedItem } from "@/components/inventory-picker"
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  prize: z.string().min(1, "Pick a prize from your inventory"),
+  prizeKind: z.enum(["cs2", "bot_item", "bot_coins"]).default("cs2"),
+  prize: z.string().min(1, "Prize is required"),
   prizeAssetId: z.string().optional(),
   prizeIconUrl: z.string().optional(),
+  prizeBotCoins: z.number().int().positive().optional(),
+  prizeBotRarity: z.enum(["common", "uncommon", "rare", "epic", "legendary"]).optional(),
   keyword: z.string().min(1, "Keyword is required").regex(/^\w+$/, "Must be a single word (no spaces)"),
   description: z.string().optional(),
   requireFollower: z.boolean().default(false),
   subscriberOnly: z.boolean().default(false),
   minSubTier: z.enum(["1000", "2000", "3000"]).optional(),
-});
+}).refine(
+  (v) => v.prizeKind !== "bot_coins" || (v.prizeBotCoins !== undefined && v.prizeBotCoins > 0),
+  { path: ["prizeBotCoins"], message: "Coin amount required" },
+);
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -49,9 +55,12 @@ export function Giveaways() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: "",
+      prizeKind: "cs2",
       prize: "",
       prizeAssetId: undefined,
       prizeIconUrl: undefined,
+      prizeBotCoins: undefined,
+      prizeBotRarity: undefined,
       keyword: "loot",
       description: "",
       requireFollower: false,
@@ -61,6 +70,7 @@ export function Giveaways() {
   });
 
   const subscriberOnly = form.watch("subscriberOnly");
+  const prizeKind = form.watch("prizeKind");
 
   function handlePick(item: PickedItem) {
     form.setValue("prize", item.marketHashName, { shouldValidate: true });
@@ -71,13 +81,17 @@ export function Giveaways() {
   }
 
   function onSubmit(values: FormValues) {
+    const isCs2 = values.prizeKind === "cs2";
     createMutation.mutate(
       {
         data: {
           title: values.title,
+          prizeKind: values.prizeKind,
           prize: values.prize,
-          prizeAssetId: values.prizeAssetId,
-          prizeIconUrl: values.prizeIconUrl,
+          prizeAssetId: isCs2 ? values.prizeAssetId : undefined,
+          prizeIconUrl: isCs2 ? values.prizeIconUrl : undefined,
+          prizeBotCoins: values.prizeKind === "bot_coins" ? values.prizeBotCoins : undefined,
+          prizeBotRarity: values.prizeKind === "bot_item" ? values.prizeBotRarity : undefined,
           keyword: values.keyword,
           description: values.description,
           requireFollower: values.requireFollower,
@@ -146,43 +160,172 @@ export function Giveaways() {
                     )}
                   />
 
+                  {/* Prize source selector */}
                   <FormField
                     control={form.control}
-                    name="prize"
+                    name="prizeKind"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Prize</FormLabel>
-                        <FormControl>
-                          <button
-                            type="button"
-                            onClick={() => setPickerOpen(true)}
-                            className="w-full flex items-center gap-3 p-3 rounded-md border border-input bg-background text-left hover:border-primary/50 transition-colors"
-                            data-testid="button-open-prize-picker"
-                          >
-                            {pickedIcon ? (
-                              <img
-                                src={pickedIcon}
-                                alt=""
-                                className="w-12 h-12 object-contain rounded bg-background/50 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 flex items-center justify-center rounded bg-muted shrink-0">
-                                <Package className="w-5 h-5 text-muted-foreground" />
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              {field.value ? (
-                                <span className="text-sm font-medium text-foreground truncate block">{field.value}</span>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">Click to pick from your CS2 inventory</span>
-                              )}
-                            </div>
-                          </button>
-                        </FormControl>
-                        <FormMessage />
+                        <FormLabel>Prize Source</FormLabel>
+                        <div className="grid grid-cols-3 gap-1.5 rounded-md border border-input bg-background p-1">
+                          {([
+                            { v: "cs2", label: "CS2 Skin", emoji: "🔫" },
+                            { v: "bot_item", label: "Loot Drop", emoji: "👺" },
+                            { v: "bot_coins", label: "Coins", emoji: "🪙" },
+                          ] as const).map((opt) => (
+                            <button
+                              key={opt.v}
+                              type="button"
+                              onClick={() => {
+                                field.onChange(opt.v);
+                                if (opt.v !== "cs2") {
+                                  form.setValue("prizeAssetId", undefined);
+                                  form.setValue("prizeIconUrl", undefined);
+                                  setPickedIcon(null);
+                                }
+                                if (opt.v === "bot_coins") {
+                                  form.setValue("prize", "Bag of Coins", { shouldValidate: true });
+                                } else if (opt.v === "bot_item") {
+                                  form.setValue("prize", "Random Goblin Loot", { shouldValidate: true });
+                                } else {
+                                  form.setValue("prize", "", { shouldValidate: false });
+                                }
+                              }}
+                              data-testid={`tab-prize-${opt.v}`}
+                              className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded text-xs font-medium transition-all ${
+                                field.value === opt.v
+                                  ? "bg-primary text-primary-foreground shadow"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              }`}
+                            >
+                              <span>{opt.emoji}</span>
+                              <span>{opt.label}</span>
+                            </button>
+                          ))}
+                        </div>
                       </FormItem>
                     )}
                   />
+
+                  {prizeKind === "cs2" && (
+                    <FormField
+                      control={form.control}
+                      name="prize"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CS2 Skin</FormLabel>
+                          <FormControl>
+                            <button
+                              type="button"
+                              onClick={() => setPickerOpen(true)}
+                              className="w-full flex items-center gap-3 p-3 rounded-md border border-input bg-background text-left hover:border-primary/50 transition-colors"
+                              data-testid="button-open-prize-picker"
+                            >
+                              {pickedIcon ? (
+                                <img src={pickedIcon} alt="" className="w-12 h-12 object-contain rounded bg-background/50 shrink-0" />
+                              ) : (
+                                <div className="w-12 h-12 flex items-center justify-center rounded bg-muted shrink-0">
+                                  <Package className="w-5 h-5 text-muted-foreground" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                {field.value ? (
+                                  <span className="text-sm font-medium text-foreground truncate block">{field.value}</span>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">Click to pick from your CS2 inventory</span>
+                                )}
+                              </div>
+                            </button>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {prizeKind === "bot_item" && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="prize"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Display Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Random Goblin Loot" {...field} className="bg-background" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="prizeBotRarity"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Rarity Hint (optional)</FormLabel>
+                            <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
+                              <FormControl>
+                                <SelectTrigger className="bg-background" data-testid="select-bot-rarity">
+                                  <SelectValue placeholder="Any rarity (winner gets a juiced roll)" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="common">Common</SelectItem>
+                                <SelectItem value="uncommon">Uncommon</SelectItem>
+                                <SelectItem value="rare">Rare</SelectItem>
+                                <SelectItem value="epic">Epic</SelectItem>
+                                <SelectItem value="legendary">Legendary</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-muted-foreground">Goblin rolls a random item into the winner's inventory.</p>
+                          </FormItem>
+                        )}
+                      />
+                    </>
+                  )}
+
+                  {prizeKind === "bot_coins" && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="prize"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Display Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Bag of Coins" {...field} className="bg-background" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="prizeBotCoins"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Coin Amount</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  placeholder="1000"
+                                  value={field.value ?? ""}
+                                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                                  className="pl-9 bg-background"
+                                  data-testid="input-bot-coins"
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </>
+                  )}
 
                   <FormField
                     control={form.control}
@@ -297,7 +440,7 @@ export function Giveaways() {
                   <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/20 p-3 text-xs text-muted-foreground">
                     <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>
-                      Viewers can also <span className="font-mono text-amber-400">!redeem</span> loot points for extra entries (100 pts = 1 entry).
+                      Viewers can also <span className="font-mono text-amber-400">!redeem</span> coins for extra entries (100 coins = 1 entry).
                     </span>
                   </div>
 
@@ -342,20 +485,33 @@ export function Giveaways() {
                     <Card className={`border-border/50 hover:border-primary/50 transition-all cursor-pointer group ${isActive ? "bg-primary/5" : "bg-card/50"}`}>
                       <CardContent className="p-5 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          {giveaway.prizeIconUrl && (
+                          {giveaway.prizeIconUrl ? (
                             <img
                               src={giveaway.prizeIconUrl}
                               alt=""
                               className="w-12 h-12 object-contain rounded bg-background/40 shrink-0"
                             />
-                          )}
+                          ) : giveaway.prizeKind === "bot_coins" ? (
+                            <div className="w-12 h-12 flex items-center justify-center rounded bg-amber-500/15 border border-amber-500/30 shrink-0">
+                              <Coins className="w-6 h-6 text-amber-400" />
+                            </div>
+                          ) : giveaway.prizeKind === "bot_item" ? (
+                            <div className="w-12 h-12 flex items-center justify-center rounded bg-green-500/15 border border-green-500/30 shrink-0 text-2xl">
+                              👺
+                            </div>
+                          ) : null}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 mb-1">
                               <h3 className="font-bold text-lg text-foreground truncate group-hover:text-primary transition-colors">{giveaway.title}</h3>
                               <StatusBadge status={giveaway.status} isCurrent={isCurrent} />
                             </div>
                             <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                              <span className="flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> {giveaway.prize}</span>
+                              <span className="flex items-center gap-1.5">
+                                <Trophy className="w-3.5 h-3.5" /> {giveaway.prize}
+                                {giveaway.prizeKind === "bot_coins" && giveaway.prizeBotCoins ? (
+                                  <span className="text-amber-400 font-mono ml-1">({giveaway.prizeBotCoins} coins)</span>
+                                ) : null}
+                              </span>
                               <span className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /> !{giveaway.keyword}</span>
                               <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {new Date(giveaway.createdAt).toLocaleDateString()}</span>
                               {giveaway.requireFollower && (

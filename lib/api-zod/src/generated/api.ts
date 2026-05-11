@@ -53,6 +53,18 @@ export const ListGiveawaysResponseItem = zod.object({
   prize: zod.string(),
   prizeAssetId: zod.string().nullable(),
   prizeIconUrl: zod.string().nullable(),
+  prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+  prizeBotCoins: zod.number().nullable(),
+  prizeBotRarity: zod
+    .union([
+      zod.literal("common"),
+      zod.literal("uncommon"),
+      zod.literal("rare"),
+      zod.literal("epic"),
+      zod.literal("legendary"),
+      zod.literal(null),
+    ])
+    .nullable(),
   description: zod.string().nullable(),
   status: zod.enum(["pending", "active", "ended"]),
   channel: zod.string(),
@@ -85,6 +97,11 @@ export const CreateGiveawayBody = zod.object({
   prize: zod.string().min(1),
   prizeAssetId: zod.string().optional(),
   prizeIconUrl: zod.string().optional(),
+  prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]).optional(),
+  prizeBotCoins: zod.number().min(1).optional(),
+  prizeBotRarity: zod
+    .enum(["common", "uncommon", "rare", "epic", "legendary"])
+    .optional(),
   description: zod.string().optional(),
   keyword: zod.string().min(1),
   channel: zod.string().optional(),
@@ -103,6 +120,18 @@ export const GetCurrentGiveawayResponse = zod.object({
     prize: zod.string(),
     prizeAssetId: zod.string().nullable(),
     prizeIconUrl: zod.string().nullable(),
+    prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+    prizeBotCoins: zod.number().nullable(),
+    prizeBotRarity: zod
+      .union([
+        zod.literal("common"),
+        zod.literal("uncommon"),
+        zod.literal("rare"),
+        zod.literal("epic"),
+        zod.literal("legendary"),
+        zod.literal(null),
+      ])
+      .nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
@@ -149,6 +178,18 @@ export const GetGiveawayResponse = zod.object({
     prize: zod.string(),
     prizeAssetId: zod.string().nullable(),
     prizeIconUrl: zod.string().nullable(),
+    prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+    prizeBotCoins: zod.number().nullable(),
+    prizeBotRarity: zod
+      .union([
+        zod.literal("common"),
+        zod.literal("uncommon"),
+        zod.literal("rare"),
+        zod.literal("epic"),
+        zod.literal("legendary"),
+        zod.literal(null),
+      ])
+      .nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
@@ -194,6 +235,18 @@ export const StartGiveawayResponse = zod.object({
   prize: zod.string(),
   prizeAssetId: zod.string().nullable(),
   prizeIconUrl: zod.string().nullable(),
+  prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+  prizeBotCoins: zod.number().nullable(),
+  prizeBotRarity: zod
+    .union([
+      zod.literal("common"),
+      zod.literal("uncommon"),
+      zod.literal("rare"),
+      zod.literal("epic"),
+      zod.literal("legendary"),
+      zod.literal(null),
+    ])
+    .nullable(),
   description: zod.string().nullable(),
   status: zod.enum(["pending", "active", "ended"]),
   channel: zod.string(),
@@ -230,6 +283,18 @@ export const EndGiveawayResponse = zod.object({
     prize: zod.string(),
     prizeAssetId: zod.string().nullable(),
     prizeIconUrl: zod.string().nullable(),
+    prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+    prizeBotCoins: zod.number().nullable(),
+    prizeBotRarity: zod
+      .union([
+        zod.literal("common"),
+        zod.literal("uncommon"),
+        zod.literal("rare"),
+        zod.literal("epic"),
+        zod.literal("legendary"),
+        zod.literal(null),
+      ])
+      .nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
@@ -274,6 +339,18 @@ export const RerollGiveawayResponse = zod.object({
     prize: zod.string(),
     prizeAssetId: zod.string().nullable(),
     prizeIconUrl: zod.string().nullable(),
+    prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+    prizeBotCoins: zod.number().nullable(),
+    prizeBotRarity: zod
+      .union([
+        zod.literal("common"),
+        zod.literal("uncommon"),
+        zod.literal("rare"),
+        zod.literal("epic"),
+        zod.literal("legendary"),
+        zod.literal(null),
+      ])
+      .nullable(),
     description: zod.string().nullable(),
     status: zod.enum(["pending", "active", "ended"]),
     channel: zod.string(),
@@ -323,18 +400,68 @@ export const GetGiveawayEntriesResponse = zod.array(
 );
 
 /**
- * @summary Get loot point balance for a Twitch username
+ * @summary Get loot coin balance for the authenticated user
  */
-export const GetMyPointsQueryParams = zod.object({
-  username: zod.coerce.string(),
-});
-
 export const GetMyPointsResponse = zod.object({
   username: zod.string(),
   earned: zod.number(),
   redeemed: zod.number(),
   balance: zod.number(),
   costPerEntry: zod.number(),
+});
+
+/**
+ * @summary List the authenticated user's loot inventory (capped)
+ */
+export const GetMyInventoryResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.number(),
+      item: zod.string(),
+      rarity: zod.enum(["common", "uncommon", "rare", "epic", "legendary"]),
+      kind: zod.enum(["item", "buff"]),
+      buffEffect: zod
+        .union([
+          zod.literal("luck"),
+          zod.literal("coins"),
+          zod.literal("tickets"),
+          zod.literal(null),
+        ])
+        .nullable(),
+      coinValue: zod.number(),
+      chargesRemaining: zod.number(),
+      isActive: zod.boolean(),
+      acquiredAt: zod.string(),
+    }),
+  ),
+  cap: zod.number(),
+  balance: zod.number(),
+  costPerEntry: zod.number(),
+});
+
+/**
+ * @summary Sell an inventory item for coins
+ */
+export const SellInventoryItemParams = zod.object({
+  itemId: zod.coerce.number(),
+});
+
+export const SellInventoryItemResponse = zod.object({
+  coinsEarned: zod.number(),
+  balanceAfter: zod.number(),
+});
+
+/**
+ * @summary Activate a buff item
+ */
+export const UseInventoryItemParams = zod.object({
+  itemId: zod.coerce.number(),
+});
+
+export const UseInventoryItemResponse = zod.object({
+  item: zod.string(),
+  buffEffect: zod.string(),
+  chargesRemaining: zod.number(),
 });
 
 /**
@@ -345,7 +472,6 @@ export const RedeemEntriesParams = zod.object({
 });
 
 export const RedeemEntriesBody = zod.object({
-  username: zod.string(),
   entries: zod.number().min(1),
 });
 
@@ -514,6 +640,7 @@ export const GetBotSettingsResponse = zod.object({
   steamTradeUrl: zod.string().nullable(),
   steamId64: zod.string().nullable(),
   steamUsername: zod.string().nullable(),
+  goblinEventsEnabled: zod.boolean(),
 });
 
 /**
@@ -525,6 +652,7 @@ export const UpdateBotSettingsBody = zod.object({
   steamTradeUrl: zod.string().nullish(),
   steamId64: zod.string().nullish(),
   steamUsername: zod.string().nullish(),
+  goblinEventsEnabled: zod.boolean().optional(),
 });
 
 export const UpdateBotSettingsResponse = zod.object({
@@ -533,6 +661,7 @@ export const UpdateBotSettingsResponse = zod.object({
   steamTradeUrl: zod.string().nullable(),
   steamId64: zod.string().nullable(),
   steamUsername: zod.string().nullable(),
+  goblinEventsEnabled: zod.boolean(),
 });
 
 /**

@@ -8,11 +8,15 @@ const COMMANDS = [
   { cmd: "!loot", desc: "Roll for random goblin loot — common to legendary rarity drops", rarity: "legendary" },
   { cmd: "!enter", desc: "Enter the active giveaway — goblin writes your name in the book", rarity: "epic" },
   { cmd: "!giveaway", desc: "Check if a giveaway is running and how many entries so far", rarity: "rare" },
-  { cmd: "!hoard", desc: "See your full loot inventory and total points accumulated", rarity: "uncommon" },
+  { cmd: "!hoard", desc: "Check your total coin balance accumulated from selling loot", rarity: "uncommon" },
+  { cmd: "!inventory", desc: "List the items in your goblin pouch (5-slot cap)", rarity: "uncommon" },
+  { cmd: "!sell", desc: "Sell an inventory slot for coins — !sell <slot> or !sell all", rarity: "uncommon" },
+  { cmd: "!use", desc: "Activate a buff item from your inventory — !use <slot>", rarity: "rare" },
+  { cmd: "!coins", desc: "Check your coin balance (alias for !points)", rarity: "common" },
   { cmd: "!goblin", desc: "Summon the goblin for a chaotic response", rarity: "uncommon" },
   { cmd: "!steal", desc: "Attempt a theft from another viewer — the goblin decides the outcome", rarity: "rare" },
   { cmd: "!feedgoblin", desc: "Offer a snack to keep the goblin happy and running smoothly", rarity: "common" },
-  { cmd: "!inventory", desc: "Alias for !hoard — check your collected loot and stats", rarity: "common" },
+  { cmd: "!tradeurl", desc: "Submit your Steam trade URL after winning a CS2 skin giveaway", rarity: "common" },
 ];
 
 const RARITY_STYLES: Record<string, string> = {
@@ -127,13 +131,13 @@ export function Home() {
             <FeatureCard
               icon={<Package className="w-6 h-6 text-green-400" />}
               title="Hoard Tracking"
-              desc="Every loot drop is saved. Viewers can check their inventory, see their total points, and compete on the leaderboard."
+              desc="Every loot drop is saved. Viewers can check their inventory, see their coin balance, and compete on the leaderboard."
               accent="green"
             />
             <FeatureCard
               icon={<Zap className="w-6 h-6 text-blue-400" />}
               title="Chaos Events"
-              desc="The goblin steals points, drops surprise loot, and responds to chaos commands — keeping your chat alive between giveaways."
+              desc="The goblin steals coins, drops surprise loot, and responds to chaos commands — keeping your chat alive between giveaways."
               accent="blue"
             />
             <FeatureCard

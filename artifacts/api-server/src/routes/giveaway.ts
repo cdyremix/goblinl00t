@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable } from "@workspace/db";
+import { db, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
+import { addInventoryItem, rollLootDrop } from "../bot/inventory";
 import {
   CreateGiveawayBody,
   GetGiveawayParams,
@@ -22,6 +23,9 @@ function serializeGiveaway(g: typeof giveawaysTable.$inferSelect, entryCount: nu
     description: g.description ?? null,
     prizeAssetId: g.prizeAssetId ?? null,
     prizeIconUrl: g.prizeIconUrl ?? null,
+    prizeKind: (g.prizeKind ?? "cs2") as "cs2" | "bot_item" | "bot_coins",
+    prizeBotCoins: g.prizeBotCoins ?? null,
+    prizeBotRarity: g.prizeBotRarity ?? null,
     status: g.status,
     channel: g.channel,
     keyword: g.keyword,
@@ -70,6 +74,9 @@ router.post("/giveaway", async (req, res) => {
       prize: body.prize,
       prizeAssetId: body.prizeAssetId ?? null,
       prizeIconUrl: body.prizeIconUrl ?? null,
+      prizeKind: body.prizeKind ?? "cs2",
+      prizeBotCoins: body.prizeBotCoins ?? null,
+      prizeBotRarity: body.prizeBotRarity ?? null,
       description: body.description ?? null,
       keyword: body.keyword ?? "!enter",
       channel: body.channel ?? "goblinl00t",
@@ -226,13 +233,38 @@ router.post("/giveaway/:id/end", async (req, res) => {
     entryCount: entries.length,
   });
 
-  // Auto-create a trade fulfillment record for the winner
-  void db.insert(tradeFulfillmentsTable).values({
-    giveawayId: giveaway.id,
-    winnerTwitchUsername: winner.username,
-    prize: giveaway.prize,
-    status: "pending",
-  }).onConflictDoNothing();
+  // Award bot prizes directly; only CS2 prizes need streamer-managed delivery.
+  const prizeKind = (giveaway.prizeKind ?? "cs2") as "cs2" | "bot_item" | "bot_coins";
+  if (prizeKind === "bot_coins") {
+    const amount = Math.max(1, giveaway.prizeBotCoins ?? 0);
+    await db.insert(lootDropsTable).values({
+      channel: giveaway.channel,
+      username: winner.username,
+      item: `Giveaway Prize: ${giveaway.title}`,
+      rarity: "epic",
+      points: amount,
+    });
+  } else if (prizeKind === "bot_item") {
+    const loot = rollLootDrop({ luckBuffActive: true });
+    const result = await addInventoryItem(giveaway.channel, winner.username, loot);
+    if (!result.ok) {
+      // Inventory full — fall back to coin compensation so the prize is never silently dropped.
+      await db.insert(lootDropsTable).values({
+        channel: giveaway.channel,
+        username: winner.username,
+        item: `Giveaway Prize (pouch was full): ${loot.item}`,
+        rarity: loot.rarity,
+        points: loot.coinValue,
+      });
+    }
+  } else {
+    void db.insert(tradeFulfillmentsTable).values({
+      giveawayId: giveaway.id,
+      winnerTwitchUsername: winner.username,
+      prize: giveaway.prize,
+      status: "pending",
+    }).onConflictDoNothing();
+  }
 
   res.json({
     giveaway: serializeGiveaway(giveaway, entries.length),

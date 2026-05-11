@@ -23,7 +23,6 @@ import type {
   CommandStat,
   ConnectSteam200,
   DisconnectSteam200,
-  GetMyPointsParams,
   GetRecentLootParams,
   GetTopLootersParams,
   Giveaway,
@@ -37,11 +36,14 @@ import type {
   PointsBalance,
   RedeemEntriesInput,
   RedemptionResult,
+  SellItemResult,
   StatsOverview,
   SteamInventory,
   TradeFulfillment,
   UpdateBotSettings,
   UpdateTradeFulfillment,
+  UseItemResult,
+  UserInventory,
   UserStat,
 } from "./api.schemas";
 
@@ -966,59 +968,43 @@ export function useGetGiveawayEntries<
 }
 
 /**
- * @summary Get loot point balance for a Twitch username
+ * @summary Get loot coin balance for the authenticated user
  */
-export const getGetMyPointsUrl = (params: GetMyPointsParams) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? "null" : value.toString());
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0
-    ? `/api/points/me?${stringifiedParams}`
-    : `/api/points/me`;
+export const getGetMyPointsUrl = () => {
+  return `/api/points/me`;
 };
 
 export const getMyPoints = async (
-  params: GetMyPointsParams,
   options?: RequestInit,
 ): Promise<PointsBalance> => {
-  return customFetch<PointsBalance>(getGetMyPointsUrl(params), {
+  return customFetch<PointsBalance>(getGetMyPointsUrl(), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetMyPointsQueryKey = (params?: GetMyPointsParams) => {
-  return [`/api/points/me`, ...(params ? [params] : [])] as const;
+export const getGetMyPointsQueryKey = () => {
+  return [`/api/points/me`] as const;
 };
 
 export const getGetMyPointsQueryOptions = <
   TData = Awaited<ReturnType<typeof getMyPoints>>,
-  TError = ErrorType<unknown>,
->(
-  params: GetMyPointsParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getMyPoints>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPoints>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetMyPointsQueryKey(params);
+  const queryKey = queryOptions?.queryKey ?? getGetMyPointsQueryKey();
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyPoints>>> = ({
     signal,
-  }) => getMyPoints(params, { signal, ...requestOptions });
+  }) => getMyPoints({ signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getMyPoints>>,
@@ -1030,27 +1016,24 @@ export const getGetMyPointsQueryOptions = <
 export type GetMyPointsQueryResult = NonNullable<
   Awaited<ReturnType<typeof getMyPoints>>
 >;
-export type GetMyPointsQueryError = ErrorType<unknown>;
+export type GetMyPointsQueryError = ErrorType<void>;
 
 /**
- * @summary Get loot point balance for a Twitch username
+ * @summary Get loot coin balance for the authenticated user
  */
 
 export function useGetMyPoints<
   TData = Awaited<ReturnType<typeof getMyPoints>>,
-  TError = ErrorType<unknown>,
->(
-  params: GetMyPointsParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getMyPoints>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetMyPointsQueryOptions(params, options);
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPoints>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyPointsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -1058,6 +1041,249 @@ export function useGetMyPoints<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List the authenticated user's loot inventory (capped)
+ */
+export const getGetMyInventoryUrl = () => {
+  return `/api/inventory/me`;
+};
+
+export const getMyInventory = async (
+  options?: RequestInit,
+): Promise<UserInventory> => {
+  return customFetch<UserInventory>(getGetMyInventoryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyInventoryQueryKey = () => {
+  return [`/api/inventory/me`] as const;
+};
+
+export const getGetMyInventoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyInventory>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyInventory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyInventoryQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyInventory>>> = ({
+    signal,
+  }) => getMyInventory({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyInventory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyInventoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyInventory>>
+>;
+export type GetMyInventoryQueryError = ErrorType<void>;
+
+/**
+ * @summary List the authenticated user's loot inventory (capped)
+ */
+
+export function useGetMyInventory<
+  TData = Awaited<ReturnType<typeof getMyInventory>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyInventory>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyInventoryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Sell an inventory item for coins
+ */
+export const getSellInventoryItemUrl = (itemId: number) => {
+  return `/api/inventory/${itemId}/sell`;
+};
+
+export const sellInventoryItem = async (
+  itemId: number,
+  options?: RequestInit,
+): Promise<SellItemResult> => {
+  return customFetch<SellItemResult>(getSellInventoryItemUrl(itemId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSellInventoryItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sellInventoryItem>>,
+    TError,
+    { itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sellInventoryItem>>,
+  TError,
+  { itemId: number },
+  TContext
+> => {
+  const mutationKey = ["sellInventoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sellInventoryItem>>,
+    { itemId: number }
+  > = (props) => {
+    const { itemId } = props ?? {};
+
+    return sellInventoryItem(itemId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SellInventoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sellInventoryItem>>
+>;
+
+export type SellInventoryItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Sell an inventory item for coins
+ */
+export const useSellInventoryItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sellInventoryItem>>,
+    TError,
+    { itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sellInventoryItem>>,
+  TError,
+  { itemId: number },
+  TContext
+> => {
+  return useMutation(getSellInventoryItemMutationOptions(options));
+};
+
+/**
+ * @summary Activate a buff item
+ */
+export const getUseInventoryItemUrl = (itemId: number) => {
+  return `/api/inventory/${itemId}/use`;
+};
+
+export const useInventoryItem = async (
+  itemId: number,
+  options?: RequestInit,
+): Promise<UseItemResult> => {
+  return customFetch<UseItemResult>(getUseInventoryItemUrl(itemId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getUseInventoryItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof useInventoryItem>>,
+    TError,
+    { itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof useInventoryItem>>,
+  TError,
+  { itemId: number },
+  TContext
+> => {
+  const mutationKey = ["useInventoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof useInventoryItem>>,
+    { itemId: number }
+  > = (props) => {
+    const { itemId } = props ?? {};
+
+    return useInventoryItem(itemId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UseInventoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof useInventoryItem>>
+>;
+
+export type UseInventoryItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Activate a buff item
+ */
+export const useUseInventoryItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof useInventoryItem>>,
+    TError,
+    { itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof useInventoryItem>>,
+  TError,
+  { itemId: number },
+  TContext
+> => {
+  return useMutation(getUseInventoryItemMutationOptions(options));
+};
 
 /**
  * @summary Redeem loot points for extra entries (manual override)

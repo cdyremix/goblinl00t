@@ -16,4 +16,5 @@ export interface UpdateBotSettings {
   steamId64?: string | null;
   /** @nullable */
   steamUsername?: string | null;
+  goblinEventsEnabled?: boolean;
 }

@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RedeemEntriesInput {
-  /** @minimum 1 */
-  entries: number;
+export interface SellItemResult {
+  coinsEarned: number;
+  balanceAfter: number;
 }

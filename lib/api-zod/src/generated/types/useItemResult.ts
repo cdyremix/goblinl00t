@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetMyPointsParams = {
-  username: string;
-};
+export interface UseItemResult {
+  item: string;
+  buffEffect: string;
+  chargesRemaining: number;
+}

@@ -105,7 +105,7 @@ export function Stats() {
                       </div>
                       <div className="flex items-center gap-3 text-muted-foreground">
                         <span className="text-xs">{user.lootCount} drops</span>
-                        <span className="font-mono font-bold text-foreground">{user.totalPoints.toLocaleString()} pts</span>
+                        <span className="font-mono font-bold text-foreground">{user.totalPoints.toLocaleString()} coins</span>
                       </div>
                     </div>
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">

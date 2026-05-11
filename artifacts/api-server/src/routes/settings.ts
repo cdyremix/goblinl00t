@@ -30,6 +30,7 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
     steamTradeUrl: user.steamTradeUrl ?? null,
     steamId64: user.steamId64 ?? null,
     steamUsername: user.steamUsername ?? null,
+    goblinEventsEnabled: user.goblinEventsEnabled,
   };
 }
 
@@ -50,6 +51,7 @@ router.put("/settings", async (req, res) => {
     steamTradeUrl?: string | null;
     steamId64?: string | null;
     steamUsername?: string | null;
+    goblinEventsEnabled?: boolean;
   };
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
@@ -76,6 +78,7 @@ router.put("/settings", async (req, res) => {
   if ("steamTradeUrl" in body) updates.steamTradeUrl = body.steamTradeUrl ?? null;
   if ("steamId64" in body) updates.steamId64 = body.steamId64 ?? null;
   if ("steamUsername" in body) updates.steamUsername = body.steamUsername ?? null;
+  if (typeof body.goblinEventsEnabled === "boolean") updates.goblinEventsEnabled = body.goblinEventsEnabled;
 
   await getOrCreateUser(userId);
   const [updated] = await db

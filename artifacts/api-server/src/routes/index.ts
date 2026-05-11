@@ -11,6 +11,7 @@ import settingsRouter from "./settings";
 import steamRouter from "./steam";
 import tradeFulfillmentsRouter from "./trade-fulfillments";
 import pointsRouter from "./points";
+import inventoryRouter from "./inventory";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(settingsRouter);
 router.use(steamRouter);
 router.use(tradeFulfillmentsRouter);
 router.use(pointsRouter);
+router.use(inventoryRouter);
 
 export default router;

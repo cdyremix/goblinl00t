@@ -24,13 +24,15 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 
 ## Where things live
 
-- `lib/db/src/schema/` — DB schema (giveaways, giveaway_entries, loot_drops, command_logs)
+- `lib/db/src/schema/` — DB schema (giveaways, giveaway_entries, loot_drops, command_logs, user_inventory, goblin_events, users)
 - `lib/api-spec/openapi.yaml` — OpenAPI source of truth for all endpoints
 - `lib/api-client-react/src/generated/` — generated React Query hooks (do not edit)
 - `artifacts/api-server/src/` — Express API + bot service
   - `src/bot/bot-service.ts` — tmi.js Twitch bot (offline mode if no token)
-  - `src/bot/loot-tables.ts` — rarity tiers and item pools
-  - `src/routes/` — giveaway, loot, stats, commands, bot routes
+  - `src/bot/loot-tables.ts` — rarity tiers and item pools (LOOT_TABLE export)
+  - `src/bot/inventory.ts` — 5-slot inventory service: rollLootDrop (luck buff bumps rarity), addInventoryItem (per-user advisory lock), sellInventoryItem (coins-buff 2× multiplier in same txn), useInventoryItem, consumeBuffCharge, hasActiveBuff
+  - `src/bot/goblin-events.ts` — 5–15 min jitter scheduler, picks random recent chatter, fires drop (loot_drops insert) or steal (point_redemptions kind='goblin_steal', capped to balance); gated by usersTable.goblinEventsEnabled
+  - `src/routes/` — giveaway, loot, stats, commands, bot, inventory, settings routes
 - `artifacts/goblin-dashboard/src/` — React frontend
   - `src/pages/` — home, dashboard, giveaways, giveaway-detail, stats, commands
   - `src/components/layout.tsx` — sidebar nav layout
@@ -57,7 +59,7 @@ A mischievous goblin-themed Twitch bot + web dashboard for running giveaways, lo
 
 ## Bot Commands
 
-`!loot`, `!enter`, `!goblin`, `!steal`, `!hoard`, `!inventory`, `!feedgoblin`, `!giveaway`, `!tradeurl`
+`!loot`, `!enter`, `!goblin`, `!steal`, `!hoard`, `!inventory`, `!sell <slot|all>`, `!use <slot>`, `!coins` (alias for `!points`), `!feedgoblin`, `!giveaway`, `!tradeurl`
 
 ## Twitch Integration
 
@@ -79,6 +81,11 @@ Without them, the API and dashboard work fully; the bot just won't connect to Tw
 - `POST /giveaway/:id/redeem` is Clerk-authed and operates on the caller's linked `usersTable.twitchUsername` — it cannot redeem for another user.
 - Sub-tier detection reads `tags.badges?.subscriber` (only `"2000"` / `"3000"` indicate Tier 2 / 3; anything else is Tier 1). `badges-raw` and `badge-info` are NOT reliable for tier.
 - Follower gating is best-effort and falls open when `TWITCH_CLIENT_ID` / `TWITCH_OAUTH_TOKEN` aren't set or the broadcaster has no stored `twitchUserId`. For strict enforcement, configure a real Twitch app token.
+- Giveaway prizes have three kinds (`prizeKind`): `cs2` (manual streamer delivery via Trade Office), `bot_item` (auto-rolls into winner's inventory; falls back to coin credit if pouch is full), `bot_coins` (credits `prizeBotCoins` directly to the winner via `loot_drops`). Always serialize/deserialize all three new fields (`prizeKind`, `prizeBotCoins`, `prizeBotRarity`).
+- Inventory is capped at 5 slots per (channel, username). All inserts MUST go through `addInventoryItem()` — it takes a per-user `pg_advisory_xact_lock` to enforce the cap under concurrency. The luck-buff charge consumption is atomic with the insert (pass `consumeLuckOnSuccess: true`); a "full" result never burns the charge.
+- Ticket buff (`!enter`) is consumed only after the entry insert lands. The insert uses `onConflictDoNothing` on `(giveaway_id, username)` so a concurrent duplicate entry won't burn the buff either.
+- New chat-driven inventory paths normalize username via `tags.username` (lowercase). Historical `loot_drops` / `point_redemptions` rows may be mixed-case, so balance lookups can split across casings until backfilled — known limitation, not a regression.
+- `Random Goblin Events` (settings toggle, default ON) picks from an in-memory `RECENT_CHATTERS` map per channel, so it activates only after viewers have spoken since the bot started. Steals are silently skipped when balance ≤ 0; events are logged in `goblin_events`.
 
 ## User preferences
 

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -14,5 +14,6 @@ export const usersTable = pgTable("users", {
   steamId64: text("steam_id64"),
   steamUsername: text("steam_username"),
   avatarPreset: text("avatar_preset"),
+  goblinEventsEnabled: boolean("goblin_events_enabled").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
