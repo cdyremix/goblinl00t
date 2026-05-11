@@ -3,7 +3,7 @@ import { useAuth } from "@clerk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
-  Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock,
+  Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock, UserPlus, Eye, EyeOff,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -123,6 +123,7 @@ export function Admin() {
   const [filter, setFilter] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  const [creatingUser, setCreatingUser] = useState(false);
   const { toast } = useToast();
 
   const usersQuery = useQuery<{ users: AdminUser[] }>({
@@ -185,13 +186,22 @@ export function Admin() {
             Super-user controls for the entire Goblin L00t roster.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => qc.invalidateQueries({ queryKey: ["admin"] })}
-        >
-          <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setCreatingUser(true)}
+            data-testid="button-admin-create-user"
+          >
+            <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Create user
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => qc.invalidateQueries({ queryKey: ["admin"] })}
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -244,6 +254,15 @@ export function Admin() {
           )}
         </CardContent>
       </Card>
+
+      <CreateUserDialog
+        open={creatingUser}
+        onClose={() => setCreatingUser(false)}
+        onCreated={() => {
+          qc.invalidateQueries({ queryKey: ["admin"] });
+          setCreatingUser(false);
+        }}
+      />
 
       {/* Edit dialog — fetches the enriched user detail on open. Mounted
           here so opening it doesn't reset the filter / scroll position. */}
@@ -406,6 +425,228 @@ function MaintenanceToggleCard() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Provisions a new streamer account: creates the Clerk user (email +
+ * password) and the matching DB row in one shot. Optional Twitch handle
+ * pre-fills the row but does NOT bind `twitchUserId` — the streamer
+ * still has to complete OAuth themselves before the bot can act as them.
+ */
+function CreateUserDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const authedFetch = useAuthedFetch();
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [twitchUsername, setTwitchUsername] = useState("");
+  const [tier, setTier] = useState<Tier>("free");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Reset the form whenever the dialog re-opens so a previous attempt's
+  // half-typed values don't bleed into the next create flow.
+  useEffect(() => {
+    if (open) {
+      setEmail("");
+      setPassword("");
+      setTwitchUsername("");
+      setTier("free");
+      setIsAdmin(false);
+      setShowPassword(false);
+    }
+  }, [open]);
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const r = await authedFetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          twitchUsername: twitchUsername.trim() || null,
+          subscriptionTier: tier,
+          isAdmin,
+        }),
+      });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(json?.error ?? `Create failed (${r.status})`);
+      return json;
+    },
+    onSuccess: () => {
+      toast({ title: "User created", description: `${email} can now sign in.` });
+      onCreated();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Create failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function genTempPassword() {
+    // 20 chars from a balanced alphabet, drawn via crypto.getRandomValues
+    // so the temp credential isn't predictable. Math.random would be
+    // acceptable for a "shared once + rotated" temp password but using
+    // CSPRNG costs nothing and removes the foot-gun for any future
+    // reuse of this helper.
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*";
+    const buf = new Uint32Array(20);
+    crypto.getRandomValues(buf);
+    let out = "";
+    for (let i = 0; i < buf.length; i++) {
+      out += chars[buf[i]! % chars.length];
+    }
+    setPassword(out);
+    // Surface it briefly so the admin can copy/share — they explicitly
+    // asked for a generated password, so masking the result of a
+    // generate-click would be more annoying than protective.
+    setShowPassword(true);
+  }
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!email.trim() || password.length < 8) return;
+    create.mutate();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-medieval">
+            <UserPlus className="w-5 h-5 text-amber-400" />
+            Create user
+          </DialogTitle>
+          <DialogDescription>
+            Provisions a Clerk account + a matching DB row. The user can sign in
+            immediately with the email + password you set here.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="create-email">Email</Label>
+            <Input
+              id="create-email"
+              type="email"
+              required
+              autoComplete="off"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="streamer@example.com"
+              data-testid="input-create-email"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="create-password">Password</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={genTempPassword}
+                data-testid="button-create-password-generate"
+              >
+                Generate
+              </Button>
+            </div>
+            <div className="relative">
+              <Input
+                id="create-password"
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 chars"
+                className="pr-10 font-mono"
+                data-testid="input-create-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Share this with the user. They can change it from their account page.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="create-twitch">Twitch handle (optional)</Label>
+            <Input
+              id="create-twitch"
+              value={twitchUsername}
+              onChange={(e) => setTwitchUsername(e.target.value)}
+              placeholder="goblinl00t"
+              data-testid="input-create-twitch"
+            />
+            <p className="text-xs text-muted-foreground">
+              Pre-fills the row. The user still needs to complete Twitch OAuth from
+              their account page before the bot can authenticate as them.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="create-tier">Tier</Label>
+              <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
+                <SelectTrigger id="create-tier" data-testid="select-create-tier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="premium">Premium</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col justify-end">
+              <Label className="flex items-center gap-2 cursor-pointer">
+                <Switch
+                  checked={isAdmin}
+                  onCheckedChange={setIsAdmin}
+                  data-testid="switch-create-admin"
+                />
+                <span className="text-sm">Super admin</span>
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={create.isPending || !email.trim() || password.length < 8}
+              data-testid="button-create-submit"
+            >
+              {create.isPending ? (
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              ) : (
+                <UserPlus className="w-4 h-4 mr-1.5" />
+              )}
+              Create
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

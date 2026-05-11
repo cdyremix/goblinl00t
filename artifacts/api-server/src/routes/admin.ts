@@ -19,6 +19,144 @@ router.get("/admin/me", async (req, res) => {
   res.json({ isAdmin: true, user: ctx.user });
 });
 
+const CreateUserBody = z.object({
+  email: z.string().email().max(254),
+  password: z.string().min(8).max(128),
+  twitchUsername: z.string().trim().min(1).max(64).optional().nullable(),
+  isAdmin: z.boolean().optional(),
+  subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
+});
+
+/**
+ * POST /admin/users — create a fresh streamer account. Provisions the
+ * Clerk user (email pre-verified, password set) AND the matching
+ * `usersTable` row in one round-trip so the new account can sign in
+ * immediately with the supplied creds.
+ *
+ * Compensating cleanup: if the DB insert fails AFTER Clerk createUser
+ * succeeds, we delete the Clerk user so we don't leak an orphaned
+ * Clerk account that has no matching DB row (which would later
+ * auto-create on first sign-in but with `isAdmin=false` and the wrong
+ * tier — surprising to the operator who thought the create failed).
+ *
+ * `twitchUsername` is normalized to lowercase to match the convention
+ * used everywhere else (`bot/bot-service.ts#loadJoinableChannels`,
+ * chat-message inserts, etc.). It does NOT trigger a `joinChannel`
+ * call — admin-created accounts still need the streamer to complete
+ * the Twitch OAuth flow to bind `twitchUserId` and the bot to actually
+ * authenticate as them.
+ */
+router.post("/admin/users", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+
+  const parsed = CreateUserBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+    return;
+  }
+  const { email, password, twitchUsername, isAdmin, subscriptionTier } = parsed.data;
+  const normalizedTwitch = twitchUsername ? twitchUsername.toLowerCase() : null;
+
+  // Pre-flight: refuse if a DB row already owns this twitchUsername.
+  // Clerk would happily create the user but the bot would then have
+  // two rows pointing at the same channel and `loadJoinableChannels`
+  // would still dedupe — but the admin would see a confusing duplicate
+  // in the table. Better to fail loud here.
+  if (normalizedTwitch) {
+    const [conflict] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.twitchUsername, normalizedTwitch))
+      .limit(1);
+    if (conflict) {
+      res.status(409).json({ error: `Twitch handle "${normalizedTwitch}" is already taken.` });
+      return;
+    }
+  }
+
+  // Step 1: Clerk create (isolated try). Map Clerk's structured errors
+  // (`{ errors: [{ code, message }] }`) into appropriate HTTP statuses
+  // so the admin sees "email taken" / "password too weak" instead of a
+  // generic 500.
+  let clerkUserId: string;
+  try {
+    const created = await clerkClient.users.createUser({
+      emailAddress: [email],
+      password,
+      skipPasswordChecks: false,
+    });
+    clerkUserId = created.id;
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    // Clerk SDK errors surface a `.errors[]` array with stable codes.
+    const codes: string[] = ((err as { errors?: Array<{ code?: string }> })?.errors ?? [])
+      .map((e) => e.code ?? "")
+      .filter(Boolean);
+    const isDuplicate = codes.some((c) => c.includes("identifier_exists") || c.includes("already_exists"));
+    const isWeakPwd = codes.some((c) => c.includes("password"));
+    const status = isDuplicate ? 409 : isWeakPwd ? 422 : 500;
+    req.log.warn({ errMessage, codes, adminId: ctx.user.id }, "admin: clerk create rejected");
+    res.status(status).json({
+      error: isDuplicate
+        ? "An account with that email already exists."
+        : isWeakPwd
+          ? "Password rejected by Clerk: " + errMessage
+          : "Failed to create Clerk user",
+      detail: errMessage,
+    });
+    return;
+  }
+
+  // Step 2: DB insert (isolated try). On failure, roll back the Clerk
+  // user we just created so we don't leak an orphan. Note: a successful
+  // res.json() throw (extremely rare — happens with closed sockets)
+  // would NOT trigger rollback because it's outside this block. That's
+  // intentional — by the time we're writing the response, the row is
+  // committed and we shouldn't undo it.
+  let row: typeof usersTable.$inferSelect;
+  try {
+    const [inserted] = await db
+      .insert(usersTable)
+      .values({
+        clerkUserId,
+        twitchUsername: normalizedTwitch,
+        isAdmin: isAdmin ?? false,
+        subscriptionTier: subscriptionTier ?? "free",
+        // Skip the post-signup tier picker for admin-created accounts —
+        // the operator already chose the tier in the dialog.
+        tierSelected: true,
+      })
+      .returning();
+    row = inserted!;
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage, clerkUserId, adminId: ctx.user.id }, "admin: db insert failed, rolling back Clerk user");
+    try {
+      await clerkClient.users.deleteUser(clerkUserId);
+    } catch (cleanupErr) {
+      const cleanupMsg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+      req.log.error(
+        { cleanupMsg, clerkUserId },
+        "admin: failed to roll back orphaned Clerk user — manual cleanup required",
+      );
+    }
+    // Postgres unique-violation code is `23505` — surfaces as a race-loss
+    // on the `twitch_username` unique constraint when the pre-flight
+    // check passed but a concurrent create won the insert. Map to 409.
+    const isUniqueViolation = (err as { code?: string })?.code === "23505";
+    res.status(isUniqueViolation ? 409 : 500).json({
+      error: isUniqueViolation
+        ? "Twitch handle is already taken."
+        : "Failed to create user",
+      detail: errMessage,
+    });
+    return;
+  }
+
+  res.status(201).json({ user: row });
+});
+
 /**
  * GET /admin/users — full streamer roster. Includes every column the
  * admin dashboard might want to display. Sorted newest-first so freshly
