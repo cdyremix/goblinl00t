@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
 type ClerkEmail = ClerkUser["emailAddresses"][number];
@@ -180,6 +181,20 @@ export function Account() {
         <p className="text-muted-foreground mt-2 text-lg">Manage your hoard membership and channel bindings.</p>
       </div>
 
+      <Tabs defaultValue="identity" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="identity" data-testid="tab-identity">
+            <Gem className="w-3.5 h-3.5 mr-1.5" /> Identity
+          </TabsTrigger>
+          <TabsTrigger value="channel" data-testid="tab-channel">
+            <Tv className="w-3.5 h-3.5 mr-1.5" /> Channel
+          </TabsTrigger>
+          <TabsTrigger value="rank" data-testid="tab-rank">
+            <Crown className="w-3.5 h-3.5 mr-1.5" /> Rank
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="identity" className="mt-6">
       {/* Profile */}
       <Card className="border-border/50">
         <CardHeader className="border-b border-border/50">
@@ -259,7 +274,9 @@ export function Account() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
 
+        <TabsContent value="channel" className="mt-6">
       {/* Twitch Connection */}
       <Card className="border-border/50">
         <CardHeader className="border-b border-border/50">
@@ -315,7 +332,9 @@ export function Account() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
 
+        <TabsContent value="rank" className="mt-6">
       {/* Subscription Plans */}
       <div>
         <div className="flex items-center gap-2 mb-6">
@@ -396,6 +415,8 @@ export function Account() {
           Premium & Pro billing coming soon via Stripe. Plans saved for when payments go live.
         </p>
       </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Email change dialog */}
       {clerkUser && (

@@ -498,6 +498,43 @@ export interface UseItemResult {
   chargesRemaining: number;
 }
 
+export type ChatUserInventoryItemRarity =
+  (typeof ChatUserInventoryItemRarity)[keyof typeof ChatUserInventoryItemRarity];
+
+export const ChatUserInventoryItemRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
+export interface ChatUserInventoryItem {
+  id: number;
+  slot: number;
+  item: string;
+  rarity: ChatUserInventoryItemRarity;
+  kind: string;
+}
+
+export interface ChatUser {
+  username: string;
+  coins: number;
+  inventoryCount: number;
+  inventory: ChatUserInventoryItem[];
+}
+
+export interface AdjustCoinsRequest {
+  delta: number;
+  reason?: string;
+}
+
+export interface AdjustCoinsResponse {
+  ok: boolean;
+  username: string;
+  balance: number;
+}
+
 export type ListGiveawaysParams = {
   status?: ListGiveawaysStatus;
   limit?: number;

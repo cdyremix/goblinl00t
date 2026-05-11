@@ -17,9 +17,12 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdjustCoinsRequest,
+  AdjustCoinsResponse,
   BotCommand,
   BotSettings,
   BotStatus,
+  ChatUser,
   CommandStat,
   ConnectSteam200,
   DisconnectSteam200,
@@ -2432,6 +2435,168 @@ export const useUpdateBotSettings = <
   TContext
 > => {
   return useMutation(getUpdateBotSettingsMutationOptions(options));
+};
+
+/**
+ * @summary List all chat users in the streamer's channel with coin balances and inventory
+ */
+export const getListChatUsersUrl = () => {
+  return `/api/chat-users`;
+};
+
+export const listChatUsers = async (
+  options?: RequestInit,
+): Promise<ChatUser[]> => {
+  return customFetch<ChatUser[]>(getListChatUsersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListChatUsersQueryKey = () => {
+  return [`/api/chat-users`] as const;
+};
+
+export const getListChatUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listChatUsers>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listChatUsers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListChatUsersQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listChatUsers>>> = ({
+    signal,
+  }) => listChatUsers({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listChatUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListChatUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listChatUsers>>
+>;
+export type ListChatUsersQueryError = ErrorType<void>;
+
+/**
+ * @summary List all chat users in the streamer's channel with coin balances and inventory
+ */
+
+export function useListChatUsers<
+  TData = Awaited<ReturnType<typeof listChatUsers>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listChatUsers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListChatUsersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Adjust a chat user's coin balance (positive or negative delta)
+ */
+export const getAdjustChatUserCoinsUrl = (username: string) => {
+  return `/api/chat-users/${username}/coins`;
+};
+
+export const adjustChatUserCoins = async (
+  username: string,
+  adjustCoinsRequest: AdjustCoinsRequest,
+  options?: RequestInit,
+): Promise<AdjustCoinsResponse> => {
+  return customFetch<AdjustCoinsResponse>(getAdjustChatUserCoinsUrl(username), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adjustCoinsRequest),
+  });
+};
+
+export const getAdjustChatUserCoinsMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adjustChatUserCoins>>,
+    TError,
+    { username: string; data: BodyType<AdjustCoinsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adjustChatUserCoins>>,
+  TError,
+  { username: string; data: BodyType<AdjustCoinsRequest> },
+  TContext
+> => {
+  const mutationKey = ["adjustChatUserCoins"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adjustChatUserCoins>>,
+    { username: string; data: BodyType<AdjustCoinsRequest> }
+  > = (props) => {
+    const { username, data } = props ?? {};
+
+    return adjustChatUserCoins(username, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdjustChatUserCoinsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adjustChatUserCoins>>
+>;
+export type AdjustChatUserCoinsMutationBody = BodyType<AdjustCoinsRequest>;
+export type AdjustChatUserCoinsMutationError = ErrorType<void>;
+
+/**
+ * @summary Adjust a chat user's coin balance (positive or negative delta)
+ */
+export const useAdjustChatUserCoins = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adjustChatUserCoins>>,
+    TError,
+    { username: string; data: BodyType<AdjustCoinsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adjustChatUserCoins>>,
+  TError,
+  { username: string; data: BodyType<AdjustCoinsRequest> },
+  TContext
+> => {
+  return useMutation(getAdjustChatUserCoinsMutationOptions(options));
 };
 
 /**

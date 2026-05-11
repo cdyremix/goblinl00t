@@ -26,6 +26,8 @@ tags:
     description: Giveaway winner trade fulfillment
   - name: steam
     description: Steam inventory integration
+  - name: chat-users
+    description: Chat user management (coins + inventory)
 
 paths:
   /healthz:
@@ -570,6 +572,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BotSettings"
+        "400":
+          description: Invalid input
+        "401":
+          description: Unauthorized
+
+  /chat-users:
+    get:
+      operationId: listChatUsers
+      tags: [chat-users]
+      summary: List all chat users in the streamer's channel with coin balances and inventory
+      responses:
+        "200":
+          description: List of chat users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatUser"
+        "401":
+          description: Unauthorized
+
+  /chat-users/{username}/coins:
+    post:
+      operationId: adjustChatUserCoins
+      tags: [chat-users]
+      summary: Adjust a chat user's coin balance (positive or negative delta)
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustCoinsRequest"
+      responses:
+        "200":
+          description: Adjustment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdjustCoinsResponse"
         "400":
           description: Invalid input
         "401":
@@ -1210,3 +1258,67 @@ components:
         - item
         - buffEffect
         - chargesRemaining
+
+    ChatUserInventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        slot:
+          type: integer
+        item:
+          type: string
+        rarity:
+          type: string
+          enum: [common, uncommon, rare, epic, legendary]
+        kind:
+          type: string
+      required:
+        - id
+        - slot
+        - item
+        - rarity
+        - kind
+
+    ChatUser:
+      type: object
+      properties:
+        username:
+          type: string
+        coins:
+          type: integer
+        inventoryCount:
+          type: integer
+        inventory:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatUserInventoryItem"
+      required:
+        - username
+        - coins
+        - inventoryCount
+        - inventory
+
+    AdjustCoinsRequest:
+      type: object
+      properties:
+        delta:
+          type: integer
+        reason:
+          type: string
+      required:
+        - delta
+
+    AdjustCoinsResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        username:
+          type: string
+        balance:
+          type: integer
+      required:
+        - ok
+        - username
+        - balance

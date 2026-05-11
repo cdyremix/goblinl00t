@@ -703,6 +703,43 @@ export const UpdateBotSettingsResponse = zod.object({
 });
 
 /**
+ * @summary List all chat users in the streamer's channel with coin balances and inventory
+ */
+export const ListChatUsersResponseItem = zod.object({
+  username: zod.string(),
+  coins: zod.number(),
+  inventoryCount: zod.number(),
+  inventory: zod.array(
+    zod.object({
+      id: zod.number(),
+      slot: zod.number(),
+      item: zod.string(),
+      rarity: zod.enum(["common", "uncommon", "rare", "epic", "legendary"]),
+      kind: zod.string(),
+    }),
+  ),
+});
+export const ListChatUsersResponse = zod.array(ListChatUsersResponseItem);
+
+/**
+ * @summary Adjust a chat user's coin balance (positive or negative delta)
+ */
+export const AdjustChatUserCoinsParams = zod.object({
+  username: zod.coerce.string(),
+});
+
+export const AdjustChatUserCoinsBody = zod.object({
+  delta: zod.number(),
+  reason: zod.string().optional(),
+});
+
+export const AdjustChatUserCoinsResponse = zod.object({
+  ok: zod.boolean(),
+  username: zod.string(),
+  balance: zod.number(),
+});
+
+/**
  * @summary Enable or disable a bot command
  */
 export const ToggleCommandParams = zod.object({

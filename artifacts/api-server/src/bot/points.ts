@@ -1,5 +1,5 @@
 import { db, lootDropsTable, pointRedemptionsTable, giveawayEntriesTable, giveawaysTable, usersTable } from "@workspace/db";
-import { eq, sum, sql } from "drizzle-orm";
+import { eq, sum, sql, and } from "drizzle-orm";
 
 export const REDEEM_COST_PER_ENTRY = 100;
 
@@ -18,15 +18,29 @@ async function getCoinCapFor(username: string): Promise<number | null> {
   return row?.coinCap ?? null;
 }
 
-export async function getPointsBalance(username: string): Promise<{ earned: number; redeemed: number; balance: number; cap: number | null }> {
+export async function getPointsBalance(
+  username: string,
+  channel?: string,
+): Promise<{ earned: number; redeemed: number; balance: number; cap: number | null }> {
+  // Optional channel filter — when supplied, restricts the sums to a single
+  // streamer's channel so the same username on two channels has independent
+  // balances. Callers that omit it get the legacy global-by-username behavior
+  // (kept for !coins and the leaderboard, which currently run against the
+  // single configured bot channel).
+  const earnedWhere = channel
+    ? and(eq(lootDropsTable.username, username), eq(lootDropsTable.channel, channel))
+    : eq(lootDropsTable.username, username);
+  const redeemedWhere = channel
+    ? and(eq(pointRedemptionsTable.username, username), eq(pointRedemptionsTable.channel, channel))
+    : eq(pointRedemptionsTable.username, username);
   const [earnedRow] = await db
     .select({ total: sum(lootDropsTable.points) })
     .from(lootDropsTable)
-    .where(eq(lootDropsTable.username, username));
+    .where(earnedWhere);
   const [redeemedRow] = await db
     .select({ total: sum(pointRedemptionsTable.points) })
     .from(pointRedemptionsTable)
-    .where(eq(pointRedemptionsTable.username, username));
+    .where(redeemedWhere);
 
   const earned = Number(earnedRow?.total ?? 0);
   const redeemed = Number(redeemedRow?.total ?? 0);

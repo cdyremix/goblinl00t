@@ -17,6 +17,8 @@ import { Stats } from "@/pages/stats";
 import { Account } from "@/pages/account";
 import SettingsPage from "@/pages/settings";
 import TradeOffice from "@/pages/trade-office";
+import HelpGuide from "@/pages/help";
+import ChatUsers from "@/pages/chat-users";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -201,6 +203,12 @@ function AppRouter() {
       </Route>
       <Route path="/trade-office">
         <ProtectedRoute><Layout><TradeOffice /></Layout></ProtectedRoute>
+      </Route>
+      <Route path="/users">
+        <ProtectedRoute><Layout><ChatUsers /></Layout></ProtectedRoute>
+      </Route>
+      <Route path="/help">
+        <ProtectedRoute><Layout><HelpGuide /></Layout></ProtectedRoute>
       </Route>
       <Route component={NotFound} />
     </Switch>

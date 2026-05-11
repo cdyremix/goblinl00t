@@ -13,6 +13,7 @@ import tradeFulfillmentsRouter from "./trade-fulfillments";
 import pointsRouter from "./points";
 import inventoryRouter from "./inventory";
 import lootHoardRouter from "./loot-hoard";
+import chatUsersRouter from "./chat-users";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(tradeFulfillmentsRouter);
 router.use(pointsRouter);
 router.use(inventoryRouter);
 router.use(lootHoardRouter);
+router.use(chatUsersRouter);
 
 export default router;

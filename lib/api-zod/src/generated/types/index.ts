@@ -6,12 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./adjustCoinsRequest";
+export * from "./adjustCoinsResponse";
 export * from "./botCommand";
 export * from "./botSettings";
 export * from "./botSettingsBotTheme";
 export * from "./botSettingsWheelMode";
 export * from "./botSettingsWheelSpeed";
 export * from "./botStatus";
+export * from "./chatUser";
+export * from "./chatUserInventoryItem";
+export * from "./chatUserInventoryItemRarity";
 export * from "./commandStat";
 export * from "./connectSteam200";
 export * from "./disconnectSteam200";
