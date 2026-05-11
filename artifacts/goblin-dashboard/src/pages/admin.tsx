@@ -3,9 +3,10 @@ import { useAuth } from "@clerk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
-  Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock, UserPlus, Eye, EyeOff,
+  Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock, UserPlus,
   CheckCircle2, XCircle, MoreHorizontal, UserCog, UserX,
 } from "lucide-react";
+import { PasswordInput } from "@/components/password-input";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -565,7 +566,6 @@ function CreateUserDialog({
   // super-user. Modeled as a single value (rather than two booleans) so
   // the UI can't accidentally check both.
   const [role, setRole] = useState<"none" | "dev" | "admin">("none");
-  const [showPassword, setShowPassword] = useState(false);
   // Inline validation state. `touched` only flips after the user has
   // blurred a field (or attempted submit), so the dialog doesn't yell
   // at them while they're still typing the first character.
@@ -579,14 +579,6 @@ function CreateUserDialog({
   // immediate feedback that they're addressing the problem.
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; twitchUsername?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
-  // The dialog only opens for super-admins (route is requireAdmin), and
-  // per product policy super-admins create accounts with no validation
-  // gate — fake emails, weak passwords, odd handles all welcome. The
-  // server agrees and will pass `skipPasswordChecks: true` to Clerk.
-  // We still surface the strength meter for visibility but it never
-  // blocks submit.
-  const bypassValidation = true;
-
   // Reset the form whenever the dialog re-opens so a previous attempt's
   // half-typed values don't bleed into the next create flow.
   useEffect(() => {
@@ -596,45 +588,38 @@ function CreateUserDialog({
       setTwitchUsername("");
       setTier("free");
       setRole("none");
-      setShowPassword(false);
       setTouched({ email: false, password: false, twitchUsername: false });
       setFieldErrors({});
       setFormError(null);
     }
   }, [open]);
 
-  // Local validation. Only enforced when bypass is OFF.
+  // Local validation. Mirrors the server-side checks in
+  // `routes/admin.ts#CreateUserBody` so the dialog can render inline
+  // errors before round-tripping. Clerk also enforces password strength
+  // + breach checks server-side as a final gate — never trust local
+  // validation alone.
   const emailTrimmed = email.trim();
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed);
-  const pwStrength = scorePasswordStrength(password);
-  const localEmailError = bypassValidation
-    ? null
-    : !emailTrimmed
-      ? "Email is required."
-      : !emailValid
-        ? "Enter a valid email address."
-        : null;
-  const localPasswordError = bypassValidation
-    ? password.length === 0
-      ? "Password is required."
-      : null
-    : password.length === 0
-      ? "Password is required."
-      : password.length < 8
-        ? "Password must be at least 8 characters."
-        : null;
-  // Username is OPTIONAL. When provided + bypass off, it must look like
-  // a real Twitch handle. With bypass on, anything non-empty is allowed
-  // (admin can seed a placeholder; will be overwritten by Twitch OAuth).
+  const localEmailError = !emailTrimmed
+    ? "Email is required."
+    : !emailValid
+      ? "Enter a valid email address."
+      : null;
+  const localPasswordError = password.length === 0
+    ? "Password is required."
+    : password.length < 8
+      ? "Password must be at least 8 characters."
+      : null;
+  // Username is OPTIONAL. When provided, it must look like a real
+  // Twitch handle so the bot's channel-join layer doesn't choke.
   const twitchTrimmed = twitchUsername.trim();
   const localTwitchError =
     twitchTrimmed.length === 0
       ? null
-      : bypassValidation
-        ? null
-        : !/^[a-zA-Z0-9_]{4,25}$/.test(twitchTrimmed)
-          ? "Twitch handles are 4–25 characters, letters/numbers/underscore only."
-          : null;
+      : !/^[a-zA-Z0-9_]{4,25}$/.test(twitchTrimmed)
+        ? "Twitch handles are 4–25 characters, letters/numbers/underscore only."
+        : null;
   const canSubmit = !localEmailError && !localPasswordError && !localTwitchError;
 
   const create = useMutation({
@@ -702,10 +687,9 @@ function CreateUserDialog({
       out += chars[buf[i]! % chars.length];
     }
     setPassword(out);
-    // Surface it briefly so the admin can copy/share — they explicitly
-    // asked for a generated password, so masking the result of a
-    // generate-click would be more annoying than protective.
-    setShowPassword(true);
+    // The admin can click the eye toggle on the input to reveal it for
+    // copy/share. We intentionally don't auto-reveal — the input owns
+    // its own show/hide state now.
   }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -788,35 +772,23 @@ function CreateUserDialog({
                 Generate
               </Button>
             </div>
-            <div className="relative">
-              <Input
-                id="create-password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
-                  if (formError) setFormError(null);
-                }}
-                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                placeholder={bypassValidation ? "Any password" : "At least 8 chars"}
-                aria-invalid={!!passwordErr}
-                className={`pr-10 font-mono ${passwordErr ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                data-testid="input-create-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {password.length > 0 && (
-              <PasswordStrengthMeter score={pwStrength.score} label={pwStrength.label} />
-            )}
+            <PasswordInput
+              id="create-password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
+                if (formError) setFormError(null);
+              }}
+              onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+              placeholder="At least 8 characters"
+              aria-invalid={!!passwordErr}
+              showStrength
+              className={`font-mono ${passwordErr ? "border-destructive focus-visible:ring-destructive" : ""}`}
+              data-testid="input-create-password"
+              toggleTestId="button-toggle-create-password"
+            />
             {passwordErr ? (
               <p className="text-xs text-destructive" data-testid="error-create-password">
                 {passwordErr}
@@ -903,16 +875,6 @@ function CreateUserDialog({
             </div>
           </div>
 
-          {bypassValidation && (
-            <p
-              className="text-[11px] text-amber-400/90 leading-tight"
-              data-testid="hint-create-admin-bypass"
-            >
-              Super admin role auto-skips email format, password strength, and Twitch handle
-              checks (including Clerk's password policy).
-            </p>
-          )}
-
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
@@ -933,62 +895,6 @@ function CreateUserDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Lightweight password strength scorer. Returns 0–4 plus a label so the
- * meter UI can color + describe consistently. Heuristic only — combines
- * length buckets with a character-class-variety bonus. Intentionally
- * doesn't pull in `zxcvbn` (~400KB) for a single dialog.
- */
-function scorePasswordStrength(pw: string): { score: 0 | 1 | 2 | 3 | 4; label: string } {
-  if (!pw) return { score: 0, label: "Empty" };
-  let s = 0;
-  if (pw.length >= 8) s++;
-  if (pw.length >= 12) s++;
-  if (pw.length >= 16) s++;
-  let classes = 0;
-  if (/[a-z]/.test(pw)) classes++;
-  if (/[A-Z]/.test(pw)) classes++;
-  if (/[0-9]/.test(pw)) classes++;
-  if (/[^a-zA-Z0-9]/.test(pw)) classes++;
-  if (classes >= 3) s++;
-  if (pw.length < 6) s = 0;
-  const score = Math.min(4, s) as 0 | 1 | 2 | 3 | 4;
-  const label = ["Very weak", "Weak", "Fair", "Strong", "Very strong"][score]!;
-  return { score, label };
-}
-
-function PasswordStrengthMeter({ score, label }: { score: 0 | 1 | 2 | 3 | 4; label: string }) {
-  const colors = [
-    "bg-destructive",
-    "bg-orange-500",
-    "bg-amber-400",
-    "bg-lime-500",
-    "bg-emerald-500",
-  ];
-  const labelColor = [
-    "text-destructive",
-    "text-orange-400",
-    "text-amber-400",
-    "text-lime-400",
-    "text-emerald-400",
-  ];
-  return (
-    <div className="space-y-1" data-testid="password-strength-meter">
-      <div className="flex gap-1">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className={`h-1 flex-1 rounded-full transition-colors ${
-              i <= score ? colors[score] : "bg-border/60"
-            }`}
-          />
-        ))}
-      </div>
-      <p className={`text-[11px] ${labelColor[score]}`}>{label}</p>
-    </div>
   );
 }
 
@@ -1658,17 +1564,19 @@ function IdentitySection({
           <div className="flex gap-2 items-end">
             <div className="flex-1">
               <Label htmlFor="admin-pw">Set new password</Label>
-              <Input
+              <PasswordInput
                 id="admin-pw"
-                type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
                   if (passwordError) setPasswordError(null);
                 }}
-                placeholder="Any length — admin override"
+                placeholder="At least 8 characters"
                 aria-invalid={!!passwordError}
+                showStrength
                 data-testid="input-edit-password"
+                toggleTestId="button-toggle-edit-password"
               />
               {passwordError ? (
                 <p className="text-[11px] text-destructive mt-1" data-testid="error-edit-password">
@@ -1680,7 +1588,7 @@ function IdentitySection({
                 </p>
               )}
             </div>
-            <Button onClick={savePassword} disabled={busyKind === "password" || password.length === 0} data-testid="button-save-password">
+            <Button onClick={savePassword} disabled={busyKind === "password" || password.length < 8} data-testid="button-save-password">
               {busyKind === "password" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
               Set password
             </Button>

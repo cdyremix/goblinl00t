@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PLANS, TIER_RANK, DISPLAYED_FEATURES, hasFeature } from "@/lib/plans";
@@ -760,38 +761,43 @@ function ChangePasswordDialog({ open, onOpenChange, user, onSuccess }: DialogPro
           {user.passwordEnabled && (
             <div className="space-y-1.5">
               <Label htmlFor="current-password">Current password</Label>
-              <Input
+              <PasswordInput
                 id="current-password"
-                type="password"
                 autoComplete="current-password"
                 required
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
+                data-testid="input-current-password"
+                toggleTestId="button-toggle-current-password"
               />
             </div>
           )}
           <div className="space-y-1.5">
             <Label htmlFor="new-password">New password</Label>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
               autoComplete="new-password"
               required
               minLength={8}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              showStrength
+              placeholder="At least 8 characters"
+              data-testid="input-new-password"
+              toggleTestId="button-toggle-new-password"
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="confirm-password">Confirm new password</Label>
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               autoComplete="new-password"
               required
               minLength={8}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              data-testid="input-confirm-password"
+              toggleTestId="button-toggle-confirm-password"
             />
           </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">

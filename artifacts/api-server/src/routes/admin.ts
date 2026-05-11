@@ -27,7 +27,7 @@ const CreateUserBody = z
     // pathological inputs) but format/min-length only apply when bypass
     // is off. The route is admin-only either way.
     email: z.string().min(1).max(254),
-    password: z.string().min(1).max(128),
+    password: z.string().min(8, "Password must be at least 8 characters.").max(128),
     // Optional pre-link username. Lowercased + format-checked when
     // `bypassValidation` is off (must look like a real Twitch handle so
     // the bot's channel-join layer doesn't choke on it). When the user
@@ -84,14 +84,6 @@ router.post("/admin/users", async (req, res) => {
   // channel join all key on the same string.
   const normalizedTwitch = twitchUsername ? twitchUsername.toLowerCase() : null;
 
-  // The /admin/users route is `requireAdmin`-gated, so the caller is
-  // ALWAYS a super-admin. Per product policy, super-admins can create
-  // any account with any credentials — fake emails, weak passwords,
-  // odd Twitch handles. We pass `skipPasswordChecks: true` to Clerk so
-  // its server-side strength rules don't reject test fixtures either.
-  // The only thing we still enforce is non-empty (Clerk requires both
-  // an email and a password to exist; that's a Clerk-side hard rule).
-  const bypassValidation = true;
   // Admin AND dev accounts skip the Clerk email-verification round-trip.
   // Both roles are operator-provisioned (internal staff / QA), so a
   // verification code email isn't useful — the admin already owns the
@@ -99,27 +91,25 @@ router.post("/admin/users", async (req, res) => {
   // get the standard verification flow.
   const skipEmailVerification = isAdmin === true || isDev === true;
 
-  if (!bypassValidation) {
-    const issues: Array<{ path: (string | number)[]; message: string }> = [];
-    if (!EMAIL_RE.test(email)) {
-      issues.push({ path: ["email"], message: "Enter a valid email address." });
-    }
-    if (password.length < 8) {
-      issues.push({ path: ["password"], message: "Password must be at least 8 characters." });
-    }
-    // Twitch handle format: alphanumeric + underscore, 4–25 chars per
-    // Twitch's public docs. Only enforced when bypass is off — admins
-    // sometimes need to seed odd legacy / test handles.
-    if (normalizedTwitch && !/^[a-z0-9_]{4,25}$/.test(normalizedTwitch)) {
-      issues.push({
-        path: ["twitchUsername"],
-        message: "Twitch handles are 4–25 characters, letters/numbers/underscore only.",
-      });
-    }
-    if (issues.length > 0) {
-      res.status(400).json({ error: "Invalid body", issues });
-      return;
-    }
+  // Validation runs unconditionally now — even super-admins can't seed
+  // weak/breached creds. Clerk's own pwned + strength checks fire on
+  // createUser below; these local checks just give a cleaner inline
+  // error before we round-trip to Clerk.
+  const issues: Array<{ path: (string | number)[]; message: string }> = [];
+  if (!EMAIL_RE.test(email)) {
+    issues.push({ path: ["email"], message: "Enter a valid email address." });
+  }
+  // Twitch handle format: alphanumeric + underscore, 4–25 chars per
+  // Twitch's public docs.
+  if (normalizedTwitch && !/^[a-z0-9_]{4,25}$/.test(normalizedTwitch)) {
+    issues.push({
+      path: ["twitchUsername"],
+      message: "Twitch handles are 4–25 characters, letters/numbers/underscore only.",
+    });
+  }
+  if (issues.length > 0) {
+    res.status(400).json({ error: "Invalid body", issues });
+    return;
   }
 
   // Uniqueness pre-flight — twitch_username has a UNIQUE index, so we'd
@@ -777,9 +767,9 @@ router.post("/admin/users/:id/email", async (req, res) => {
 });
 
 const PasswordBody = z.object({
-  // No min length — admins can set whatever temp credential they want
-  // (matches the create-flow policy). Hard cap stays as defense-in-depth.
-  password: z.string().min(1).max(128),
+  // 8-char minimum matches the create-flow policy. Clerk's server-side
+  // strength + breach checks still run on top of this.
+  password: z.string().min(8, "Password must be at least 8 characters.").max(128),
 });
 
 /**
