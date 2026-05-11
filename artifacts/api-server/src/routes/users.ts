@@ -41,6 +41,29 @@ router.put("/users/me/subscription", async (req, res) => {
   res.json({ user: updated });
 });
 
+const VALID_AVATAR_PRESETS = ["goblin", "ogre", "wizard", "knight", "rogue", "king"];
+
+router.put("/users/me/profile", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const body = req.body as { avatarPreset?: string | null };
+  const updates: Partial<typeof usersTable.$inferInsert> = {};
+  if ("avatarPreset" in body) {
+    if (body.avatarPreset !== null && !VALID_AVATAR_PRESETS.includes(body.avatarPreset ?? "")) {
+      res.status(400).json({ error: "Invalid avatar preset" });
+      return;
+    }
+    updates.avatarPreset = body.avatarPreset ?? null;
+  }
+  await getOrCreateUser(userId);
+  const [updated] = await db
+    .update(usersTable)
+    .set(updates)
+    .where(eq(usersTable.clerkUserId, userId))
+    .returning();
+  res.json({ user: updated });
+});
+
 router.delete("/users/me/twitch", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }

@@ -13,5 +13,6 @@ export const usersTable = pgTable("users", {
   steamTradeUrl: text("steam_trade_url"),
   steamId64: text("steam_id64"),
   steamUsername: text("steam_username"),
+  avatarPreset: text("avatar_preset"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

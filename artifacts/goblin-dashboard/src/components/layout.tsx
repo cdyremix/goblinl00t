@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, Gift, BarChart3, Home, User, LogOut, Settings2, Send } from "lucide-react";
+import { UserAvatar } from "@/components/user-avatar";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -20,7 +21,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const profileQuery = useQuery<{ user: { avatarPreset: string | null } }>({
+    queryKey: ["users", "me"],
+    enabled: !!isSignedIn,
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/users/me", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Failed to load profile");
+      return res.json();
+    },
+  });
+
   const isCS2 = settingsQuery.data?.botTheme === "cs2";
+  const avatarPreset = profileQuery.data?.user.avatarPreset ?? null;
 
   const allLinks = [
     { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
@@ -71,13 +84,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-border space-y-3">
           {user && (
             <div className="flex items-center gap-3 px-2">
-              {user.imageUrl ? (
-                <img src={user.imageUrl} alt="Avatar" className="w-7 h-7 rounded-full border border-border shrink-0" />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
-                  <User className="w-4 h-4 text-muted-foreground" />
-                </div>
-              )}
+              <UserAvatar
+                presetId={avatarPreset}
+                imageUrl={user.imageUrl}
+                fallbackText={user.username ?? user.fullName ?? user.primaryEmailAddress?.emailAddress}
+                className="w-7 h-7"
+                emojiClass="text-sm"
+              />
               <span className="text-xs text-muted-foreground truncate flex-1">
                 {user.fullName ?? user.username ?? user.primaryEmailAddress?.emailAddress}
               </span>
