@@ -485,10 +485,11 @@ function CreateUserDialog({
   // immediate feedback that they're addressing the problem.
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; twitchUsername?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
-  // Admin override — when on, the dialog skips client validation AND
-  // tells the server to skip its own checks (incl. Clerk's password
-  // policy). Use for seeding internal/QA accounts with weak passwords.
-  const [bypassValidation, setBypassValidation] = useState(false);
+  // Super-admin role auto-bypasses validation — server agrees and will
+  // also pass `skipPasswordChecks: true` to Clerk. Streamer/Dev rows
+  // still go through the full email/password/handle gate because they
+  // represent real end users.
+  const bypassValidation = role === "admin";
 
   // Reset the form whenever the dialog re-opens so a previous attempt's
   // half-typed values don't bleed into the next create flow.
@@ -503,7 +504,6 @@ function CreateUserDialog({
       setTouched({ email: false, password: false, twitchUsername: false });
       setFieldErrors({});
       setFormError(null);
-      setBypassValidation(false);
     }
   }, [open]);
 
@@ -553,7 +553,6 @@ function CreateUserDialog({
           subscriptionTier: tier,
           isAdmin: role === "admin",
           isDev: role === "dev",
-          bypassValidation,
         }),
       });
       const json = (await r.json().catch(() => ({}))) as {
@@ -808,28 +807,15 @@ function CreateUserDialog({
             </div>
           </div>
 
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
-            <Label className="flex items-start gap-2 cursor-pointer">
-              <Switch
-                checked={bypassValidation}
-                onCheckedChange={(v) => {
-                  setBypassValidation(v);
-                  // Clearing local + server errors lets the user see
-                  // immediately that the gate dropped.
-                  setFieldErrors({});
-                  setFormError(null);
-                }}
-                data-testid="switch-create-bypass"
-              />
-              <div className="flex-1">
-                <span className="text-sm font-medium">Override restrictions</span>
-                <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                  Skip email format + password strength checks (including Clerk's policy). For
-                  seeding internal / QA accounts with weak credentials.
-                </p>
-              </div>
-            </Label>
-          </div>
+          {bypassValidation && (
+            <p
+              className="text-[11px] text-amber-400/90 leading-tight"
+              data-testid="hint-create-admin-bypass"
+            >
+              Super admin role auto-skips email format, password strength, and Twitch handle
+              checks (including Clerk's password policy).
+            </p>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

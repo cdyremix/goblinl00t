@@ -38,11 +38,6 @@ const CreateUserBody = z
     isAdmin: z.boolean().optional(),
     isDev: z.boolean().optional(),
     subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
-    // When true, skip both our own format/length checks AND tell Clerk
-    // to skip its password policy (`skipPasswordChecks`). Useful for
-    // seeding internal/QA accounts with weak well-known credentials.
-    // Admin-only by virtue of `requireAdmin`.
-    bypassValidation: z.boolean().optional(),
   })
   // Mutually exclusive — admin already implies feature bypass; the dev
   // flag is for accounts that should NOT have admin powers, so allowing
@@ -84,17 +79,19 @@ router.post("/admin/users", async (req, res) => {
     res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
     return;
   }
-  const { email, password, twitchUsername, isAdmin, isDev, subscriptionTier, bypassValidation } = parsed.data;
+  const { email, password, twitchUsername, isAdmin, isDev, subscriptionTier } = parsed.data;
   // Normalize lowercase up front so uniqueness check + insert + bot
   // channel join all key on the same string.
   const normalizedTwitch = twitchUsername ? twitchUsername.toLowerCase() : null;
 
-  // Conditional strict validation. With `bypassValidation` off (the
-  // default) we enforce email format + password ≥ 8 chars; with it on
-  // we trust the admin and pass straight through to Clerk (which will
-  // also receive `skipPasswordChecks: true`). Errors are returned in
-  // the same `issues[]` shape Zod produces so the dashboard can render
-  // them inline against the right field.
+  // Super-admin accounts auto-bypass validation. Rationale: ops/QA
+  // routinely seed admin accounts with weak well-known credentials
+  // (e.g. local dev), and there's no UX win in forcing format checks
+  // on a row the operator already has full system access to. For every
+  // other role (Streamer / Dev) we enforce the same checks the public
+  // sign-up flow does — those accounts represent real end users.
+  const bypassValidation = isAdmin === true;
+
   if (!bypassValidation) {
     const issues: Array<{ path: (string | number)[]; message: string }> = [];
     if (!EMAIL_RE.test(email)) {
@@ -145,7 +142,7 @@ router.post("/admin/users", async (req, res) => {
     const created = await clerkClient.users.createUser({
       emailAddress: [email],
       password,
-      skipPasswordChecks: bypassValidation === true,
+      skipPasswordChecks: bypassValidation,
     });
     clerkUserId = created.id;
   } catch (err) {
