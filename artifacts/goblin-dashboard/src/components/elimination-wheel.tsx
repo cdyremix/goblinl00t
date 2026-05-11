@@ -384,7 +384,9 @@ export function EliminationWheel({
           viewport — the user saw only the dimmed overlay. Constraining
           `max-h-[90vh]` + giving the body its own scroll container keeps
           everything visible regardless of viewer count. */}
-      <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] relative overflow-hidden flex flex-col">
+      <DialogContent
+        className="!left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !max-w-5xl !w-[95vw] !max-h-[90vh] relative overflow-hidden flex flex-col [&>button]:hidden"
+      >
         {/* Winner celebration overlay — rendered INSIDE the wheel's
             DialogContent (not as a nested Dialog) so we keep a single
             focus trap and a clean modal a11y tree. Confetti respects
