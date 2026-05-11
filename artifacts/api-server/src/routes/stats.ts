@@ -4,6 +4,7 @@ import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTa
 import { eq, desc, count, sum, sql, and, gte } from "drizzle-orm";
 import { GetTopLootersQueryParams } from "@workspace/api-zod";
 import { requireStreamerChannel } from "../lib/auth-helpers";
+import { userHasFeature } from "../lib/tier-helpers";
 
 const router: IRouter = Router();
 
@@ -277,6 +278,16 @@ void and;
 router.get("/stats/export", async (req, res) => {
   const ctx = await requireStreamerChannel(req, res);
   if (!ctx) return;
+  // CSV export is gated behind `full-ledger-export` (Horde Master+).
+  // The dashboard hides the button for free-tier users; this is the
+  // server-side enforcement against direct API calls.
+  if (!userHasFeature(ctx.user, "full-ledger-export")) {
+    res.status(403).json({
+      error: "CSV export is a Horde Master perk.",
+      feature: "full-ledger-export",
+    });
+    return;
+  }
   const range = parseRange(req.query["range"]);
   const since = await resolveSince(req, range);
   const kind = String(req.query["kind"] ?? "loot");

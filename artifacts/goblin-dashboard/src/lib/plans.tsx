@@ -1,8 +1,10 @@
 import { Crown, Shield, Sword } from "lucide-react";
 import type { ReactNode } from "react";
 
+export type TierId = "free" | "premium" | "pro";
+
 export interface Plan {
-  id: "free" | "premium" | "pro";
+  id: TierId;
   name: string;
   price: string;
   period: string;
@@ -11,11 +13,9 @@ export interface Plan {
   highlight: boolean;
   badge?: string;
   blurb: string;
-  features: string[];
-  locked: string[];
 }
 
-export const TIER_RANK: Record<Plan["id"], number> = {
+export const TIER_RANK: Record<TierId, number> = {
   free: 0,
   premium: 1,
   pro: 2,
@@ -31,22 +31,6 @@ export const PLANS: Plan[] = [
     color: "border-border/50",
     highlight: false,
     blurb: "Everything a small streamer needs to bring chaos to chat.",
-    features: [
-      "Core chat commands",
-      "Coin economy & inventory",
-      "One active giveaway at a time",
-      "Elimination wheel",
-      "Recent-stream stats",
-      "Default bot theme",
-      "Community support",
-    ],
-    locked: [
-      "Unlimited giveaways",
-      "All bot themes & skin trading",
-      "Discord webhooks",
-      "Custom command responses",
-      "Full ledger & exports",
-    ],
   },
   {
     id: "premium",
@@ -58,19 +42,6 @@ export const PLANS: Plan[] = [
     highlight: true,
     badge: "Most Popular",
     blurb: "For streamers running real giveaways and skin drops.",
-    features: [
-      "Everything in Cave Dweller",
-      "Unlimited giveaways",
-      "All bot themes",
-      "Skin trading tools",
-      "Discord webhooks",
-      "Custom command responses",
-      "Full ledger & exports",
-    ],
-    locked: [
-      "Multiple Twitch channels",
-      "Custom bot name",
-    ],
   },
   {
     id: "pro",
@@ -82,15 +53,75 @@ export const PLANS: Plan[] = [
     highlight: false,
     badge: "Full Power",
     blurb: "Sponsorship-ready analytics and white-glove onboarding.",
-    features: [
-      "Everything in Horde Master",
-      "Multiple Twitch channels",
-      "Custom bot name",
-      "Advanced analytics",
-      "Priority support",
-      "Early access to new features",
-      "White-glove onboarding",
-    ],
-    locked: [],
   },
 ];
+
+/**
+ * Single source of truth for what each rank unlocks. Every plan card on
+ * the pricing page renders the SAME list — features above a tier's rank
+ * are shown greyed out so streamers can compare apples-to-apples and see
+ * exactly what an upgrade buys them.
+ *
+ * `id` is the gating key used by `hasFeature()` / `useFeature()` in the
+ * dashboard. If you add a new feature, also gate the matching surface
+ * (Settings card, page, button, etc.) with the same id.
+ */
+export interface Feature {
+  id: FeatureId;
+  label: string;
+  /** Lowest tier that includes this feature. */
+  minTier: TierId;
+}
+
+export type FeatureId =
+  | "core-chat"
+  | "coin-economy"
+  | "single-giveaway"
+  | "elimination-wheel"
+  | "recent-stats"
+  | "default-theme"
+  | "community-support"
+  | "unlimited-giveaways"
+  | "all-themes"
+  | "skin-trading"
+  | "discord-webhooks"
+  | "custom-responses"
+  | "full-ledger-export"
+  | "custom-bot-name"
+  | "advanced-analytics"
+  | "priority-support";
+
+export const FEATURES: Feature[] = [
+  { id: "core-chat", label: "Core chat commands", minTier: "free" },
+  { id: "coin-economy", label: "Coin economy & inventory", minTier: "free" },
+  { id: "single-giveaway", label: "One active giveaway at a time", minTier: "free" },
+  { id: "elimination-wheel", label: "Elimination wheel", minTier: "free" },
+  { id: "recent-stats", label: "Recent-stream stats", minTier: "free" },
+  { id: "default-theme", label: "Default Goblin theme", minTier: "free" },
+  { id: "community-support", label: "Community support", minTier: "free" },
+  { id: "unlimited-giveaways", label: "Unlimited concurrent giveaways", minTier: "premium" },
+  { id: "all-themes", label: "All bot themes (Goblin + CS2)", minTier: "premium" },
+  { id: "skin-trading", label: "Skin trading & Trade Office", minTier: "premium" },
+  { id: "discord-webhooks", label: "Discord webhook announcements", minTier: "premium" },
+  { id: "custom-responses", label: "Custom command responses", minTier: "premium" },
+  { id: "full-ledger-export", label: "Full ledger history & CSV export", minTier: "premium" },
+  { id: "custom-bot-name", label: "Custom bot display name", minTier: "pro" },
+  { id: "advanced-analytics", label: "Advanced sponsorship analytics", minTier: "pro" },
+  { id: "priority-support", label: "Priority support & onboarding", minTier: "pro" },
+];
+
+export function hasFeature(tier: TierId | string | null | undefined, feature: FeatureId): boolean {
+  const t = (tier as TierId) ?? "free";
+  if (!(t in TIER_RANK)) return false;
+  const f = FEATURES.find((x) => x.id === feature);
+  if (!f) return false;
+  return TIER_RANK[t] >= TIER_RANK[f.minTier];
+}
+
+export function minTierFor(feature: FeatureId): TierId {
+  return FEATURES.find((f) => f.id === feature)?.minTier ?? "free";
+}
+
+export function planNameFor(tier: TierId): string {
+  return PLANS.find((p) => p.id === tier)?.name ?? tier;
+}

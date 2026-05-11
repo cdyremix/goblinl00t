@@ -18,6 +18,8 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Hint } from "@/components/hint";
 import { defaultBotNameFor } from "@/lib/cs2-agents";
+import { FeatureLock, useSubscriptionTier, LockedHint } from "@/hooks/use-tier";
+import { hasFeature } from "@/lib/plans";
 
 type BotTheme = "goblin" | "cs2";
 
@@ -134,6 +136,9 @@ function useSteamConnection() {
 export default function SettingsPage() {
   const { query, mutation } = useSettings();
   const { connect, disconnect } = useSteamConnection();
+  const { tier } = useSubscriptionTier();
+  const canAllThemes = hasFeature(tier, "all-themes");
+  const canCustomBotName = hasFeature(tier, "custom-bot-name");
   const settings = query.data;
 
   const [pendingTheme, setPendingTheme] = useState<BotTheme | null>(null);
@@ -223,6 +228,7 @@ export default function SettingsPage() {
             text="The name the bot uses when referring to itself in chat. Leave blank to use the default name for your selected theme."
             side="right"
           />
+          {!canCustomBotName && <LockedHint feature="custom-bot-name" />}
         </div>
         <div className="flex gap-2 items-start">
           <div className="flex-1 space-y-1">
@@ -231,10 +237,12 @@ export default function SettingsPage() {
               <Input
                 id="bot-name"
                 value={inputValue}
-                onChange={(e) => setBotNameDraft(e.target.value)}
+                onChange={(e) => canCustomBotName && setBotNameDraft(e.target.value)}
                 placeholder={themeDefaultName}
                 maxLength={32}
-                className={`pl-9 placeholder:text-muted-foreground/50 ${!nameValid ? "border-destructive" : ""}`}
+                disabled={!canCustomBotName}
+                title={canCustomBotName ? undefined : "Custom bot name requires the Goblin King rank."}
+                className={`pl-9 placeholder:text-muted-foreground/50 ${!nameValid ? "border-destructive" : ""} ${!canCustomBotName ? "cursor-not-allowed opacity-60" : ""}`}
               />
             </div>
             {!nameValid && (
@@ -359,11 +367,16 @@ export default function SettingsPage() {
           onSave={(v) => mutation.mutate({ coinCap: v })}
         />
 
-        <DiscordWebhookSection
-          value={settings?.discordWebhookUrl ?? null}
-          saving={mutation.isPending}
-          onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
-        />
+        <FeatureLock
+          feature="discord-webhooks"
+          description="Auto-post a winner embed to your Discord server every time a giveaway ends."
+        >
+          <DiscordWebhookSection
+            value={settings?.discordWebhookUrl ?? null}
+            saving={mutation.isPending}
+            onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
+          />
+        </FeatureLock>
       </section>
 
       {/*
@@ -390,19 +403,37 @@ export default function SettingsPage() {
             side="right"
           />
         </div>
-        <Select value={activeTheme} onValueChange={(v) => handleThemeSelect(v as BotTheme)}>
+        <Select
+          value={activeTheme}
+          onValueChange={(v) => {
+            // CS2 theme is gated behind "all-themes" — silently ignore the
+            // selection rather than mutate so a downgraded user can't sneak
+            // it on. The locked hint next to the label tells them why.
+            if (v === "cs2" && !canAllThemes) return;
+            handleThemeSelect(v as BotTheme);
+          }}
+        >
           <SelectTrigger id="bot-theme" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {THEME_OPTIONS.map((theme) => (
-              <SelectItem key={theme.id} value={theme.id}>
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{theme.emoji}</span>
-                  <span>{theme.name}</span>
-                </div>
-              </SelectItem>
-            ))}
+            {THEME_OPTIONS.map((theme) => {
+              const locked = theme.id === "cs2" && !canAllThemes;
+              return (
+                <SelectItem
+                  key={theme.id}
+                  value={theme.id}
+                  disabled={locked}
+                  className={locked ? "opacity-60" : ""}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{theme.emoji}</span>
+                    <span>{theme.name}</span>
+                    {locked && <LockedHint feature="all-themes" className="ml-1" />}
+                  </div>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
         <div className="pt-2">

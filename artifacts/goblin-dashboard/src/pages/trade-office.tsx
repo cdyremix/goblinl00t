@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Hint } from "@/components/hint";
 import { SteamItemCard, type SteamItem } from "@/components/steam-item-card";
+import { FeatureLock } from "@/hooks/use-tier";
 
 type TradeStatus = "pending" | "trade_locked" | "sent" | "skipped";
 
@@ -428,6 +429,11 @@ export default function TradeOffice() {
   }
 
   return (
+    <FeatureLock
+      feature="skin-trading"
+      description="Trade Office is part of the CS2 skin-giveaway toolkit — manage trade URLs, locks, and delivery status from one place."
+      className="min-h-[60vh]"
+    >
     <div className="space-y-6 max-w-5xl">
       <div>
         <h1 className="font-medieval text-3xl text-foreground flex items-center gap-3">
@@ -508,5 +514,6 @@ export default function TradeOffice() {
         </div>
       )}
     </div>
+    </FeatureLock>
   );
 }

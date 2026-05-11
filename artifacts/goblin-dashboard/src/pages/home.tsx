@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import {
   Gift, Sword, Package, Zap, Star, ChevronRight, Terminal,
   Sparkles, Trophy, MessageSquare, ShieldCheck, Plug, Wand2,
-  CheckCircle2,
+  CheckCircle2, XCircle,
 } from "lucide-react";
 import { useAuth } from "@clerk/react";
-import { PLANS } from "@/lib/plans";
+import { PLANS, FEATURES, hasFeature } from "@/lib/plans";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -382,12 +382,24 @@ export function Home() {
                 <p className="text-sm text-muted-foreground mb-4">{plan.blurb}</p>
 
                 <ul className="space-y-1.5 mb-6 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-foreground">
-                      <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
+                  {FEATURES.map((feat) => {
+                    const included = hasFeature(plan.id, feat.id);
+                    return (
+                      <li
+                        key={feat.id}
+                        className={`flex items-start gap-2 text-sm ${
+                          included ? "text-foreground" : "text-muted-foreground/50"
+                        }`}
+                      >
+                        {included ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-muted-foreground/30 shrink-0 mt-0.5" />
+                        )}
+                        <span>{feat.label}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
 
                 {isLoaded && isSignedIn ? (

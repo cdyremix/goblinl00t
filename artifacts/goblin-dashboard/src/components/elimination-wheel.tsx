@@ -384,8 +384,16 @@ export function EliminationWheel({
           viewport — the user saw only the dimmed overlay. Constraining
           `max-h-[90vh]` + giving the body its own scroll container keeps
           everything visible regardless of viewer count. */}
+      {/* Definite `h-[85vh]` (not max-h) is critical: without an actual
+          height, `flex-1 min-h-0` on the inner grid has nothing to expand
+          into, the modal sizes to its full content (which can exceed the
+          viewport on giveaways with lots of entries), and Radix's
+          `top-50% / translate-y-(-50%)` centering ends up anchored against
+          a too-tall modal — which on shorter viewports renders the bottom
+          half off-screen. A definite height keeps the modal centered AND
+          gives the grid a real container to scroll inside. */}
       <DialogContent
-        className="!left-1/2 !top-1/2 !-translate-x-1/2 !-translate-y-1/2 !max-w-5xl !w-[95vw] !max-h-[90vh] relative overflow-hidden flex flex-col gap-3 p-4 sm:p-6 [&>button]:hidden"
+        className="max-w-5xl w-[95vw] h-[85vh] max-h-[800px] overflow-hidden flex flex-col gap-3 p-4 sm:p-6 [&>button]:hidden"
       >
         {/* Winner celebration overlay — rendered INSIDE the wheel's
             DialogContent (not as a nested Dialog) so we keep a single

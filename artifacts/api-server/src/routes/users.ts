@@ -26,16 +26,36 @@ router.get("/users/me", async (req, res) => {
   res.json({ user });
 });
 
+/**
+ * PUT /users/me/subscription
+ *
+ * Direct tier writes are restricted to "free" only — paid tiers
+ * (`premium` / `pro`) are entitlement-bearing and MUST flow through
+ * Stripe so we don't hand out paid features to anyone with curl. The
+ * dashboard's tier picker / Rank tab routes paid selections through
+ * `/api/stripe/checkout` (or the Billing Portal); the only legitimate
+ * caller of this endpoint is "I picked the free plan in the post-signup
+ * modal" or "downgrade me to free" (after the Stripe sub is cancelled).
+ *
+ * `routes/stripe.ts#GET /subscription` reconciles the active sub's
+ * product `metadata.tier` back into `usersTable.subscriptionTier` on
+ * every read, so paid tiers stay in sync without a writable surface
+ * here.
+ */
 router.put("/users/me/subscription", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const { tier } = req.body as { tier: string };
-  const valid = ["free", "premium", "pro"];
-  if (!valid.includes(tier)) { res.status(400).json({ error: "Invalid tier" }); return; }
+  if (tier !== "free") {
+    res.status(403).json({
+      error: "Paid tiers can only be set via Stripe checkout. Use POST /stripe/checkout.",
+    });
+    return;
+  }
   await getOrCreateUser(userId);
   const [updated] = await db
     .update(usersTable)
-    .set({ subscriptionTier: tier, tierSelected: true })
+    .set({ subscriptionTier: "free", tierSelected: true })
     .where(eq(usersTable.clerkUserId, userId))
     .returning();
   res.json({ user: updated });

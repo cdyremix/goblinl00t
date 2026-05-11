@@ -1,4 +1,4 @@
-import { useState, useMemo, type ReactNode } from "react";
+import { useState, useMemo } from "react";
 import { useUser, useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { PLANS, TIER_RANK } from "@/lib/plans";
+import { PLANS, TIER_RANK, FEATURES, hasFeature } from "@/lib/plans";
 import { BillingSection } from "@/components/billing-section";
 
 type ClerkUser = NonNullable<ReturnType<typeof useUser>["user"]>;
@@ -403,44 +403,30 @@ export function Account() {
 
                   <Separator className="mb-4 opacity-50" />
 
-                  {/* Render exactly TOTAL_ROWS list items per card by padding
-                      with invisible placeholders. Without this, cards with
-                      different feature counts make the action button sit at
-                      different vertical positions across the row. */}
+                  {/* Every plan renders the SAME feature list — features
+                      above this tier's rank are greyed out so streamers
+                      can compare apples-to-apples and see exactly what
+                      the upgrade buys them. Single source of truth lives
+                      in lib/plans.tsx#FEATURES. */}
                   <ul className="space-y-2 mb-6 flex-1">
-                    {(() => {
-                      const TOTAL_ROWS = 12;
-                      const rows: ReactNode[] = [];
-                      plan.features.forEach((f) =>
-                        rows.push(
-                          <li key={`f-${f}`} className="flex items-start gap-2 text-sm text-foreground">
+                    {FEATURES.map((feat) => {
+                      const included = hasFeature(plan.id, feat.id);
+                      return (
+                        <li
+                          key={feat.id}
+                          className={`flex items-start gap-2 text-sm ${
+                            included ? "text-foreground" : "text-muted-foreground/50"
+                          }`}
+                        >
+                          {included ? (
                             <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                            {f}
-                          </li>,
-                        ),
-                      );
-                      plan.locked.forEach((f) =>
-                        rows.push(
-                          <li key={`l-${f}`} className="flex items-start gap-2 text-sm text-muted-foreground/50">
+                          ) : (
                             <XCircle className="w-4 h-4 text-muted-foreground/30 shrink-0 mt-0.5" />
-                            {f}
-                          </li>,
-                        ),
+                          )}
+                          {feat.label}
+                        </li>
                       );
-                      while (rows.length < TOTAL_ROWS) {
-                        rows.push(
-                          <li
-                            key={`pad-${rows.length}`}
-                            aria-hidden="true"
-                            className="flex items-start gap-2 text-sm invisible"
-                          >
-                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                            &nbsp;
-                          </li>,
-                        );
-                      }
-                      return rows;
-                    })()}
+                    })}
                   </ul>
 
                   {isActive ? (

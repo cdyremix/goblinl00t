@@ -29,6 +29,7 @@ import { useState } from "react";
 import { InventoryPicker, type PickedItem } from "@/components/inventory-picker";
 import { Hint } from "@/components/hint";
 import { EliminationWheel } from "@/components/elimination-wheel";
+import { useSubscriptionTier, LockedHint } from "@/hooks/use-tier";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -67,6 +68,8 @@ export function Giveaways() {
 
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
+  const { hasFeature: hasTierFeature } = useSubscriptionTier();
+  const hasUnlimited = hasTierFeature("unlimited-giveaways");
 
   const createMutation = useCreateGiveaway();
 
@@ -100,6 +103,21 @@ export function Giveaways() {
   }
 
   function onSubmit(values: FormValues) {
+    // Free tier is capped at one concurrent giveaway. We count anything
+    // not yet ended (pending OR active) — both block a second create so
+    // the streamer doesn't end up with a queue they can't use. Premium+
+    // users have unlimited concurrent giveaways.
+    const concurrent = (giveaways ?? []).filter(
+      (g) => g.status === "pending" || g.status === "active",
+    ).length;
+    if (!hasUnlimited && concurrent >= 1) {
+      toast({
+        title: "One giveaway at a time",
+        description: "Free tier supports a single active giveaway. Upgrade to Horde Master for unlimited concurrent giveaways.",
+        variant: "destructive",
+      });
+      return;
+    }
     const isCs2 = values.prizeKind === "cs2";
     createMutation.mutate(
       {

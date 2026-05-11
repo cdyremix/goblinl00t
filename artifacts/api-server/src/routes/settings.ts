@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { setActiveTheme, type BotTheme } from "../bot/bot-themes";
 import { setActiveBotName } from "../bot/bot-service";
 import { invalidateChannelSettings } from "../bot/channel-settings";
+import { userHasFeature } from "../lib/tier-helpers";
 
 const router = Router();
 
@@ -75,6 +76,12 @@ router.put("/settings", async (req, res) => {
     discordWebhookUrl?: string | null;
   };
 
+  // Resolve the caller's row early so we can tier-gate paid settings
+  // BEFORE applying any updates. UI gates on the dashboard mirror these
+  // checks but are presentation-only — the API is the entitlement
+  // boundary.
+  const before = await getOrCreateUser(userId);
+
   const updates: Partial<typeof usersTable.$inferInsert> = {};
 
   if (body.botTheme !== undefined) {
@@ -82,11 +89,29 @@ router.put("/settings", async (req, res) => {
       res.status(400).json({ error: "Invalid theme. Must be: goblin or cs2" });
       return;
     }
+    // CS2 theme is gated behind "all-themes" (Horde Master+). Free-tier
+    // users can only run the default Goblin theme.
+    if (body.botTheme === "cs2" && !userHasFeature(before, "all-themes")) {
+      res.status(403).json({
+        error: "The CS2 theme is a Horde Master perk. Upgrade to unlock all themes.",
+        feature: "all-themes",
+      });
+      return;
+    }
     updates.botTheme = body.botTheme;
     setActiveTheme(body.botTheme as BotTheme);
   }
 
   if (body.botName !== undefined) {
+    // Custom bot display name is a Goblin King (pro) feature. Free /
+    // premium users can only run the theme's default name.
+    if (!userHasFeature(before, "custom-bot-name")) {
+      res.status(403).json({
+        error: "Custom bot name is a Goblin King perk.",
+        feature: "custom-bot-name",
+      });
+      return;
+    }
     const name = body.botName.trim();
     if (!name || name.length > 32) {
       res.status(400).json({ error: "Bot name must be 1–32 characters" });
@@ -131,7 +156,17 @@ router.put("/settings", async (req, res) => {
   }
   if ("discordWebhookUrl" in body) {
     const raw = body.discordWebhookUrl;
-    if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
+    const clearing = raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "");
+    // Setting (non-clearing) the webhook is a paid feature — clearing
+    // is always allowed so a downgraded user can still take it off.
+    if (!clearing && !userHasFeature(before, "discord-webhooks")) {
+      res.status(403).json({
+        error: "Discord webhook announcements are a Horde Master perk.",
+        feature: "discord-webhooks",
+      });
+      return;
+    }
+    if (clearing) {
       updates.discordWebhookUrl = null;
     } else if (typeof raw === "string" && /^https:\/\/(?:discord\.com|discordapp\.com)\/api\/webhooks\/[\w/-]+$/.test(raw.trim())) {
       updates.discordWebhookUrl = raw.trim();
@@ -141,7 +176,6 @@ router.put("/settings", async (req, res) => {
     }
   }
 
-  const before = await getOrCreateUser(userId);
   const [updated] = await db
     .update(usersTable)
     .set(updates)

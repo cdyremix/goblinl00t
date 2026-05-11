@@ -21,6 +21,7 @@ import { announceGiveawayStart, announceGiveawayEnd } from "../bot/bot-service";
 import { getActiveTheme } from "../bot/bot-themes";
 import { fireDiscordWebhook } from "../lib/discord-webhook";
 import { requireStreamerChannel, resolveStreamerChannelForRead } from "../lib/auth-helpers";
+import { userHasFeature } from "../lib/tier-helpers";
 
 /**
  * Resolve the calling streamer's channel handle (lowercase Twitch username).
@@ -111,6 +112,46 @@ router.post("/giveaway", async (req, res) => {
   const ctx = await requireStreamerChannel(req, res);
   if (!ctx) return;
   const body = CreateGiveawayBody.parse(req.body);
+
+  // Free tier is capped at one concurrent giveaway. Anything not yet
+  // ended (pending OR active) counts. Premium+ has unlimited concurrent
+  // giveaways via the `unlimited-giveaways` feature. This mirrors the
+  // dashboard pre-flight check but is the actual entitlement boundary —
+  // the UI check can be skipped via direct API calls.
+  if (!userHasFeature(ctx.user, "unlimited-giveaways")) {
+    const [{ count: openCount }] = await db
+      .select({ count: count() })
+      .from(giveawaysTable)
+      .where(
+        and(
+          eq(giveawaysTable.channel, ctx.channel),
+          sql`${giveawaysTable.status} IN ('pending', 'active')`,
+        ),
+      );
+    if (Number(openCount) >= 1) {
+      res.status(403).json({
+        error: "Free tier supports a single concurrent giveaway. End or delete the current one, or upgrade to Horde Master.",
+        feature: "unlimited-giveaways",
+      });
+      return;
+    }
+  }
+
+  // CS2 prize kind requires the skin-trading feature (Horde Master+) —
+  // it's the prize type that creates trade-office fulfillment rows.
+  // IMPORTANT: `prizeKind` is optional in the zod schema and the insert
+  // below defaults it to "cs2", so we must resolve the effective value
+  // BEFORE the gate — otherwise a free-tier caller could omit the field
+  // and silently slip through into a CS2 giveaway.
+  const effectivePrizeKind = body.prizeKind ?? "cs2";
+  if (effectivePrizeKind === "cs2" && !userHasFeature(ctx.user, "skin-trading")) {
+    res.status(403).json({
+      error: "CS2 skin prizes require Horde Master. Try a coin or bot-item prize instead.",
+      feature: "skin-trading",
+    });
+    return;
+  }
+
   const [giveaway] = await db
     .insert(giveawaysTable)
     .values({
@@ -118,7 +159,7 @@ router.post("/giveaway", async (req, res) => {
       prize: body.prize,
       prizeAssetId: body.prizeAssetId ?? null,
       prizeIconUrl: body.prizeIconUrl ?? null,
-      prizeKind: body.prizeKind ?? "cs2",
+      prizeKind: effectivePrizeKind,
       prizeBotCoins: body.prizeBotCoins ?? null,
       prizeBotRarity: body.prizeBotRarity ?? null,
       description: body.description ?? null,

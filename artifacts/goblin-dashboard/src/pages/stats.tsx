@@ -14,7 +14,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { BarChart3, Trophy, Gem, Users, Zap, Gift, Command, Clock, Lightbulb, AlertTriangle, Download } from "lucide-react";
+import { BarChart3, Trophy, Gem, Users, Zap, Gift, Command, Clock, Lightbulb, AlertTriangle, Download, Lock } from "lucide-react";
+import { useSubscriptionTier, LockedHint } from "@/hooks/use-tier";
+import { Link } from "wouter";
 
 const RARITY_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
   legendary: { bg: "bg-amber-500/10", text: "text-amber-400", bar: "bg-amber-500" },
@@ -32,6 +34,18 @@ export function Stats() {
   const [exporting, setExporting] = useState(false);
   const { getToken } = useAuth();
   const { toast } = useToast();
+  // CSV export + extended ledger ranges are gated behind the
+  // "full-ledger-export" feature (Horde Master+). Free tier still sees
+  // Day / Week with a locked hint pointing at upgrade.
+  const { hasFeature: hasTierFeature } = useSubscriptionTier();
+  const canExport = hasTierFeature("full-ledger-export");
+  // Pin free users back to "week" if they had selected a paid range and
+  // got downgraded — prevents stale state from masking the gate.
+  const effectiveRange: Range = canExport
+    ? range
+    : range === "month" || range === "year" || range === "all"
+      ? "week"
+      : range;
 
   /**
    * Pull the CSV through an authed fetch, then trigger a synthetic download.
@@ -41,10 +55,18 @@ export function Stats() {
    * gate and works in every browser we care about.
    */
   async function exportCsv() {
+    if (!canExport) {
+      toast({
+        title: "Export is a paid feature",
+        description: "Upgrade to Horde Master to download CSV ledger exports.",
+        variant: "destructive",
+      });
+      return;
+    }
     setExporting(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/stats/export?range=${range}&kind=${exportKind}`, {
+      const res = await fetch(`/api/stats/export?range=${effectiveRange}&kind=${exportKind}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
@@ -69,10 +91,10 @@ export function Stats() {
     }
   }
 
-  const { data: overview, isLoading: overviewLoading } = useGetStatsOverview({ range });
-  const { data: commandStats, isLoading: commandsLoading } = useGetCommandStats({ range });
-  const { data: topLooters, isLoading: lootersLoading } = useGetTopLooters({ limit: 10, range });
-  const { data: engagement, isLoading: engagementLoading } = useGetEngagementReport({ range });
+  const { data: overview, isLoading: overviewLoading } = useGetStatsOverview({ range: effectiveRange });
+  const { data: commandStats, isLoading: commandsLoading } = useGetCommandStats({ range: effectiveRange });
+  const { data: topLooters, isLoading: lootersLoading } = useGetTopLooters({ limit: 10, range: effectiveRange });
+  const { data: engagement, isLoading: engagementLoading } = useGetEngagementReport({ range: effectiveRange });
 
   const maxCommandCount = commandStats ? Math.max(...commandStats.map((c) => c.usageCount), 1) : 1;
   const maxPoints = topLooters ? Math.max(...topLooters.map((u) => u.totalPoints), 1) : 1;
@@ -85,18 +107,31 @@ export function Stats() {
           <p className="text-muted-foreground mt-2 text-lg">The goblin's full accounting of loot and chaos.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
+          <Tabs
+            value={effectiveRange}
+            onValueChange={(v) => {
+              const next = v as Range;
+              if (!canExport && (next === "month" || next === "year" || next === "all")) return;
+              setRange(next);
+            }}
+          >
             <TabsList data-testid="tabs-stats-range">
               <TabsTrigger value="day">Day</TabsTrigger>
               <TabsTrigger value="week">Week</TabsTrigger>
-              <TabsTrigger value="month">Month</TabsTrigger>
-              <TabsTrigger value="year">Year</TabsTrigger>
-              <TabsTrigger value="all">All-time</TabsTrigger>
+              <TabsTrigger value="month" disabled={!canExport} title={!canExport ? "Horde Master required" : undefined}>
+                Month {!canExport && <Lock className="inline w-3 h-3 ml-1 text-amber-400" />}
+              </TabsTrigger>
+              <TabsTrigger value="year" disabled={!canExport} title={!canExport ? "Horde Master required" : undefined}>
+                Year {!canExport && <Lock className="inline w-3 h-3 ml-1 text-amber-400" />}
+              </TabsTrigger>
+              <TabsTrigger value="all" disabled={!canExport} title={!canExport ? "Horde Master required" : undefined}>
+                All-time {!canExport && <Lock className="inline w-3 h-3 ml-1 text-amber-400" />}
+              </TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-2">
             <Select value={exportKind} onValueChange={(v) => setExportKind(v as "loot" | "commands" | "giveaways")}>
-              <SelectTrigger className="w-[140px]" data-testid="select-export-kind">
+              <SelectTrigger className="w-[140px]" data-testid="select-export-kind" disabled={!canExport}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -105,17 +140,36 @@ export function Stats() {
                 <SelectItem value="giveaways">Giveaways</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={exportCsv}
-              disabled={exporting}
-              data-testid="button-export-csv"
-              className="gap-2"
-            >
-              <Download className="w-4 h-4" />
-              {exporting ? "Exporting…" : "Export CSV"}
-            </Button>
+            {canExport ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={exportCsv}
+                disabled={exporting}
+                data-testid="button-export-csv"
+                className="gap-2"
+              >
+                <Download className="w-4 h-4" />
+                {exporting ? "Exporting…" : "Export CSV"}
+              </Button>
+            ) : (
+              // Locked state: single anchor (no nested interactive
+              // elements — earlier we wrapped a `<LockedHint>` (also a
+              // link) inside this `<Link>`, which is invalid markup and
+              // breaks keyboard / screen-reader navigation).
+              <Link
+                href="/account?tab=rank"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-sm font-semibold"
+                data-testid="button-export-csv-locked"
+                title="CSV export requires Horde Master+"
+              >
+                <Lock className="w-4 h-4" />
+                Export CSV
+                <span className="text-[10px] uppercase tracking-wide font-bold">
+                  Horde Master+
+                </span>
+              </Link>
+            )}
           </div>
         </div>
       </div>

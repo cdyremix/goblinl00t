@@ -1,6 +1,6 @@
 import { useUser, useAuth } from "@clerk/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { PLANS, type Plan } from "@/lib/plans";
+import { PLANS, FEATURES, hasFeature, type Plan } from "@/lib/plans";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -171,16 +171,28 @@ export function TierSelectModal({ open, onPicked }: Props) {
 
               <Separator className="mb-3 opacity-50" />
 
+              {/* Full FEATURES list with check/X parity — every plan
+                  card shows the same rows so the streamer can compare
+                  apples-to-apples. Mirrors the rank cards on /account. */}
               <ul className="space-y-1.5 mb-4 flex-1">
-                {plan.features.slice(0, 5).map((f) => (
-                  <li
-                    key={f}
-                    className="flex items-start gap-2 text-xs text-foreground"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                    <span>{f}</span>
-                  </li>
-                ))}
+                {FEATURES.map((feat) => {
+                  const included = hasFeature(plan.id, feat.id);
+                  return (
+                    <li
+                      key={feat.id}
+                      className={`flex items-start gap-2 text-xs ${
+                        included ? "text-foreground" : "text-muted-foreground/50"
+                      }`}
+                    >
+                      {included ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 mt-0.5" />
+                      )}
+                      <span>{feat.label}</span>
+                    </li>
+                  );
+                })}
               </ul>
 
               <Button
