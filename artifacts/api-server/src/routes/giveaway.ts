@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { db, usersTable, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable } from "@workspace/db";
-import { eq, desc, count, and } from "drizzle-orm";
+import { eq, desc, count, and, sql } from "drizzle-orm";
 import { addInventoryItem, rollLootDrop } from "../bot/inventory";
 import { clampCoinAward } from "../bot/points";
 import {
@@ -10,7 +10,11 @@ import {
   StartGiveawayParams,
   EndGiveawayParams,
   RerollGiveawayParams,
+  RestartGiveawayParams,
   GetGiveawayEntriesParams,
+  AddGiveawayEntryParams,
+  AddGiveawayEntryBody,
+  DeleteGiveawayEntryParams,
   ListGiveawaysQueryParams,
 } from "@workspace/api-zod";
 import { announceGiveawayStart, announceGiveawayEnd } from "../bot/bot-service";
@@ -656,6 +660,47 @@ router.post("/giveaway/:id/reroll", async (req, res) => {
   });
 });
 
+/**
+ * Re-open an ended giveaway: clears the previously chosen winner and flips
+ * status back to "active" so the streamer can draw again from the same pool
+ * (and/or accept additional manually-added entries). Coin awards already
+ * credited to the previous winner are intentionally NOT clawed back —
+ * those live in `loot_drops` and represent prizes that were genuinely
+ * delivered. The streamer can always reverse them via Chat Users → Adjust
+ * Coins if a re-draw makes that necessary.
+ */
+router.post("/giveaway/:id/restart", async (req, res) => {
+  const { id } = RestartGiveawayParams.parse({ id: Number(req.params["id"]) });
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+
+  const [target] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
+  if (!target) { res.status(404).json({ error: "Giveaway not found" }); return; }
+  // Cross-channel access is a 404 (don't leak existence) — same pattern as
+  // the other ownership-guarded mutations.
+  if (target.channel.toLowerCase() !== ctx.channel) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+  if (target.status !== "ended") {
+    res.status(400).json({ error: "Only ended giveaways can be restarted" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(giveawaysTable)
+    .set({ status: "active", winnerId: null, winnerUsername: null, endedAt: null })
+    .where(eq(giveawaysTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "Giveaway not found" }); return; }
+
+  const [{ value: entryCount }] = await db
+    .select({ value: count() })
+    .from(giveawayEntriesTable)
+    .where(eq(giveawayEntriesTable.giveawayId, id));
+  res.json(serializeGiveaway(updated, entryCount));
+});
+
 router.get("/giveaway/:id/entries", async (req, res) => {
   const ctx = await resolveStreamerChannelForRead(req, res);
   if (!ctx) return;
@@ -687,6 +732,87 @@ router.get("/giveaway/:id/entries", async (req, res) => {
       enteredAt: e.enteredAt.toISOString(),
     }))
   );
+});
+
+/**
+ * Manually add an entry to a giveaway. Streamer-only; the giveaway must
+ * still be open (status pending or active). If an entry for the same
+ * username already exists we increment its ticket count instead of
+ * inserting a duplicate row — `(giveawayId, username)` is unique.
+ */
+router.post("/giveaway/:id/entries", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const { id } = AddGiveawayEntryParams.parse({ id: Number(req.params["id"]) });
+  const body = AddGiveawayEntryBody.parse(req.body);
+  const username = body.username.trim().toLowerCase();
+  const tickets = body.tickets ?? 1;
+
+  const [giveaway] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
+  if (!giveaway || giveaway.channel.toLowerCase() !== ctx.channel) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+  if (giveaway.status === "ended") {
+    res.status(400).json({ error: "Giveaway has ended" });
+    return;
+  }
+
+  // INCREMENT (not overwrite) — `(giveawayId, username)` is unique, so a
+  // duplicate username from chat means the streamer is topping up tickets,
+  // not resetting them. Wiping the ticket count on a manual add would
+  // silently strip rewards a viewer already earned via !enter.
+  const [row] = await db
+    .insert(giveawayEntriesTable)
+    .values({ giveawayId: id, username, tickets })
+    .onConflictDoUpdate({
+      target: [giveawayEntriesTable.giveawayId, giveawayEntriesTable.username],
+      set: { tickets: sql`${giveawayEntriesTable.tickets} + ${tickets}` },
+    })
+    .returning();
+  if (!row) { res.status(500).json({ error: "Failed to add entry" }); return; }
+
+  res.status(201).json({
+    id: row.id,
+    giveawayId: row.giveawayId,
+    username: row.username,
+    tickets: row.tickets,
+    enteredAt: row.enteredAt.toISOString(),
+  });
+});
+
+/**
+ * Remove a single entry from a giveaway. Streamer-only; refuses to delete
+ * the entry of a winner that's already been chosen — restart the giveaway
+ * first if you need to undo a draw.
+ */
+router.delete("/giveaway/:id/entries/:entryId", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const { id, entryId } = DeleteGiveawayEntryParams.parse({
+    id: Number(req.params["id"]),
+    entryId: Number(req.params["entryId"]),
+  });
+
+  const [giveaway] = await db.select().from(giveawaysTable).where(eq(giveawaysTable.id, id)).limit(1);
+  if (!giveaway || giveaway.channel.toLowerCase() !== ctx.channel) {
+    res.status(404).json({ error: "Giveaway not found" });
+    return;
+  }
+  if (giveaway.winnerId === entryId) {
+    res.status(400).json({ error: "Cannot remove the winning entry — restart the giveaway first." });
+    return;
+  }
+
+  const result = await db
+    .delete(giveawayEntriesTable)
+    .where(and(eq(giveawayEntriesTable.id, entryId), eq(giveawayEntriesTable.giveawayId, id)))
+    .returning({ id: giveawayEntriesTable.id });
+  if (result.length === 0) {
+    res.status(404).json({ error: "Entry not found" });
+    return;
+  }
+  res.status(204).end();
 });
 
 export default router;

@@ -156,6 +156,19 @@ export interface GiveawayEntry {
   enteredAt: string;
 }
 
+export interface AddGiveawayEntryInput {
+  /**
+   * @minLength 1
+   * @maxLength 64
+   */
+  username: string;
+  /**
+   * @minimum 1
+   * @maximum 99
+   */
+  tickets?: number;
+}
+
 export interface GiveawayWithEntries {
   giveaway: Giveaway;
   entries: GiveawayEntry[];

@@ -6,7 +6,9 @@ import {
   useGetGiveawayEntries,
   useStartGiveaway,
   useEndGiveaway,
-  useRerollGiveaway,
+  useRestartGiveaway,
+  useAddGiveawayEntry,
+  useDeleteGiveawayEntry,
   useGetBotSettings,
   getGetBotSettingsQueryKey,
   getGetGiveawayQueryKey,
@@ -14,13 +16,14 @@ import {
   getGetCurrentGiveawayQueryKey,
   getListGiveawaysQueryKey,
 } from "@workspace/api-client-react";
+import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Users, Hash, Calendar, Play, Square, RefreshCw, ArrowLeft, Crown } from "lucide-react";
+import { Trophy, Users, Hash, Calendar, Play, Square, RotateCcw, ArrowLeft, Crown, Plus, X } from "lucide-react";
 import { Link } from "wouter";
 import { EliminationWheel } from "@/components/elimination-wheel";
 
@@ -50,7 +53,12 @@ export function GiveawayDetail() {
 
   const startMutation = useStartGiveaway();
   const endMutation = useEndGiveaway();
-  const rerollMutation = useRerollGiveaway();
+  // Issue #3: "Reroll Winner" replaced with "Restart Giveaway" — same
+  // entries, status flips back to active, winner cleared. Feels less
+  // adversarial than rerolling and lets chat keep entering.
+  const restartMutation = useRestartGiveaway();
+  const addEntryMutation = useAddGiveawayEntry();
+  const deleteEntryMutation = useDeleteGiveawayEntry();
   // Wheel settings come from /api/settings; this hook is Clerk-authed via the global fetcher.
   const { isSignedIn } = useAuth();
   const { data: botSettings } = useGetBotSettings({
@@ -65,6 +73,9 @@ export function GiveawayDetail() {
 
   const [wheelOpen, setWheelOpen] = useState(false);
   const [wheelWinner, setWheelWinner] = useState<string | null>(null);
+  // Inline manual-entry editor state for issue #4. Held local so we can
+  // clear after a successful add.
+  const [newEntryUsername, setNewEntryUsername] = useState("");
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: getGetGiveawayQueryKey(id) });
@@ -83,35 +94,83 @@ export function GiveawayDetail() {
     });
   }
 
+  // Issue #2: Open the wheel WITHOUT firing the end-mutation. The actual
+  // server end-call only happens when the streamer clicks "Draw Winner!"
+  // inside the modal — closing via X just dismisses the modal, leaving
+  // the giveaway active.
   function handleEnd() {
+    setWheelWinner(null);
+    setWheelOpen(true);
+  }
+
+  function handleDrawWinner() {
     endMutation.mutate({ id }, {
       onSuccess: (result) => {
-        // Open the elimination wheel BEFORE invalidating, so the entries list
-        // we already loaded is still the full pre-end roster for the animation.
         setWheelWinner(result.winner.username);
-        setWheelOpen(true);
         toast({ title: `Winner: ${result.winner.username}`, description: "Spin the wheel to reveal!" });
       },
       onError: (err: unknown) => {
         const msg = err instanceof Error ? err.message : "No entries to draw from";
         toast({ title: "Failed to end", description: msg, variant: "destructive" });
+        setWheelOpen(false);
       },
     });
   }
 
   function handleWheelClose() {
     setWheelOpen(false);
-    invalidateAll();
+    // Only refetch if we actually drew a winner — otherwise the entries
+    // we have are still authoritative.
+    if (wheelWinner) invalidateAll();
   }
 
-  function handleReroll() {
-    rerollMutation.mutate({ id }, {
-      onSuccess: (result) => {
-        toast({ title: `New winner: ${result.winner.username}`, description: "Rerolled!" });
+  function handleRestart() {
+    restartMutation.mutate({ id }, {
+      onSuccess: () => {
+        toast({ title: "Giveaway restarted!", description: "Entries kept; chat can keep entering." });
         invalidateAll();
       },
-      onError: () => toast({ title: "Failed to reroll", variant: "destructive" }),
+      onError: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : "Failed to restart";
+        toast({ title: "Couldn't restart", description: msg, variant: "destructive" });
+      },
     });
+  }
+
+  function handleAddEntry(e: React.FormEvent) {
+    e.preventDefault();
+    const username = newEntryUsername.trim().toLowerCase();
+    if (!username) return;
+    addEntryMutation.mutate(
+      { id, data: { username, tickets: 1 } },
+      {
+        onSuccess: () => {
+          toast({ title: "Entry added", description: `${username} added with 1 ticket.` });
+          setNewEntryUsername("");
+          invalidateAll();
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Couldn't add entry";
+          toast({ title: "Add failed", description: msg, variant: "destructive" });
+        },
+      },
+    );
+  }
+
+  function handleDeleteEntry(entryId: number, username: string) {
+    deleteEntryMutation.mutate(
+      { id, entryId },
+      {
+        onSuccess: () => {
+          toast({ title: "Entry removed", description: `${username} removed.` });
+          invalidateAll();
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Couldn't remove entry";
+          toast({ title: "Remove failed", description: msg, variant: "destructive" });
+        },
+      },
+    );
   }
 
   if (isLoading) {
@@ -185,14 +244,14 @@ export function GiveawayDetail() {
             )}
             {isEnded && (
               <Button
-                onClick={handleReroll}
-                disabled={rerollMutation.isPending}
+                onClick={handleRestart}
+                disabled={restartMutation.isPending}
                 variant="outline"
                 className="font-bold gap-2 border-border hover:border-primary/50"
-                data-testid="button-reroll-giveaway"
+                data-testid="button-restart-giveaway"
               >
-                <RefreshCw className="w-4 h-4" />
-                {rerollMutation.isPending ? "Rerolling..." : "Reroll Winner"}
+                <RotateCcw className="w-4 h-4" />
+                {restartMutation.isPending ? "Restarting..." : "Restart Giveaway"}
               </Button>
             )}
           </div>
@@ -207,6 +266,8 @@ export function GiveawayDetail() {
         mode={wheelMode}
         speed={wheelSpeed}
         flavorEnabled={botSettings?.eliminationFlavorEnabled ?? true}
+        onDrawWinner={handleDrawWinner}
+        drawingWinner={endMutation.isPending}
       />
 
       {/* Stats Row */}
@@ -248,6 +309,31 @@ export function GiveawayDetail() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          {/* Issue #4: inline manual entry editor. Visible while the
+              giveaway is open so the streamer can patch up missed chatters
+              or add raid leaders by hand. Hidden once ended — restart
+              first if you need to edit. */}
+          {!isEnded && (
+            <form onSubmit={handleAddEntry} className="flex items-center gap-2 px-6 py-3 border-b border-border/50 bg-muted/20">
+              <Plus className="w-4 h-4 text-muted-foreground shrink-0" />
+              <Input
+                value={newEntryUsername}
+                onChange={(e) => setNewEntryUsername(e.target.value)}
+                placeholder="Add a username manually…"
+                className="h-8 text-sm flex-1"
+                data-testid="input-add-entry"
+                disabled={addEntryMutation.isPending}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!newEntryUsername.trim() || addEntryMutation.isPending}
+                data-testid="button-add-entry"
+              >
+                {addEntryMutation.isPending ? "Adding…" : "Add Entry"}
+              </Button>
+            </form>
+          )}
           {entriesLoading ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -277,6 +363,19 @@ export function GiveawayDetail() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span className="font-mono">{entry.tickets} ticket{entry.tickets !== 1 ? "s" : ""}</span>
                       <span>{new Date(entry.enteredAt).toLocaleTimeString()}</span>
+                      {!isEnded && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteEntry(entry.id, entry.username)}
+                          disabled={deleteEntryMutation.isPending}
+                          data-testid={`button-delete-entry-${entry.id}`}
+                          title="Remove entry"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );

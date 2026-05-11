@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./addGiveawayEntryInput";
 export * from "./adjustCoinsRequest";
 export * from "./adjustCoinsResponse";
 export * from "./botCommand";

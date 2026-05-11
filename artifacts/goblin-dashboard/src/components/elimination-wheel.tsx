@@ -24,7 +24,13 @@ export interface EliminationWheelProps {
   onClose: () => void;
   /** All entries currently in the giveaway, with their ticket counts. */
   entries: WheelEntry[];
-  /** The pre-determined winner returned by the server. */
+  /**
+   * The pre-determined winner returned by the server. When `null`, the
+   * wheel sits at an idle "ready to draw" state and (if `onDrawWinner` is
+   * provided) shows a "Draw Winner!" CTA — the streamer is in control of
+   * when the giveaway actually ends server-side. Once the parent picks a
+   * winner and passes it in, the elimination animation is unlocked.
+   */
   winner: string | null;
   /** "auto" spins through every elimination automatically; "manual" needs user clicks between spins. */
   mode: "auto" | "manual";
@@ -32,6 +38,15 @@ export interface EliminationWheelProps {
   speed: "slow" | "medium" | "fast";
   /** When true, show RPG-style flavor text on each elimination. */
   flavorEnabled: boolean;
+  /**
+   * Streamer-initiated draw. When provided, the wheel shows a "Draw
+   * Winner!" button whenever it's open with no winner yet — clicking it
+   * is what actually ends the giveaway server-side. Without this prop the
+   * wheel assumes the parent has already picked a winner before opening.
+   */
+  onDrawWinner?: () => void;
+  /** Loading flag for the draw-winner network call. */
+  drawingWinner?: boolean;
   /** Optional callback once the final winner reveal completes. */
   onComplete?: () => void;
 }
@@ -80,6 +95,8 @@ export function EliminationWheel({
   mode,
   speed,
   flavorEnabled,
+  onDrawWinner,
+  drawingWinner,
   onComplete,
 }: EliminationWheelProps) {
   // All slots, one per ticket. Recomputed when entries change.
@@ -355,7 +372,12 @@ export function EliminationWheel({
       {/* Bumped from max-w-2xl — the slot grid was cramped on viewers' wide
           monitors and the streamer asked for more breathing room so the
           wheel reads on stream. */}
-      <DialogContent className="max-w-5xl w-[95vw] relative overflow-hidden">
+      {/* `max-h-[90vh]` + scrollable body keeps the modal centered in the
+          viewport even on shorter screens — without it, a tall slot grid
+          + flavor banner + footer pushed the dialog past the viewport top
+          (Radix centers via translate-y-[-50%] from top:50%, which only
+          looks centered when content fits). */}
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] relative overflow-hidden flex flex-col">
         {/* Winner celebration overlay — rendered INSIDE the wheel's
             DialogContent (not as a nested Dialog) so we keep a single
             focus trap and a clean modal a11y tree. Confetti respects
@@ -375,7 +397,10 @@ export function EliminationWheel({
                 Elimination Wheel
               </DialogTitle>
               <DialogDescription className="mt-1">
-                {phase === "idle" && remainingSlots > 2 && (
+                {phase === "idle" && !winner && onDrawWinner && (
+                  <>Ready to draw. The goblin will pick a winner the moment you click below — close this modal to back out without ending the giveaway.</>
+                )}
+                {phase === "idle" && remainingSlots > 2 && winner && (
                   <>The goblin has chosen a winner. {mode === "auto" ? "Press Start to spin through eliminations." : "Click Spin to eliminate one slot per round."}</>
                 )}
                 {phase === "spinning" && <>Spinning… {remainingSlots} slots remaining</>}
@@ -444,8 +469,9 @@ export function EliminationWheel({
         )}
 
         {/* Slots grid — one card per ticket. Wider grid + bigger cards now
-            that the modal is max-w-5xl. */}
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 max-h-[60vh] overflow-y-auto p-1">
+            that the modal is max-w-5xl. The grid scrolls inside the modal
+            so the header / controls stay pinned. */}
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 flex-1 min-h-0 overflow-y-auto p-1">
           {slots.map((s) => {
             const isOut = eliminated.has(s.key);
             const isHighlighted = highlight === s.key;
@@ -483,7 +509,22 @@ export function EliminationWheel({
             {remainingSlots} / {slots.length} slots
           </div>
           <div className="flex gap-2">
-            {phase === "idle" && remainingSlots > 2 && (
+            {/* Draw-winner CTA: shown only when the parent has explicitly
+                deferred the server end-call to the streamer (onDrawWinner
+                supplied) AND no winner has been chosen yet. Closing the
+                modal in this state is a no-op on the giveaway. */}
+            {phase === "idle" && !winner && onDrawWinner && (
+              <Button
+                onClick={onDrawWinner}
+                disabled={!!drawingWinner}
+                className="gap-2 bg-primary text-primary-foreground font-bold animate-pulse"
+                data-testid="button-wheel-draw-winner"
+              >
+                <Crown className="w-4 h-4" />
+                {drawingWinner ? "Drawing…" : "Draw Winner!"}
+              </Button>
+            )}
+            {phase === "idle" && winner && remainingSlots > 2 && (
               <Button onClick={handleStart} className="gap-2 bg-primary text-primary-foreground" data-testid="button-wheel-start">
                 <Play className="w-4 h-4" />
                 {mode === "auto" ? "Start" : "Spin"}

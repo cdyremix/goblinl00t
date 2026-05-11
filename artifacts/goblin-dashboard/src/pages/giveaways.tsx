@@ -994,16 +994,23 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
     );
   }
 
+  // Issue #2: Opening the wheel must NOT auto-end the giveaway. We open
+  // the modal first with no winner; the actual end-mutation only fires
+  // when the streamer clicks "Draw Winner!" inside the wheel. That way
+  // hitting the X just closes the modal — the giveaway stays active.
   function handleSpin() {
+    if (!giveaway) return;
+    setWheelWinner(null);
+    setWheelOpen(true);
+  }
+
+  function handleDrawWinner() {
     if (!giveaway) return;
     endMutation.mutate(
       { id: giveaway.id },
       {
         onSuccess: (result) => {
-          // Open the wheel BEFORE invalidating so the entries we already loaded
-          // are still the full pre-end roster for the elimination animation.
           setWheelWinner(result.winner.username);
-          setWheelOpen(true);
         },
         onError: (err: unknown) => {
           const msg =
@@ -1011,6 +1018,9 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
               ? err.message
               : "No entries to draw from — try the test-entries button.";
           toast({ title: "Couldn't pick a winner", description: msg, variant: "destructive" });
+          // Close the wheel on failure so the streamer isn't stuck staring
+          // at a non-functional draw button.
+          setWheelOpen(false);
         },
       },
     );
@@ -1018,7 +1028,9 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
 
   function handleWheelClose() {
     setWheelOpen(false);
-    if (giveaway) invalidate(giveaway.id);
+    // Only invalidate if we actually drew a winner — otherwise the cached
+    // list is still accurate and a refetch flickers the button states.
+    if (giveaway && wheelWinner) invalidate(giveaway.id);
   }
 
   return (
@@ -1133,6 +1145,8 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
         mode={wheelMode}
         speed={wheelSpeed}
         flavorEnabled={flavorEnabled}
+        onDrawWinner={handleDrawWinner}
+        drawingWinner={endMutation.isPending}
       />
     </>
   );

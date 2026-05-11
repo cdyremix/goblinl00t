@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddGiveawayEntryInput,
   AdjustCoinsRequest,
   AdjustCoinsResponse,
   BotCommand,
@@ -985,6 +986,96 @@ export const useRerollGiveaway = <
 };
 
 /**
+ * Returns an ended giveaway to active status, clearing the previously
+chosen winner. All existing entries are preserved so the streamer
+can reshuffle / draw again from the same pool, or open more entries
+from chat. Coin awards already credited to the previous winner are
+NOT clawed back.
+
+ * @summary Re-open an ended giveaway (clears winner, status → active)
+ */
+export const getRestartGiveawayUrl = (id: number) => {
+  return `/api/giveaway/${id}/restart`;
+};
+
+export const restartGiveaway = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Giveaway> => {
+  return customFetch<Giveaway>(getRestartGiveawayUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRestartGiveawayMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restartGiveaway>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof restartGiveaway>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["restartGiveaway"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof restartGiveaway>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return restartGiveaway(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RestartGiveawayMutationResult = NonNullable<
+  Awaited<ReturnType<typeof restartGiveaway>>
+>;
+
+export type RestartGiveawayMutationError = ErrorType<void>;
+
+/**
+ * @summary Re-open an ended giveaway (clears winner, status → active)
+ */
+export const useRestartGiveaway = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restartGiveaway>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof restartGiveaway>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRestartGiveawayMutationOptions(options));
+};
+
+/**
  * Dev/test helper. Ends any currently active giveaway for the caller's
 channel, creates a fresh `active` giveaway with a coin prize, and
 inserts ~30 fake entries with varied ticket counts so the streamer
@@ -1244,6 +1335,183 @@ export function useGetGiveawayEntries<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Streamer-only manual entry insert. Useful for re-adding viewers who
+had connection issues, or seeding a giveaway with off-platform
+participants. Username is normalised to lowercase. If an entry for
+the same username already exists, its ticket count is incremented.
+
+ * @summary Manually add an entry to a giveaway (streamer only)
+ */
+export const getAddGiveawayEntryUrl = (id: number) => {
+  return `/api/giveaway/${id}/entries`;
+};
+
+export const addGiveawayEntry = async (
+  id: number,
+  addGiveawayEntryInput: AddGiveawayEntryInput,
+  options?: RequestInit,
+): Promise<GiveawayEntry> => {
+  return customFetch<GiveawayEntry>(getAddGiveawayEntryUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addGiveawayEntryInput),
+  });
+};
+
+export const getAddGiveawayEntryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addGiveawayEntry>>,
+    TError,
+    { id: number; data: BodyType<AddGiveawayEntryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addGiveawayEntry>>,
+  TError,
+  { id: number; data: BodyType<AddGiveawayEntryInput> },
+  TContext
+> => {
+  const mutationKey = ["addGiveawayEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addGiveawayEntry>>,
+    { id: number; data: BodyType<AddGiveawayEntryInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addGiveawayEntry(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddGiveawayEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addGiveawayEntry>>
+>;
+export type AddGiveawayEntryMutationBody = BodyType<AddGiveawayEntryInput>;
+export type AddGiveawayEntryMutationError = ErrorType<void>;
+
+/**
+ * @summary Manually add an entry to a giveaway (streamer only)
+ */
+export const useAddGiveawayEntry = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addGiveawayEntry>>,
+    TError,
+    { id: number; data: BodyType<AddGiveawayEntryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addGiveawayEntry>>,
+  TError,
+  { id: number; data: BodyType<AddGiveawayEntryInput> },
+  TContext
+> => {
+  return useMutation(getAddGiveawayEntryMutationOptions(options));
+};
+
+/**
+ * @summary Manually remove an entry from a giveaway (streamer only)
+ */
+export const getDeleteGiveawayEntryUrl = (id: number, entryId: number) => {
+  return `/api/giveaway/${id}/entries/${entryId}`;
+};
+
+export const deleteGiveawayEntry = async (
+  id: number,
+  entryId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteGiveawayEntryUrl(id, entryId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteGiveawayEntryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGiveawayEntry>>,
+    TError,
+    { id: number; entryId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteGiveawayEntry>>,
+  TError,
+  { id: number; entryId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteGiveawayEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteGiveawayEntry>>,
+    { id: number; entryId: number }
+  > = (props) => {
+    const { id, entryId } = props ?? {};
+
+    return deleteGiveawayEntry(id, entryId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteGiveawayEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteGiveawayEntry>>
+>;
+
+export type DeleteGiveawayEntryMutationError = ErrorType<void>;
+
+/**
+ * @summary Manually remove an entry from a giveaway (streamer only)
+ */
+export const useDeleteGiveawayEntry = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteGiveawayEntry>>,
+    TError,
+    { id: number; entryId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteGiveawayEntry>>,
+  TError,
+  { id: number; entryId: number },
+  TContext
+> => {
+  return useMutation(getDeleteGiveawayEntryMutationOptions(options));
+};
 
 /**
  * @summary Get loot coin balance for the authenticated user

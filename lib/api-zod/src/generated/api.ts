@@ -394,6 +394,59 @@ export const RerollGiveawayResponse = zod.object({
 });
 
 /**
+ * Returns an ended giveaway to active status, clearing the previously
+chosen winner. All existing entries are preserved so the streamer
+can reshuffle / draw again from the same pool, or open more entries
+from chat. Coin awards already credited to the previous winner are
+NOT clawed back.
+
+ * @summary Re-open an ended giveaway (clears winner, status → active)
+ */
+export const RestartGiveawayParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RestartGiveawayResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  prize: zod.string(),
+  prizeAssetId: zod.string().nullable(),
+  prizeIconUrl: zod.string().nullable(),
+  prizeKind: zod.enum(["cs2", "bot_item", "bot_coins"]),
+  prizeBotCoins: zod.number().nullable(),
+  prizeBotRarity: zod
+    .union([
+      zod.literal("common"),
+      zod.literal("uncommon"),
+      zod.literal("rare"),
+      zod.literal("epic"),
+      zod.literal("legendary"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  description: zod.string().nullable(),
+  status: zod.enum(["pending", "active", "ended"]),
+  channel: zod.string(),
+  keyword: zod.string(),
+  requireFollower: zod.boolean(),
+  subscriberOnly: zod.boolean(),
+  minSubTier: zod
+    .union([
+      zod.literal("1000"),
+      zod.literal("2000"),
+      zod.literal("3000"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  winnerId: zod.number().nullable(),
+  winnerUsername: zod.string().nullable(),
+  entryCount: zod.number(),
+  createdAt: zod.string(),
+  startedAt: zod.string().nullable(),
+  endedAt: zod.string().nullable(),
+});
+
+/**
  * Dev/test helper. Inserts ~30 fake entries with varied ticket counts
 into the specified giveaway. Uses onConflictDoNothing on (giveawayId,
 username) so calling it twice is safe — duplicates are skipped.
@@ -461,6 +514,35 @@ export const GetGiveawayEntriesResponseItem = zod.object({
 export const GetGiveawayEntriesResponse = zod.array(
   GetGiveawayEntriesResponseItem,
 );
+
+/**
+ * Streamer-only manual entry insert. Useful for re-adding viewers who
+had connection issues, or seeding a giveaway with off-platform
+participants. Username is normalised to lowercase. If an entry for
+the same username already exists, its ticket count is incremented.
+
+ * @summary Manually add an entry to a giveaway (streamer only)
+ */
+export const AddGiveawayEntryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const addGiveawayEntryBodyUsernameMax = 64;
+
+export const addGiveawayEntryBodyTicketsMax = 99;
+
+export const AddGiveawayEntryBody = zod.object({
+  username: zod.string().min(1).max(addGiveawayEntryBodyUsernameMax),
+  tickets: zod.number().min(1).max(addGiveawayEntryBodyTicketsMax).optional(),
+});
+
+/**
+ * @summary Manually remove an entry from a giveaway (streamer only)
+ */
+export const DeleteGiveawayEntryParams = zod.object({
+  id: zod.coerce.number(),
+  entryId: zod.coerce.number(),
+});
 
 /**
  * @summary Get loot coin balance for the authenticated user
