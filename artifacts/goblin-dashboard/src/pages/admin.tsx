@@ -471,6 +471,22 @@ function CreateUserDialog({
   // the UI can't accidentally check both.
   const [role, setRole] = useState<"none" | "dev" | "admin">("none");
   const [showPassword, setShowPassword] = useState(false);
+  // Inline validation state. `touched` only flips after the user has
+  // blurred a field (or attempted submit), so the dialog doesn't yell
+  // at them while they're still typing the first character.
+  const [touched, setTouched] = useState<{ email: boolean; password: boolean }>({
+    email: false,
+    password: false,
+  });
+  // Per-field server errors returned by the API after submit (`issues[]`
+  // shaped like Zod). Cleared on every input change so the user gets
+  // immediate feedback that they're addressing the problem.
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  // Admin override — when on, the dialog skips client validation AND
+  // tells the server to skip its own checks (incl. Clerk's password
+  // policy). Use for seeding internal/QA accounts with weak passwords.
+  const [bypassValidation, setBypassValidation] = useState(false);
 
   // Reset the form whenever the dialog re-opens so a previous attempt's
   // half-typed values don't bleed into the next create flow.
@@ -481,8 +497,34 @@ function CreateUserDialog({
       setTier("free");
       setRole("none");
       setShowPassword(false);
+      setTouched({ email: false, password: false });
+      setFieldErrors({});
+      setFormError(null);
+      setBypassValidation(false);
     }
   }, [open]);
+
+  // Local validation. Only enforced when bypass is OFF.
+  const emailTrimmed = email.trim();
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed);
+  const pwStrength = scorePasswordStrength(password);
+  const localEmailError = bypassValidation
+    ? null
+    : !emailTrimmed
+      ? "Email is required."
+      : !emailValid
+        ? "Enter a valid email address."
+        : null;
+  const localPasswordError = bypassValidation
+    ? password.length === 0
+      ? "Password is required."
+      : null
+    : password.length === 0
+      ? "Password is required."
+      : password.length < 8
+        ? "Password must be at least 8 characters."
+        : null;
+  const canSubmit = !localEmailError && !localPasswordError;
 
   const create = useMutation({
     mutationFn: async () => {
@@ -490,23 +532,47 @@ function CreateUserDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: email.trim(),
+          email: emailTrimmed,
           password,
           subscriptionTier: tier,
           isAdmin: role === "admin",
           isDev: role === "dev",
+          bypassValidation,
         }),
       });
-      const json = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(json?.error ?? `Create failed (${r.status})`);
+      const json = (await r.json().catch(() => ({}))) as {
+        error?: string;
+        issues?: Array<{ path?: (string | number)[]; message?: string }>;
+      };
+      if (!r.ok) {
+        const next: { email?: string; password?: string } = {};
+        for (const iss of json.issues ?? []) {
+          const key = String(iss.path?.[0] ?? "");
+          if (key === "email" && iss.message) next.email = iss.message;
+          if (key === "password" && iss.message) next.password = iss.message;
+        }
+        // If the server returned a generic message and no per-field
+        // issues (e.g. Clerk rejection, duplicate email), surface it as
+        // a form-level inline banner.
+        const err = new Error(json.error ?? `Create failed (${r.status})`);
+        (err as Error & { fieldErrors?: typeof next }).fieldErrors = next;
+        throw err;
+      }
       return json;
     },
     onSuccess: () => {
-      toast({ title: "User created", description: `${email} can now sign in.` });
+      toast({ title: "User created", description: `${emailTrimmed} can now sign in.` });
       onCreated();
     },
-    onError: (err: Error) => {
-      toast({ title: "Create failed", description: err.message, variant: "destructive" });
+    onError: (err: Error & { fieldErrors?: { email?: string; password?: string } }) => {
+      const fe = err.fieldErrors ?? {};
+      setFieldErrors(fe);
+      // Show the form-level banner when the failure isn't field-specific
+      // (duplicate email, Clerk weak-password rejection, network error).
+      if (!fe.email && !fe.password) setFormError(err.message);
+      else setFormError(null);
+      // Force-show the inline messages even if the user never blurred.
+      setTouched({ email: true, password: true });
     },
   });
 
@@ -532,9 +598,18 @@ function CreateUserDialog({
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email.trim() || password.length < 8) return;
+    setTouched({ email: true, password: true });
+    setFormError(null);
+    setFieldErrors({});
+    if (!canSubmit) return;
     create.mutate();
   }
+
+  // Errors to actually render: server-supplied take precedence over
+  // local (since the server might know things the client doesn't, e.g.
+  // duplicate email), and we only render local ones once touched.
+  const emailErr = fieldErrors.email ?? (touched.email ? localEmailError : null);
+  const passwordErr = fieldErrors.password ?? (touched.password ? localPasswordError : null);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -549,19 +624,41 @@ function CreateUserDialog({
             immediately with the email + password you set here.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
+          {formError && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-start gap-2"
+              data-testid="alert-create-form-error"
+            >
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="create-email">Email</Label>
             <Input
               id="create-email"
               type="email"
-              required
               autoComplete="off"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
+                if (formError) setFormError(null);
+              }}
+              onBlur={() => setTouched((t) => ({ ...t, email: true }))}
               placeholder="streamer@example.com"
+              aria-invalid={!!emailErr}
+              className={emailErr ? "border-destructive focus-visible:ring-destructive" : ""}
               data-testid="input-create-email"
             />
+            {emailErr && (
+              <p className="text-xs text-destructive" data-testid="error-create-email">
+                {emailErr}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -582,13 +679,17 @@ function CreateUserDialog({
               <Input
                 id="create-password"
                 type={showPassword ? "text" : "password"}
-                required
-                minLength={8}
                 autoComplete="new-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 chars"
-                className="pr-10 font-mono"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
+                  if (formError) setFormError(null);
+                }}
+                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                placeholder={bypassValidation ? "Any password" : "At least 8 chars"}
+                aria-invalid={!!passwordErr}
+                className={`pr-10 font-mono ${passwordErr ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 data-testid="input-create-password"
               />
               <button
@@ -600,9 +701,18 @@ function CreateUserDialog({
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Share this with the user. They can change it from their account page.
-            </p>
+            {password.length > 0 && (
+              <PasswordStrengthMeter score={pwStrength.score} label={pwStrength.label} />
+            )}
+            {passwordErr ? (
+              <p className="text-xs text-destructive" data-testid="error-create-password">
+                {passwordErr}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Share this with the user. They can change it from their account page.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -650,13 +760,36 @@ function CreateUserDialog({
             </div>
           </div>
 
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+            <Label className="flex items-start gap-2 cursor-pointer">
+              <Switch
+                checked={bypassValidation}
+                onCheckedChange={(v) => {
+                  setBypassValidation(v);
+                  // Clearing local + server errors lets the user see
+                  // immediately that the gate dropped.
+                  setFieldErrors({});
+                  setFormError(null);
+                }}
+                data-testid="switch-create-bypass"
+              />
+              <div className="flex-1">
+                <span className="text-sm font-medium">Override restrictions</span>
+                <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                  Skip email format + password strength checks (including Clerk's policy). For
+                  seeding internal / QA accounts with weak credentials.
+                </p>
+              </div>
+            </Label>
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={create.isPending || !email.trim() || password.length < 8}
+              disabled={create.isPending || !canSubmit}
               data-testid="button-create-submit"
             >
               {create.isPending ? (
@@ -670,6 +803,62 @@ function CreateUserDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Lightweight password strength scorer. Returns 0–4 plus a label so the
+ * meter UI can color + describe consistently. Heuristic only — combines
+ * length buckets with a character-class-variety bonus. Intentionally
+ * doesn't pull in `zxcvbn` (~400KB) for a single dialog.
+ */
+function scorePasswordStrength(pw: string): { score: 0 | 1 | 2 | 3 | 4; label: string } {
+  if (!pw) return { score: 0, label: "Empty" };
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 12) s++;
+  if (pw.length >= 16) s++;
+  let classes = 0;
+  if (/[a-z]/.test(pw)) classes++;
+  if (/[A-Z]/.test(pw)) classes++;
+  if (/[0-9]/.test(pw)) classes++;
+  if (/[^a-zA-Z0-9]/.test(pw)) classes++;
+  if (classes >= 3) s++;
+  if (pw.length < 6) s = 0;
+  const score = Math.min(4, s) as 0 | 1 | 2 | 3 | 4;
+  const label = ["Very weak", "Weak", "Fair", "Strong", "Very strong"][score]!;
+  return { score, label };
+}
+
+function PasswordStrengthMeter({ score, label }: { score: 0 | 1 | 2 | 3 | 4; label: string }) {
+  const colors = [
+    "bg-destructive",
+    "bg-orange-500",
+    "bg-amber-400",
+    "bg-lime-500",
+    "bg-emerald-500",
+  ];
+  const labelColor = [
+    "text-destructive",
+    "text-orange-400",
+    "text-amber-400",
+    "text-lime-400",
+    "text-emerald-400",
+  ];
+  return (
+    <div className="space-y-1" data-testid="password-strength-meter">
+      <div className="flex gap-1">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors ${
+              i <= score ? colors[score] : "bg-border/60"
+            }`}
+          />
+        ))}
+      </div>
+      <p className={`text-[11px] ${labelColor[score]}`}>{label}</p>
+    </div>
   );
 }
 

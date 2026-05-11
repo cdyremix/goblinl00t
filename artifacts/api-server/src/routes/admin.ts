@@ -21,11 +21,21 @@ router.get("/admin/me", async (req, res) => {
 
 const CreateUserBody = z
   .object({
-    email: z.string().email().max(254),
-    password: z.string().min(8).max(128),
+    // Email/password use loose schemas here so the body parses regardless
+    // of `bypassValidation`; the strict checks are applied conditionally
+    // below. Hard caps stay (defense-in-depth: avoid logging / storing
+    // pathological inputs) but format/min-length only apply when bypass
+    // is off. The route is admin-only either way.
+    email: z.string().min(1).max(254),
+    password: z.string().min(1).max(128),
     isAdmin: z.boolean().optional(),
     isDev: z.boolean().optional(),
     subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
+    // When true, skip both our own format/length checks AND tell Clerk
+    // to skip its password policy (`skipPasswordChecks`). Useful for
+    // seeding internal/QA accounts with weak well-known credentials.
+    // Admin-only by virtue of `requireAdmin`.
+    bypassValidation: z.boolean().optional(),
   })
   // Mutually exclusive — admin already implies feature bypass; the dev
   // flag is for accounts that should NOT have admin powers, so allowing
@@ -34,6 +44,10 @@ const CreateUserBody = z
     message: "isAdmin and isDev are mutually exclusive",
     path: ["isDev"],
   });
+
+// Same RFC5322-ish pattern Zod uses internally; pulled out so the
+// "bypass off" branch can run it explicitly.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * POST /admin/users — create a fresh streamer account. Provisions the
@@ -63,7 +77,27 @@ router.post("/admin/users", async (req, res) => {
     res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
     return;
   }
-  const { email, password, isAdmin, isDev, subscriptionTier } = parsed.data;
+  const { email, password, isAdmin, isDev, subscriptionTier, bypassValidation } = parsed.data;
+
+  // Conditional strict validation. With `bypassValidation` off (the
+  // default) we enforce email format + password ≥ 8 chars; with it on
+  // we trust the admin and pass straight through to Clerk (which will
+  // also receive `skipPasswordChecks: true`). Errors are returned in
+  // the same `issues[]` shape Zod produces so the dashboard can render
+  // them inline against the right field.
+  if (!bypassValidation) {
+    const issues: Array<{ path: (string | number)[]; message: string }> = [];
+    if (!EMAIL_RE.test(email)) {
+      issues.push({ path: ["email"], message: "Enter a valid email address." });
+    }
+    if (password.length < 8) {
+      issues.push({ path: ["password"], message: "Password must be at least 8 characters." });
+    }
+    if (issues.length > 0) {
+      res.status(400).json({ error: "Invalid body", issues });
+      return;
+    }
+  }
 
   // Step 1: Clerk create (isolated try). Map Clerk's structured errors
   // (`{ errors: [{ code, message }] }`) into appropriate HTTP statuses
@@ -74,7 +108,7 @@ router.post("/admin/users", async (req, res) => {
     const created = await clerkClient.users.createUser({
       emailAddress: [email],
       password,
-      skipPasswordChecks: false,
+      skipPasswordChecks: bypassValidation === true,
     });
     clerkUserId = created.id;
   } catch (err) {
