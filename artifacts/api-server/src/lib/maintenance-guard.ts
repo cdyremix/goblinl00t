@@ -24,7 +24,12 @@ const PATH_ALLOWLIST = new Set<string>([
   "/readyz",
   "/users/me",
 ]);
-const PREFIX_ALLOWLIST = ["/auth/"];
+// `/bot/*` — status + restart endpoints so the dashboard can still show bot
+// health and streamers can restart the bot during a maintenance window.
+// The Twitch chat bot itself is fully maintenance-independent (talks directly
+// to the DB, never through the HTTP API), so viewers keep getting responses
+// to !loot, !enter, etc. even while the maintenance wall is up.
+const PREFIX_ALLOWLIST = ["/auth/", "/bot/"];
 
 function pathPasses(urlPath: string): boolean {
   if (PATH_ALLOWLIST.has(urlPath)) return true;

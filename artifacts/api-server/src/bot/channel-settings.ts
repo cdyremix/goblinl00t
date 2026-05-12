@@ -1,5 +1,6 @@
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import type { RarityWeights } from "./inventory";
 
 /**
  * In-memory cache of per-channel runtime settings the bot reads on every
@@ -16,6 +17,8 @@ export interface ChannelSettings {
   goblinEventsEnabled: boolean;
   wheelMode: "auto" | "manual";
   wheelSpeed: "slow" | "medium" | "fast";
+  /** Custom rarity weights for !loot rolls. null = use DEFAULT_RARITY_WEIGHTS. */
+  lootRarityWeights: RarityWeights | null;
 }
 
 const DEFAULTS: ChannelSettings = {
@@ -25,6 +28,7 @@ const DEFAULTS: ChannelSettings = {
   goblinEventsEnabled: true,
   wheelMode: "auto",
   wheelSpeed: "medium",
+  lootRarityWeights: null,
 };
 
 const cache = new Map<string, ChannelSettings>();
@@ -51,6 +55,7 @@ async function loadFromDb(channel: string): Promise<ChannelSettings> {
     wheelMode: (user.wheelMode === "manual" ? "manual" : "auto"),
     wheelSpeed:
       user.wheelSpeed === "slow" || user.wheelSpeed === "fast" ? user.wheelSpeed : "medium",
+    lootRarityWeights: user.lootRarityWeights ?? null,
   };
 }
 

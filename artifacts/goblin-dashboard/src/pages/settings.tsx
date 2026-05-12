@@ -23,6 +23,22 @@ import { hasFeature } from "@/lib/plans";
 
 type BotTheme = "goblin" | "cs2";
 
+type RarityWeights = {
+  common: number;
+  uncommon: number;
+  rare: number;
+  epic: number;
+  legendary: number;
+};
+
+const DEFAULT_RARITY_WEIGHTS: RarityWeights = {
+  common: 50,
+  uncommon: 30,
+  rare: 15,
+  epic: 4,
+  legendary: 1,
+};
+
 interface BotSettings {
   botTheme: BotTheme;
   botName: string;
@@ -38,6 +54,8 @@ interface BotSettings {
   eliminationFlavorEnabled: boolean;
   /** Optional Discord webhook URL — see below for validation rules. */
   discordWebhookUrl: string | null;
+  /** Custom rarity weights for !loot rolls. null = server defaults. */
+  lootRarityWeights: RarityWeights | null;
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -367,6 +385,12 @@ export default function SettingsPage() {
           onSave={(v) => mutation.mutate({ coinCap: v })}
         />
 
+        <LootDropRatesSection
+          value={settings?.lootRarityWeights ?? null}
+          saving={mutation.isPending}
+          onSave={(v) => mutation.mutate({ lootRarityWeights: v })}
+        />
+
         <FeatureLock
           feature="discord-webhooks"
           description="Auto-post a winner embed to your Discord server every time a giveaway ends."
@@ -563,6 +587,132 @@ export default function SettingsPage() {
 // =====================================================================
 // Coin cap subsection — local draft so the user can type freely before saving
 // =====================================================================
+
+const RARITY_CONFIG: {
+  key: keyof RarityWeights;
+  label: string;
+  emoji: string;
+  color: string;
+  barColor: string;
+}[] = [
+  { key: "common",    label: "Common",    emoji: "⚪", color: "text-muted-foreground", barColor: "bg-muted-foreground/60" },
+  { key: "uncommon",  label: "Uncommon",  emoji: "🟢", color: "text-green-400",        barColor: "bg-green-400/70" },
+  { key: "rare",      label: "Rare",      emoji: "🔵", color: "text-blue-400",         barColor: "bg-blue-400/70" },
+  { key: "epic",      label: "Epic",      emoji: "🟣", color: "text-purple-400",       barColor: "bg-purple-400/70" },
+  { key: "legendary", label: "Legendary", emoji: "🟡", color: "text-yellow-400",       barColor: "bg-yellow-400/70" },
+];
+
+function LootDropRatesSection({
+  value,
+  saving,
+  onSave,
+}: {
+  value: RarityWeights | null;
+  saving: boolean;
+  onSave: (v: RarityWeights | null) => void;
+}) {
+  const saved = value ?? DEFAULT_RARITY_WEIGHTS;
+  const [draft, setDraft] = useState<RarityWeights | null>(null);
+  const current = draft ?? saved;
+
+  const total = Object.values(current).reduce((s, n) => s + n, 0);
+  const pct = (key: keyof RarityWeights) =>
+    total > 0 ? ((current[key] / total) * 100).toFixed(1) : "0.0";
+
+  const isModified =
+    draft !== null &&
+    (Object.keys(DEFAULT_RARITY_WEIGHTS) as (keyof RarityWeights)[]).some(
+      (k) => draft[k] !== saved[k],
+    );
+  const isDefault =
+    (Object.keys(DEFAULT_RARITY_WEIGHTS) as (keyof RarityWeights)[]).every(
+      (k) => current[k] === DEFAULT_RARITY_WEIGHTS[k],
+    );
+
+  function handleChange(key: keyof RarityWeights, raw: string) {
+    const n = Math.max(0, Math.floor(Number(raw) || 0));
+    setDraft({ ...(draft ?? saved), [key]: n });
+  }
+
+  function handleSave() {
+    if (!isModified || total === 0) return;
+    onSave(isDefault ? null : current);
+    setDraft(null);
+  }
+
+  function handleReset() {
+    setDraft({ ...DEFAULT_RARITY_WEIGHTS });
+  }
+
+  return (
+    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🎲</span>
+          <span className="text-base font-semibold text-foreground">Loot Drop Rates</span>
+          <Hint
+            text="Adjust the relative chance of each rarity appearing when viewers use !loot. Values are weights — they don't need to add up to 100. Reset to restore the defaults."
+            side="right"
+          />
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+          onClick={handleReset}
+          disabled={saving || isDefault}
+        >
+          Reset to defaults
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed -mt-2">
+        Relative weights — higher numbers mean more frequent drops. The actual % shown is calculated from the total.
+      </p>
+      <div className="space-y-3">
+        {RARITY_CONFIG.map(({ key, label, emoji, color, barColor }) => (
+          <div key={key} className="flex items-center gap-3">
+            <span className="w-24 text-sm font-medium flex items-center gap-1.5 shrink-0">
+              <span>{emoji}</span>
+              <span className={color}>{label}</span>
+            </span>
+            <div className="flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                style={{ width: `${pct(key)}%` }}
+              />
+            </div>
+            <span className="w-10 text-xs text-right text-muted-foreground tabular-nums shrink-0">
+              {pct(key)}%
+            </span>
+            <Input
+              type="number"
+              min={0}
+              value={current[key]}
+              onChange={(e) => handleChange(key, e.target.value)}
+              className="w-16 h-7 text-sm text-center px-1 shrink-0"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button
+          size="sm"
+          disabled={!isModified || total === 0 || saving}
+          onClick={handleSave}
+          className="gap-1.5"
+        >
+          <Save className="w-3.5 h-3.5" />
+          Save Rates
+        </Button>
+        {isModified && (
+          <Button size="sm" variant="ghost" onClick={() => setDraft(null)} disabled={saving}>
+            Discard
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function CoinCapSection({
   value,

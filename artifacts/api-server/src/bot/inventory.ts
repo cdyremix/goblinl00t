@@ -5,6 +5,22 @@ import type { Rarity, LootTheme } from "./loot-tables";
 import { LOOT_TABLE, getRarityEmoji } from "./loot-tables";
 import { logger } from "../lib/logger";
 
+export type RarityWeights = {
+  common: number;
+  uncommon: number;
+  rare: number;
+  epic: number;
+  legendary: number;
+};
+
+export const DEFAULT_RARITY_WEIGHTS: RarityWeights = {
+  common: 50,
+  uncommon: 30,
+  rare: 15,
+  epic: 4,
+  legendary: 1,
+};
+
 export type BuffEffect = "luck" | "coins" | "tickets";
 
 export interface BuffDef {
@@ -23,6 +39,11 @@ export const BUFF_TABLE: BuffDef[] = [
   { item: "Trickster's Die", rarity: "epic",      effect: "luck",    charges: 8, coinValue: 600, flavor: "+25% chance to upgrade your next loot rolls" },
 ];
 
+/** Look up the flavor description for a buff item by its name. */
+export function getBuffFlavor(itemName: string): string {
+  return BUFF_TABLE.find((b) => b.item === itemName)?.flavor ?? "";
+}
+
 const BUFF_DROP_CHANCE = 0.10;
 
 export interface RolledLoot {
@@ -37,13 +58,24 @@ export interface RolledLoot {
 
 const RARITY_ORDER: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 
-function baseRoll(theme: LootTheme): { item: string; rarity: Rarity; points: number } {
-  const r = Math.random() * 100;
+/**
+ * Pick a rarity using cumulative weighted random selection. Weights are
+ * relative — they don't need to sum to 100; the roll is normalised against
+ * their actual total. When `weights` is omitted, DEFAULT_RARITY_WEIGHTS
+ * are used (common:50 uncommon:30 rare:15 epic:4 legendary:1).
+ */
+function baseRoll(
+  theme: LootTheme,
+  weights?: RarityWeights,
+): { item: string; rarity: Rarity; points: number } {
+  const w = weights ?? DEFAULT_RARITY_WEIGHTS;
+  const total = w.legendary + w.epic + w.rare + w.uncommon + w.common;
+  const r = Math.random() * total;
   let rarity: Rarity;
-  if (r < 1) rarity = "legendary";
-  else if (r < 5) rarity = "epic";
-  else if (r < 20) rarity = "rare";
-  else if (r < 50) rarity = "uncommon";
+  if (r < w.legendary) rarity = "legendary";
+  else if (r < w.legendary + w.epic) rarity = "epic";
+  else if (r < w.legendary + w.epic + w.rare) rarity = "rare";
+  else if (r < w.legendary + w.epic + w.rare + w.uncommon) rarity = "uncommon";
   else rarity = "common";
   const pool = LOOT_TABLE.filter((i) => i.rarity === rarity && i.theme === theme);
   // Defensive fallback: if a theme is missing items at this rarity, pick from any theme.
@@ -62,6 +94,8 @@ export interface RollOptions {
   allowBuffs?: boolean;
   /** Theme for the item pool. Defaults to "goblin". */
   theme?: LootTheme;
+  /** Custom rarity weights. When omitted, DEFAULT_RARITY_WEIGHTS are used. */
+  weights?: RarityWeights;
 }
 
 /**
@@ -73,6 +107,7 @@ export interface RollOptions {
 export function rollLootDrop(opts: RollOptions): RolledLoot {
   const allowBuffs = opts.allowBuffs !== false;
   const theme: LootTheme = opts.theme ?? "goblin";
+  const weights = opts.weights ?? undefined;
   if (allowBuffs && Math.random() < BUFF_DROP_CHANCE) {
     const buff = BUFF_TABLE[Math.floor(Math.random() * BUFF_TABLE.length)]!;
     return {
@@ -86,7 +121,7 @@ export function rollLootDrop(opts: RollOptions): RolledLoot {
     };
   }
 
-  let base = baseRoll(theme);
+  let base = baseRoll(theme, weights);
   if (opts.luckBuffActive && Math.random() < 0.5) {
     const upRarity = upgradeRarity(base.rarity);
     if (upRarity !== base.rarity) {

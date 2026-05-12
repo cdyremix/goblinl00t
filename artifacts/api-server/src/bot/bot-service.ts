@@ -18,6 +18,7 @@ import {
   consumeBuffCharge,
   hasActiveBuff,
   inventoryFullMessage,
+  getBuffFlavor,
   INVENTORY_CAP,
 } from "./inventory";
 import { startGoblinEvents, setGoblinEventSink, trackChatter } from "./goblin-events";
@@ -434,6 +435,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         luckBuffActive: luckActive,
         allowBuffs: settings.lootDropsEnabled,
         theme: channelTheme,
+        weights: settings.lootRarityWeights ?? undefined,
       });
       // Charge consumption is atomic with the insert — a "full" result will
       // not burn the buff (see addInventoryItem).
@@ -457,7 +459,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (loot.kind === "buff") {
         void client?.say(
           channel,
-          `${emoji} @${username} found [BUFF] ${loot.item}! ${slotTag} · !use ${result.slot} (${loot.charges}×) · !sell ${result.slot} for ${loot.coinValue}🪙`
+          `${emoji} @${username} found [BUFF] ${loot.item}! ${slotTag} · ${loot.flavor} · !use ${result.slot} (${loot.charges}×) · !sell ${result.slot} for ${loot.coinValue}🪙`
         );
       } else {
         void client?.say(
@@ -476,10 +478,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         const lines = items.map((it, i) => {
           const e = getRarityEmoji(it.rarity);
           if (it.kind === "buff") {
-            const status = it.isActive ? `ACTIVE·${it.chargesRemaining}×` : `${it.chargesRemaining}×`;
-            return `[${i + 1}]${e}${it.item} BUFF(${status}) !use ${i + 1}`;
+            const flavor = getBuffFlavor(it.item);
+            const active = it.isActive ? "ACTIVE · " : "";
+            const desc = flavor ? ` (${flavor})` : "";
+            return `[${i + 1}]${e}${it.item}${desc} BUFF [${active}${it.chargesRemaining}× left] · !use ${i + 1} · !sell ${i + 1} for ${it.coinValue}🪙`;
           }
-          return `[${i + 1}]${e}${it.item} ${it.coinValue}🪙 !sell ${i + 1}`;
+          return `[${i + 1}]${e}${it.item} ${it.coinValue}🪙 · !sell ${i + 1}`;
         });
         void client?.say(channel, `🎒 @${username} [${items.length}/${INVENTORY_CAP}]: ${lines.join(" · ")}`);
       }

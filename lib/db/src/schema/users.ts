@@ -71,6 +71,13 @@ export const usersTable = pgTable("users", {
   // embed announcing the winner. Validated against discord.com/api/webhooks/...
   // before write; any other URL shape is rejected.
   discordWebhookUrl: text("discord_webhook_url"),
+  // Per-channel rarity weights for loot rolls. When null, the bot falls back
+  // to the hardcoded defaults (common:50, uncommon:30, rare:15, epic:4, legendary:1).
+  // Values are relative weights — they don't need to sum to 100; the roll is
+  // normalised at runtime.
+  lootRarityWeights: jsonb("loot_rarity_weights").$type<{
+    common: number; uncommon: number; rare: number; epic: number; legendary: number;
+  }>(),
   // Stripe customer + active subscription IDs. Customer created lazily on
   // first checkout; subscription written back from webhook + reconciled
   // on every /users/me read so the UI is never stale even if a webhook

@@ -47,6 +47,7 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
         | "fast",
     eliminationFlavorEnabled: user.eliminationFlavorEnabled,
     discordWebhookUrl: user.discordWebhookUrl ?? null,
+    lootRarityWeights: user.lootRarityWeights ?? null,
   };
 }
 
@@ -75,6 +76,9 @@ router.put("/settings", async (req, res) => {
     wheelSpeed?: string;
     eliminationFlavorEnabled?: boolean;
     discordWebhookUrl?: string | null;
+    lootRarityWeights?: {
+      common: number; uncommon: number; rare: number; epic: number; legendary: number;
+    } | null;
   };
 
   // Resolve the caller's row early so we can tier-gate paid settings
@@ -155,6 +159,22 @@ router.put("/settings", async (req, res) => {
   }
   if (typeof body.eliminationFlavorEnabled === "boolean") {
     updates.eliminationFlavorEnabled = body.eliminationFlavorEnabled;
+  }
+  if ("lootRarityWeights" in body) {
+    const w = body.lootRarityWeights;
+    if (w === null || w === undefined) {
+      updates.lootRarityWeights = null;
+    } else {
+      const RARITIES = ["common", "uncommon", "rare", "epic", "legendary"] as const;
+      const allValid = RARITIES.every(
+        (r) => typeof w[r] === "number" && Number.isFinite(w[r]) && w[r] >= 0,
+      );
+      if (!allValid || RARITIES.reduce((s, r) => s + w[r], 0) === 0) {
+        res.status(400).json({ error: "lootRarityWeights must be an object with non-negative numbers that don't all sum to zero" });
+        return;
+      }
+      updates.lootRarityWeights = w;
+    }
   }
   if ("discordWebhookUrl" in body) {
     const raw = body.discordWebhookUrl;
