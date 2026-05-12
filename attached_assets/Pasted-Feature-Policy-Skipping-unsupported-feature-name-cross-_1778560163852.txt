@@ -1,0 +1,175 @@
+Feature Policy: Skipping unsupported feature name “cross-origin-isolated”. api.js:1:44620
+Feature Policy: Skipping unsupported feature name “autoplay”. api.js:1:44620
+Feature Policy: Skipping unsupported feature name “keyboard-map”. api.js:1:44620
+Feature Policy: Skipping unsupported feature name “cross-origin-isolated”. api.js:1:44659
+Feature Policy: Skipping unsupported feature name “autoplay”. api.js:1:44659
+Feature Policy: Skipping unsupported feature name “keyboard-map”. api.js:1:44659
+Feature Policy: Skipping unsupported feature name “cross-origin-isolated”. api.js:1:44913
+Feature Policy: Skipping unsupported feature name “autoplay”. api.js:1:44913
+Feature Policy: Skipping unsupported feature name “keyboard-map”. api.js:1:44913
+Content-Security-Policy: The page’s settings blocked an inline script (script-src-elem) from being executed because it violates the following directive: “script-src 'nonce-pL1zwgYjhhmgxrhLvvU9yI' 'unsafe-eval'”. Consider using a hash ('sha256-7PZaH7TzFg4JdT5xJguN7Och6VcMcP1LW4N3fQ936Fs=') or a nonce. 2 utils.js:41:10
+Content-Security-Policy: The page’s settings blocked an inline script (script-src-elem) from being executed because it violates the following directive: “script-src 'nonce-pL1zwgYjhhmgxrhLvvU9yI' 'unsafe-eval'”. Consider using a hash ('sha256-MqH8JJslY2fF2bGYY1rZlpCNrRCnWKRzrrDefixUJTI=') or a nonce. 2 utils.js:41:10
+Content-Security-Policy: The page’s settings blocked an inline script (script-src-elem) from being executed because it violates the following directive: “script-src 'nonce-pL1zwgYjhhmgxrhLvvU9yI' 'unsafe-eval'”. Consider using a hash ('sha256-ZswfTY7H35rbv8WC7NXBoiC7WNu86vSzCDChNWwZZDM=') or a nonce. 2 utils.js:41:10
+Partitioned cookie or storage access was provided to “https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us” because it is loaded in the third-party context and dynamic state partitioning is enabled. normal:1:221110
+Window.fullScreen attribute is deprecated and will be removed in the future. normal:1:59340
+InstallTrigger is deprecated and will be removed in the future. normal:1:59340
+onmozfullscreenchange is deprecated. normal:1:59340
+onmozfullscreenerror is deprecated. normal:1:59340
+Request for the Private Access Token challenge. normal:1:102971
+XHR
+GET
+https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/pat/9fa6a869def497b2/1778559909728/9b96796d5ccd1f35f949f4d456a5be66c765de3dd9bc46e1e422084faf51c2f7/dsJVIUZryac-1-t
+[HTTP/2 401  19ms]
+
+This page is in Quirks Mode. Page layout may be impacted. For Standards Mode use “<!DOCTYPE html>”. normal:1:102971
+<empty string> normal:1:102971
+/.*.*=.*/
+normal:1:102971
+BoundFunctionObject { toString: BoundFunctionObject, … }
+normal:1:102971
+<a>
+normal:1:102971
+: 1 normal:1:102971
+: 0 normal:1:102971
+0 normal:1:102971
+<empty string> 
+XCEE: RoFh
+normal:1:102971
+%c%d font-size:0;color:transparent XCEE: RoFh
+normal:1:102971
+0 normal:1:102971
+0 normal:1:102971
+0 normal:1:102971
+%c%d font-size:0;color:transparent XCEE: RoFh
+normal:1:102971
+console.trace() 0 normal:1:102971
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    (Async: promise callback)
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    (Async: promise callback)
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    (Async: promise callback)
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    (Async: EventListener.handleEvent)
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jP https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    jR https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    aydln https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    <anonymous> https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+    (Async: EventHandlerNonNull)
+    jV https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/ov2/av0/rch/lykl2/0x4AAAAAAAWXJGBD7bONzLBd/auto/fbE/new/normal?lang=en-us:1
+0 normal:1:102971
+WEBGL_debug_renderer_info is deprecated in Firefox and will be removed. Please use RENDERER. normal:1:102971
+WebGL context was lost. 2 normal:1:102971
+Content-Security-Policy: The page’s settings blocked an inline script (script-src-elem) from being executed because it violates the following directive: “script-src 'nonce-pL1zwgYjhhmgxrhLvvU9yI' 'unsafe-eval'”. Consider using a hash ('sha256-eJGI0Ik4oYe/PKLDOt4wcN76wYs8h+Ew05pMzdY6xG8=') or a nonce. 2 srcdoc:1:96
+GET
+https://grainy-gradients.vercel.app/noise.svg
+NS_BINDING_ABORTED
+
+XHR
+GET
+https://goblinl00t.com/api/stats/overview?range=stream
+[HTTP/1.1 500 Internal Server Error 40ms]
+
+XHR
+GET
+https://goblinl00t.com/api/loot/recent?limit=10&since=stream
+[HTTP/1.1 500 Internal Server Error 94ms]
+
+XHR
+GET
+https://goblinl00t.com/api/giveaway
+[HTTP/1.1 500 Internal Server Error 81ms]
+
+XHR
+GET
+https://goblinl00t.com/api/users/me
+[HTTP/1.1 500 Internal Server Error 33ms]
+
+XHR
+GET
+https://goblinl00t.com/api/settings
+[HTTP/1.1 500 Internal Server Error 61ms]
+
+XHR
+GET
+https://goblinl00t.com/api/stats/overview?range=all
+[HTTP/1.1 500 Internal Server Error 75ms]
+
+A resource is blocked by OpaqueResponseBlocking, please check browser console for details. noise.svg
+Cookie “__cf_bm” will soon be rejected because it is foreign and does not have the “Partitioned“ attribute. eyJ0eXBlIjoiZGVmYXVsdCIsImlpZCI6Imluc18zRGJGN3FnekR2Sk8xcHhycVVmZno0dkY0ZFIiLCJyaWQiOiJ1c2VyXzNEYm8zdkg5blpnMUZ0cEk3NXBPVXBwaWxJRiJ9
+XHR
+GET
+https://goblinl00t.com/api/users/me
+[HTTP/1.1 500 Internal Server Error 25ms]
+
+XHR
+GET
+https://goblinl00t.com/api/stripe/subscription
+[HTTP/1.1 500 Internal Server Error 37ms]
+
+XHR
+GET
+https://goblinl00t.com/api/stripe/invoices
+[HTTP/1.1 500 Internal Server Error 41ms]
+
+XHR
+GET
+https://goblinl00t.com/api/stats/commands?range=week
+[HTTP/1.1 500 Internal Server Error 75ms]
+
+XHR
+GET
+https://goblinl00t.com/api/stats/overview?range=week
+[HTTP/1.1 500 Internal Server Error 53ms]
+
+XHR
+GET
+https://goblinl00t.com/api/stats/top-looters?limit=10&range=week
+[HTTP/1.1 500 Internal Server Error 75ms]
+
