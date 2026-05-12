@@ -1,0 +1,105 @@
+goblin@ip-172-26-7-141:/opt/goblinl00t$ # Push schema with correct URL
+cd /opt/goblinl00t && DATABASE_URL="postgres://goblinl00t:goblin123@127.0.0.1:5432/goblinl00t" pnpm --filter @workspace/db run push
+$ drizzle-kit push --config ./drizzle.config.ts
+Reading config file '/opt/goblinl00t/lib/db/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
++ giveaways table will be created
++ giveaway_entries table will be created
++ loot_drops table will be created
++ command_logs table will be created
++ trade_fulfillments table will be created
++ custom_commands table will be created
++ point_redemptions table will be created
++ user_inventory table will be created
++ goblin_events table will be created
++ giveaway_presets table will be created
++ waitlist_emails table will be created
++ app_settings table will be created
+--- all table conflicts resolved ---
+
+
++ clerk_user_id column will be created
+
++ twitch_user_id column will be created
+
++ twitch_username column will be created
+
++ is_dev column will be created
+
++ twitch_access_token column will be created
+
++ twitch_refresh_token column will be created
+
++ subscription_tier column will be created
+
++ is_admin column will be created
+
++ tier_selected column will be created
+
++ bot_theme column will be created
+
++ bot_name column will be created
+
++ steam_trade_url column will be created
+
++ steam_id64 column will be created
+
++ steam_username column will be created
+
++ avatar_preset column will be created
+
++ goblin_events_enabled column will be created
+
++ loot_drops_enabled column will be created
+
++ coin_redemption_enabled column will be created
+
++ coin_cap column will be created
+
++ wheel_mode column will be created
+
++ wheel_speed column will be created
+
++ elimination_flavor_enabled column will be created
+
++ stream_started_at column will be created
+
++ command_responses column will be created
+
++ command_toggles column will be created
+
++ discord_webhook_url column will be created
+
++ stripe_customer_id column will be created
+
++ stripe_subscription_id column will be created
+
++ created_at column will be created
+--- all columns conflicts in users table resolved ---
+
+
+error: type "serial" does not exist
+    at /opt/goblinl00t/node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Object.query (/opt/goblinl00t/node_modules/.pnpm/drizzle-kit@0.31.9/node_modules/drizzle-kit/bin.cjs:80623:26)
+    at async pgPush (/opt/goblinl00t/node_modules/.pnpm/drizzle-kit@0.31.9/node_modules/drizzle-kit/bin.cjs:84485:13)
+    at async Object.handler (/opt/goblinl00t/node_modules/.pnpm/drizzle-kit@0.31.9/node_modules/drizzle-kit/bin.cjs:93943:9)
+    at async run (/opt/goblinl00t/node_modules/.pnpm/drizzle-kit@0.31.9/node_modules/drizzle-kit/bin.cjs:93189:7) {
+  length: 89,
+  severity: 'ERROR',
+  code: '42704',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_type.c',
+  line: '270',
+  routine: 'typenameType'
