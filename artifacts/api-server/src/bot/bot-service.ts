@@ -991,6 +991,13 @@ export async function startBot(): Promise<void> {
 }
 
 export async function restartBot(): Promise<BotState> {
+  // Announce in every joined channel before tearing down the connection.
+  if (client && botState.connected) {
+    const channels = [...botState.channels];
+    await Promise.allSettled(
+      channels.map((ch) => client!.say(`#${ch}`, "🔄 GoblinL00t bot is restarting — back in a sec!"))
+    );
+  }
   await startBot();
   return getBotState();
 }
