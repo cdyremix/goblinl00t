@@ -304,14 +304,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
   const dedupKey =
     tags["id"] ??
     `${channel}:${(tags.username ?? "").toLowerCase()}:${message.trim()}`;
-  const isDup = markSeen(dedupKey);
-  if (message.trim().startsWith("!")) {
-    logger.info(
-      { channel, user: tags.username, msg: message.trim(), msgId: tags["id"], dedupKey, isDup },
-      "handleMessage: command received"
-    );
-  }
-  if (isDup) return;
+  if (markSeen(dedupKey)) return;
 
   const username = (tags.username ?? tags["display-name"] ?? "unknown").toLowerCase();
   trackChatter(channel, username);
