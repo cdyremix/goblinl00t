@@ -996,10 +996,21 @@ export async function startBot(): Promise<void> {
 
 export async function restartBot(): Promise<BotState> {
   // Announce in every joined channel before tearing down the connection.
-  if (client && botState.connected) {
-    const channels = [...botState.channels];
+  // The short delay after say() lets tmi.js flush the PRIVMSG over the
+  // IRC socket before startBot() disconnects the client.
+  if (client && botState.connected && botState.channels.length > 0) {
+    logger.info({ channels: botState.channels }, "restartBot: sending announcement");
     await Promise.allSettled(
-      channels.map((ch) => client!.say(`#${ch}`, "🔄 GoblinL00t bot is restarting — back in a sec!"))
+      botState.channels.map((ch) =>
+        client!.say(`#${ch}`, "🔄 GoblinL00t bot is restarting — back in a sec!")
+      )
+    );
+    // Give tmi.js time to flush the outgoing IRC PRIVMSG before disconnect.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+  } else {
+    logger.warn(
+      { connected: botState.connected, channels: botState.channels },
+      "restartBot: skipping announcement (not connected or no channels)"
     );
   }
   await startBot();
