@@ -1,0 +1,130 @@
+goblin@ip-172-26-7-141:/opt/goblinl00t$ cd /opt/goblinl00t
+sudo mkdir -p /opt/goblinl00t/web /var/log/goblinl00t
+sudo chown -R goblin:goblin /opt/goblinl00t/web /var/log/goblinl00t
+sudo cp deploy/aws-ec2/goblin-l00t.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable goblin-l00t
+chmod +x deploy/aws-ec2/release.sh
+sudo -u goblin -H ./deploy/aws-ec2/release.sh
+Created symlink /etc/systemd/system/multi-user.target.wants/goblin-l00t.service → /etc/systemd/system/goblin-l00t.service.
+==> [1/5] Installing dependencies
+Scope: all 9 workspace projects
+Already up to date
+Done in 621ms using pnpm v11.1.0
+==> [2/5] Building api-server + dashboard
+$ tsc --build
+$ node ./build.mjs
+
+  dist/index.mjs                       4.1mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.0kb
+  dist/pino-pretty.mjs               114.6kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                   6.7mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.9kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+
+⚡ Done in 1064ms
+$ vite build --config vite.config.ts
+vite v7.3.2 building client environment for production...
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/collapsible.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/dropdown-menu.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+✓ 1975 modules transformed.
+dist/public/index.html                   1.78 kB │ gzip:   0.73 kB
+dist/public/assets/index-BbBsByXW.css  183.06 kB │ gzip:  25.66 kB
+dist/public/assets/index-CG6RaH64.js   899.03 kB │ gzip: 257.68 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 9.31s
+==> [3/5] Swapping dashboard into /opt/goblinl00t/web
+==> [4/5] Syncing DB schema (drizzle-kit push)
+$ drizzle-kit push --config ./drizzle.config.ts
+Reading config file '/opt/goblinl00t/lib/db/drizzle.config.ts'
+Using 'pg' driver for database querying
+[⣷] Pulling schema from database...
+error: password authentication failed for user "goblin"
+    at /opt/goblinl00t/node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Object.query (/opt/goblinl00t/node_modules/.pnpm/drizzle-kit@0.31.9/node_modules/drizzle-kit/bin.cjs:80623:26)
+    at async fromDatabase2 (/opt/goblinl00t/node_modules/.pnpm/drizzle-kit@0.31.9/node_modules/drizzle-kit/bin.cjs:19276:25) {
+  length: 102,
+  severity: 'FATAL',
+  code: '28P01',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'auth.c',
+  line: '331',
+  routine: 'auth_failed'
+}
+==> [5/5] Restarting goblin-l00t service
+● goblin-l00t.service - Goblin L00t API + Twitch bot
+     Loaded: loaded (/etc/systemd/system/goblin-l00t.service; enabled; preset: enabled)
+     Active: active (running) since Tue 2026-05-12 03:28:20 UTC; 2s ago
+   Main PID: 1425274 (node)
+      Tasks: 11 (limit: 2209)
+     Memory: 142.7M (peak: 163.1M)
+        CPU: 1.200s
+     CGroup: /system.slice/goblin-l00t.service
+             └─1425274 /usr/bin/node --enable-source-maps /opt/goblinl00t/artifacts/api-server/dist/index.mjs
+
+May 12 03:28:20 ip-172-26-7-141 systemd[1]: Started goblin-l00t.service - Goblin L00t API + Twitch bot.
+May 12 03:28:20 ip-172-26-7-141 goblin-l00t[1425274]: (node:1425274) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+May 12 03:28:20 ip-172-26-7-141 goblin-l00t[1425274]: (Use `node --trace-deprecation ...` to show where the warning was created)
+May 12 03:28:20 ip-172-26-7-141 goblin-l00t[1425274]: {"level":30,"time":1778556500908,"pid":1425274,"hostname":"ip-172-26-7-141","port":8080,"msg":"Goblin L00t server listening"}
+May 12 03:28:21 ip-172-26-7-141 goblin-l00t[1425274]: {"level":50,"time":1778556501380,"pid":1425274,"hostname":"ip-172-26-7-141","err":{"type":"_DrizzleQueryError","message":"Failed query: select \"twitch_username\" from \"users\" where \"users\".\"twitch_username\" is not null\nparams: : password authentication failed for user \"goblin\"","stack":"Error: Failed query: select \"twitch_username\" from \"users\" where \"users\".\"twitch_username\" is not null\nparams: \n    at NodePgPreparedQuery.queryWithCache (/opt/goblinl00t/node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.18.0_pg@8.20.0/node_modules/src/pg-core/session.ts:73:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async <anonymous> (/opt/goblinl00t/node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.18.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)\n    at async loadJoinableChannels (/opt/goblinl00t/artifacts/api-server/src/bot/bot-service.ts:824:18)\n    at async startBot (/opt/goblinl00t/artifacts/api-server/src/bot/bot-service.ts:896:20)\n    at async Server.<anonymous> (/opt/goblinl00t/artifacts/api-server/src/index.ts:92:3)\ncaused by: error: password authentication failed for user \"goblin\"\n    at <anonymous> (/opt/goblinl00t/node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool/index.js:45:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async <anonymous> (/opt/goblinl00t/node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.18.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:161:13)\n    at async NodePgPreparedQuery.queryWithCache (/opt/goblinl00t/node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.18.0_pg@8.20.0/node_modules/src/pg-core/session.ts:71:12)\n    at async <anonymous> (/opt/goblinl00t/node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.18.0_pg@8.20.0/node_modules/src/node-postgres/session.ts:154:19)\n    at async loadJoinableChannels (/opt/goblinl00t/artifacts/api-server/src/bot/bot-service.ts:824:18)\n    at async startBot (/opt/goblinl00t/artifacts/api-server/src/bot/bot-service.ts:896:20)\n    at async Server.<anonymous> (/opt/goblinl00t/artifacts/api-server/src/index.ts:92:3)","query":"select \"twitch_username\" from \"users\" where \"users\".\"twitch_username\" is not null","params":[]},"msg":"Failed to load streamer channel list — falling back to env"}
+goblin@ip-172-26-7-141:/opt/goblinl00t$ sudo cp deploy/aws-ec2/nginx-goblinl00t.conf /etc/nginx/sites-available/goblinl00t.com
+sudo ln -sf /etc/nginx/sites-available/goblinl00t.com /etc/nginx/sites-enabled/goblinl00t.com
+sudo nginx -t && sudo systemctl reload nginx
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+goblin@ip-172-26-7-141:/opt/goblinl00t$ curl -s http://127.0.0.1:8080/api/healthz   # should return 200
+sudo systemctl status goblin-l00t            # should say "active (running)"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Internal Server Error</pre>
+</body>
+</html>
+● goblin-l00t.service - Goblin L00t API + Twitch bot
+     Loaded: loaded (/etc/systemd/system/goblin-l00t.service; enabled; preset: enabled)
+     Active: active (running) since Tue 2026-05-12 03:28:20 UTC; 1min 2s ago
+   Main PID: 1425274 (node)
+      Tasks: 11 (limit: 2209)
+     Memory: 154.9M (peak: 163.1M)
+        CPU: 1.340s
+     CGroup: /system.slice/goblin-l00t.service
+             └─1425274 /usr/bin/node --enable-source-maps /opt/goblinl00t/artifacts/api-server/dist/index.mjs
+
+May 12 03:28:21 ip-172-26-7-141 goblin-l00t[1425274]: {"level":50,"time":1778556501380,"pid":1425274,"hostname":"ip-172-26-7-141","err":{"type":"_DrizzleQueryError","message":"Failed q>
+May 12 03:28:21 ip-172-26-7-141 goblin-l00t[1425274]: {"level":50,"time":1778556501652,"pid":1425274,"hostname":"ip-172-26-7-141","errMessage":"password authentication failed for user >
+May 12 03:28:21 ip-172-26-7-141 goblin-l00t[1425274]: {"level":50,"time":1778556501691,"pid":1425274,"hostname":"ip-172-26-7-141","err":{"type":"_DrizzleQueryError","message":"Failed q>
+May 12 03:28:21 ip-172-26-7-141 goblin-l00t[1425274]: {"level":30,"time":1778556501692,"pid":1425274,"hostname":"ip-172-26-7-141","msg":"Goblin events scheduler started"}
+May 12 03:28:22 ip-172-26-7-141 goblin-l00t[1425274]: {"level":30,"time":1778556502121,"pid":1425274,"hostname":"ip-172-26-7-141","channels":["#goblinl00t"],"username":"goblinl00t","ms>
+May 12 03:29:22 ip-172-26-7-141 goblin-l00t[1425274]: Error: Missing Clerk Secret Key. Go to https://dashboard.clerk.com and get your key for your instance.
+May 12 03:29:22 ip-172-26-7-141 goblin-l00t[1425274]:     at assertValidSecretKey (/opt/goblinl00t/node_modules/.pnpm/@clerk+backend@3.4.7/node_modules/@clerk/backend/src/util/optionsA>
+May 12 03:29:22 ip-172-26-7-141 goblin-l00t[1425274]:     at authenticateRequest (/opt/goblinl00t/node_modules/.pnpm/@clerk+backend@3.4.7/node_modules/@clerk/backend/src/tokens/request>
+May 12 03:29:22 ip-172-26-7-141 goblin-l00t[1425274]:     at async middleware (/opt/goblinl00t/node_modules/.pnpm/@clerk+express@2.1.15_express@5.2.1/node_modules/@clerk/express/src/au>
+May 12 03:29:22 ip-172-26-7-141 goblin-l00t[1425274]: {"level":30,"time":1778556562570,"pid":1425274,"hostname":"ip-172-26-7-141","req":{"id":1,"method":"GET","url":"/api/healthz"},"re>
+lines 1-20/20 (END)
+[1]+  Stopped                 sudo systemctl status goblin-l00t
