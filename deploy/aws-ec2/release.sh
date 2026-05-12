@@ -45,6 +45,7 @@ echo "==> [3/5] Swapping dashboard into ${WEB}"
 sudo rsync -a --delete-after \
   "${ROOT}/artifacts/goblin-dashboard/dist/public/" "${WEB}/"
 sudo chown -R goblin:goblin "$WEB"
+sudo chmod -R a+rX "$WEB"
 
 echo "==> [4/5] Syncing DB schema (drizzle-kit push)"
 DATABASE_URL="${DATABASE_URL}" pnpm --filter @workspace/db run push
