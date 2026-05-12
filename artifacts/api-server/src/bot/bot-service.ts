@@ -942,6 +942,16 @@ export async function startBot(): Promise<void> {
   });
   startGoblinEvents();
 
+  // BOT_ENABLED must be explicitly set to "true" to connect to Twitch IRC.
+  // This prevents the Replit dev server (which shares the same OAuth token
+  // secret) from connecting alongside the production deployment and causing
+  // duplicate responses in chat.
+  if (process.env["BOT_ENABLED"] !== "true") {
+    logger.warn({ channels }, "BOT_ENABLED != true — bot running in offline mode (dashboard only)");
+    botState = { ...botState, connected: false, channel: primaryChannel, channels, username, startedAt: null };
+    return;
+  }
+
   if (!oauthToken) {
     logger.warn({ channels }, "TWITCH_OAUTH_TOKEN not set — bot running in offline mode (dashboard only)");
     botState = { ...botState, connected: false, channel: primaryChannel, channels, username, startedAt: null };
