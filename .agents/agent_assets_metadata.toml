@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "ejz5EN_6tsnZGFsM4m3_6"
+uri = "file://goblinl00t-deploy.tar.gz"
+type = "unspecified"
+title = "goblinl00t-deploy.tar.gz"
