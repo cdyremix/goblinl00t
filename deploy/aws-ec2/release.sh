@@ -3,7 +3,7 @@
 # Run from /opt/goblinl00t after `git pull`. Idempotent; safe to re-run.
 #
 #   cd /opt/goblinl00t
-#   git pull
+#   git pull origin main
 #   ./deploy/aws-ec2/release.sh
 #
 # What it does:
