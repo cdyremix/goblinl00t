@@ -8,7 +8,6 @@ import {
   reloadCustomCommands,
   isBuiltInCommand,
   resolveCanonical,
-  isCommandCustomizable,
   type CommandTheme,
 } from "../bot/bot-service";
 import { invalidateCommandResponses } from "../bot/command-responses";
@@ -122,15 +121,15 @@ router.put("/commands/:name/response", async (req, res) => {
   if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
   const name = normalizeName(req.params["name"] ?? "");
   const canonical = resolveCanonical(name);
-  if (!canonical || !isCommandCustomizable(canonical)) {
-    res.status(400).json({ error: `${name} cannot be customized` });
+  if (!canonical) {
+    res.status(400).json({ error: `${name} is not a recognized built-in command` });
     return;
   }
-  // Custom command responses are a Premium-tier feature. UI hides the
-  // editor for free users via `hasFeature("custom-responses")`, but the
-  // server is the actual entitlement boundary so curl can't bypass it.
+  // Custom command responses require the Horde Master (premium) rank or above.
+  // This applies to ALL built-in commands. The server is the actual entitlement
+  // boundary — UI gating alone can be bypassed by curl.
   if (!userHasFeature(user, "custom-responses")) {
-    res.status(403).json({ error: "Custom command responses require the Premium rank." });
+    res.status(403).json({ error: "Custom command responses require Horde Master rank or above." });
     return;
   }
   const parsed = ResponseInput.safeParse(req.body);

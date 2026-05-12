@@ -51,68 +51,101 @@ interface BuiltInCommand {
 }
 
 const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
-  "!loot":       { description: `Roll for a random inventory drop (cap ${INVENTORY_CAP})`, cooldownSeconds: 30, theme: "both"   },
-  "!enter":      { description: "Enter the active giveaway",                cooldownSeconds: 5,  theme: "both"   },
-  "!giveaway":   { description: "Check if a giveaway is running",           cooldownSeconds: 5,  theme: "both"   },
-  "!inventory":  { description: "List your loot inventory slots",           cooldownSeconds: 15, theme: "both"   },
-  "!sell":       { description: "Sell an inventory item — !sell <slot> or !sell all", cooldownSeconds: 5, theme: "both" },
-  "!use":        { description: "Activate a buff item from your inventory — !use <slot>", cooldownSeconds: 5, theme: "both" },
-  "!help":       {
-    description: "Show a short list of available commands for the active theme",
-    cooldownSeconds: 30,
-    theme: "both",
+  "!loot":      {
+    description: "Roll for a random loot drop — not every roll wins!",
+    cooldownSeconds: 30, theme: "both",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "👀 {user} searched but found nothing this time.",
+  },
+  "!enter":     {
+    description: "Enter the active giveaway",
+    cooldownSeconds: 5, theme: "both",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "HEHEHE! {user} iz in da pool! *scribbles name*",
+  },
+  "!giveaway":  {
+    description: "Check if a giveaway is running",
+    cooldownSeconds: 5, theme: "both",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "🎁 No giveaway running right now!",
+  },
+  "!inventory": {
+    description: "List your loot inventory slots",
+    cooldownSeconds: 15, theme: "both",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "🎒 @{user}: Pouch is empty — type !loot to grab something!",
+  },
+  "!sell":      {
+    description: "Sell an inventory item — !sell <slot> or !sell all",
+    cooldownSeconds: 5, theme: "both",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "💰 {user} sold their loot!",
+  },
+  "!use":       {
+    description: "Activate a buff item — !use <slot>",
+    cooldownSeconds: 5, theme: "both",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "✨ {user} activated a buff!",
+  },
+  "!help":      {
+    description: "Show available commands for the active theme",
+    cooldownSeconds: 30, theme: "both",
     customizable: true,
     availableTokens: ["user", "commands", "theme"],
     defaultResponse: "📜 {user}: {commands}",
   },
-  "!goblin":     {
-    description: "Summon the bot for a themed taunt (alias: !skin)",
-    cooldownSeconds: 10,
-    theme: "goblin",
-    customizable: true,
-    availableTokens: ["user"],
-    defaultResponse: "HEHEHE! {user} summoned the goblin!",
-  },
-  "!steal":      {
-    description: "Attempt to mug another viewer (alias: !scam)",
-    cooldownSeconds: 20,
-    theme: "goblin",
-    customizable: true,
-    availableTokens: ["user", "target"],
-    defaultResponse: "{user} sneaks up on {target} and runs off with their loot!",
-  },
-  "!hoard":      {
-    description: "Check your coin balance (alias: !stash)",
-    cooldownSeconds: 15,
-    theme: "goblin",
-    customizable: true,
-    availableTokens: ["user", "balance", "earned"],
-    defaultResponse: "🪙 {user}: {balance}🪙 in your hoard · {earned} earned all-time",
-  },
-  "!feedgoblin": {
-    description: "Feed the bot a snack (alias: !case)",
-    cooldownSeconds: 10,
-    theme: "goblin",
-    customizable: true,
-    availableTokens: ["user"],
-    defaultResponse: "🍖 {user} fed the goblin! YUM!",
-  },
-  // CS2 flavor commands — pure aliases of the goblin set; share toggle/cooldown.
-  "!skin":       { description: "Alias of !goblin", cooldownSeconds: 10, theme: "cs2", aliasOf: "!goblin" },
-  "!scam":       { description: "Alias of !steal", cooldownSeconds: 20, theme: "cs2", aliasOf: "!steal" },
-  "!stash":      { description: "Alias of !hoard", cooldownSeconds: 15, theme: "cs2", aliasOf: "!hoard" },
-  "!case":       { description: "Alias of !feedgoblin", cooldownSeconds: 10, theme: "cs2", aliasOf: "!feedgoblin" },
-  "!tradeurl":   { description: "Submit your Steam trade URL after winning a skin", cooldownSeconds: 10, theme: "cs2" },
-  "!redeem":     { description: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", cooldownSeconds: 5, theme: "both" },
-  "!points":     {
-    description: "Check your coin balance (alias: !coins)",
-    cooldownSeconds: 10,
-    theme: "both",
+  "!coins":     {
+    description: "Check your coin balance",
+    cooldownSeconds: 10, theme: "both",
     customizable: true,
     availableTokens: ["user", "balance", "entries", "cost"],
     defaultResponse: "💰 {user}: {balance}🪙 · !redeem for {entries} extra entries",
   },
-  "!coins":      { description: "Alias of !points", cooldownSeconds: 10, theme: "both", aliasOf: "!points" },
+  "!redeem":    {
+    description: "Spend coins for extra giveaway entries",
+    cooldownSeconds: 5, theme: "both",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "🎟️ {user} redeemed coins for extra giveaway entries!",
+  },
+  "!goblin":    {
+    description: "Summon the goblin for a themed taunt",
+    cooldownSeconds: 10, theme: "goblin",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "HEHEHE! {user} summoned the goblin!",
+  },
+  "!steal":     {
+    description: "Steal coins from a viewer — !steal @user",
+    cooldownSeconds: 20, theme: "goblin",
+    customizable: true,
+    availableTokens: ["user", "target"],
+    defaultResponse: "{user} sneaks up on {target} and runs off with their loot!",
+  },
+  "!feed":      {
+    description: "Feed the goblin a snack",
+    cooldownSeconds: 10, theme: "goblin",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "🍖 {user} fed the goblin! YUM!",
+  },
+  // CS2 flavor aliases — share toggle/cooldown with their goblin canonical.
+  "!skin":      { description: "Alias of !goblin (CS2 theme)", cooldownSeconds: 10, theme: "cs2", aliasOf: "!goblin" },
+  "!scam":      { description: "Alias of !steal (CS2 theme)",  cooldownSeconds: 20, theme: "cs2", aliasOf: "!steal"  },
+  "!case":      { description: "Alias of !feed (CS2 theme)",   cooldownSeconds: 10, theme: "cs2", aliasOf: "!feed"   },
+  "!tradeurl":  {
+    description: "Submit your Steam trade URL after winning a skin",
+    cooldownSeconds: 10, theme: "cs2",
+    customizable: true,
+    availableTokens: ["user"],
+    defaultResponse: "✅ {user}: Trade URL saved! The streamer will send your skin soon 🎁",
+  },
 };
 
 /** Build the !help reply: short, theme-aware command list. Channel-scoped
@@ -127,12 +160,10 @@ const HELP_DESCRIPTIONS: Record<string, string> = {
   "!giveaway":  "giveaway status",
   "!redeem":    "coins → entries",
   "!coins":     "coin balance",
-  "!points":    "coin balance",
-  "!hoard":     "coin balance",
   "!steal":     "steal coins @user",
   "!goblin":    "summon the goblin",
-  "!skin":      "summon the goblin",
-  "!feedgoblin":"feed the goblin",
+  "!skin":      "summon the bot",
+  "!feed":      "feed the goblin",
   "!case":      "open a case",
   "!tradeurl":  "submit trade URL",
 };
@@ -309,15 +340,6 @@ function setCooldown(channel: string, username: string, command: string): void {
   COMMAND_COOLDOWNS.get(command)!.set(key, Date.now());
 }
 
-/**
- * Send a private reply visible only to `username`.
- * Uses Twitch's /w chat command — the standard approach for non-verified bots.
- * Falls back gracefully if whispers are unavailable on this account.
- */
-function whisper(channel: string, username: string, message: string): void {
-  void client?.say(channel, `/w ${username} ${message}`);
-}
-
 async function logCommand(command: string, username: string, channel: string) {
   try {
     await db.insert(commandLogsTable).values({ command, username, channel });
@@ -370,10 +392,16 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
   }
 
   // Built-in dispatch + per-channel enable/disable check. Resolving to the
-  // canonical name first so toggling "!hoard" off also disables "!stash"
-  // in the same channel (aliases share the toggle, as before).
+  // canonical name first so aliases share the toggle with their canonical.
   if (!(command in BUILT_IN_COMMANDS)) return;
   const canonical = BUILT_IN_COMMANDS[command]?.aliasOf ?? command;
+
+  // Theme runtime gate: goblin-only commands don't fire on CS2 channels
+  // and vice versa. Currently only affects `buildHelpCommandList` — this
+  // check ensures the handler itself is also silenced on the wrong theme.
+  const cmdTheme = BUILT_IN_COMMANDS[canonical]?.theme;
+  if (cmdTheme && cmdTheme !== "both" && cmdTheme !== channelTheme) return;
+
   const enabled = await getToggleFor(channelKey, canonical, true);
   if (!enabled) return;
   if (isOnCooldown(channel, username, command)) return;
@@ -388,6 +416,19 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     if (command === "!loot") {
       const ch = channel.replace(/^#/, "");
       const luckActive = await hasActiveBuff(ch, username, "luck");
+
+      // ~25% miss chance — luck buff bypasses the miss. Keeps the economy
+      // from inflating too fast and gives the luck buff a meaningful upside.
+      const LOOT_MISS_CHANCE = 0.25;
+      if (!luckActive && Math.random() < LOOT_MISS_CHANCE) {
+        const customMiss = await getCustomResponseFor(ch, "!loot");
+        const missMsg = customMiss
+          ? renderTemplate(customMiss, { user: `@${username}` })
+          : formatMessage(pickRandom(phrases.lootMiss), { user: `@${username}` });
+        void client?.say(channel, missMsg);
+        return;
+      }
+
       const settings = await getChannelSettings(ch);
       const loot = rollLootDrop({
         luckBuffActive: luckActive,
@@ -403,7 +444,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const flavor = pickRandom(phrases.lootResponses[loot.rarity]);
 
       if (!result.ok) {
-        whisper(channel, username, inventoryFullMessage(username));
+        void client?.say(channel, inventoryFullMessage(username));
         return;
       }
 
@@ -430,7 +471,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const ch = channel.replace(/^#/, "");
       const items = await listInventory(ch, username);
       if (items.length === 0) {
-        whisper(channel, username, `🎒 Pouch is empty — type !loot to grab something!`);
+        void client?.say(channel, `🎒 @${username}: Pouch is empty — type !loot to grab something!`);
       } else {
         const lines = items.map((it, i) => {
           const e = getRarityEmoji(it.rarity);
@@ -440,7 +481,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
           }
           return `[${i + 1}]${e}${it.item} ${it.coinValue}🪙 !sell ${i + 1}`;
         });
-        whisper(channel, username, `🎒 [${items.length}/${INVENTORY_CAP}]: ${lines.join(" · ")}`);
+        void client?.say(channel, `🎒 @${username} [${items.length}/${INVENTORY_CAP}]: ${lines.join(" · ")}`);
       }
     }
 
@@ -448,7 +489,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const ch = channel.replace(/^#/, "");
       const items = await listInventory(ch, username);
       if (items.length === 0) {
-        whisper(channel, username, `🎒 Nothing to sell — pouch is empty!`);
+        void client?.say(channel, `🎒 @${username}: Nothing to sell — pouch is empty!`);
         return;
       }
       const arg = (parts[1] ?? "").toLowerCase();
@@ -458,13 +499,13 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (arg === "all") {
         targetItems = items.filter((i) => i.kind === "item");
         if (targetItems.length === 0) {
-          whisper(channel, username, `🧪 All items are buffs — !use <slot> to activate or !sell <slot> to dump one.`);
+          void client?.say(channel, `🧪 @${username}: All items are buffs — !use <slot> to activate or !sell <slot> to dump one.`);
           return;
         }
       } else {
         const slot = Number.parseInt(arg, 10);
         if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
-          whisper(channel, username, `!sell 1–${items.length} or !sell all`);
+          void client?.say(channel, `@${username}: !sell 1–${items.length} or !sell all`);
           return;
         }
         targetItems = [items[slot - 1]!];
@@ -479,7 +520,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         }
       }
       if (soldCount === 0) {
-        whisper(channel, username, `Sale failed — check !inventory and retry.`);
+        void client?.say(channel, `@${username}: Sale failed — check !inventory and retry.`);
         return;
       }
       const summary = soldCount === 1 ? soldNames[0] : `${soldCount} items`;
@@ -491,16 +532,16 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const items = await listInventory(ch, username);
       const slot = Number.parseInt(parts[1] ?? "", 10);
       if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
-        whisper(channel, username, `!use 1–${items.length || INVENTORY_CAP} — buffs only.`);
+        void client?.say(channel, `@${username}: !use 1–${items.length || INVENTORY_CAP} — buffs only.`);
         return;
       }
       const target = items[slot - 1]!;
       const r = await useInventoryItem({ channel: ch, username, itemId: target.id });
       if (!r.ok) {
         if (r.reason === "not_buff") {
-          whisper(channel, username, `${target.item} isn't a buff — !sell ${slot} for ${target.coinValue}🪙 instead.`);
+          void client?.say(channel, `@${username}: ${target.item} isn't a buff — !sell ${slot} for ${target.coinValue}🪙 instead.`);
         } else {
-          whisper(channel, username, `Couldn't activate that item.`);
+          void client?.say(channel, `@${username}: Couldn't activate that item.`);
         }
         return;
       }
@@ -520,7 +561,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .limit(1);
 
       if (!active) {
-        whisper(channel, username, phrases.enterNoGiveaway(username));
+        void client?.say(channel, phrases.enterNoGiveaway(username));
         return;
       }
 
@@ -529,7 +570,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
       const gate = await checkGating(active as Gateable, tags, channel);
       if (!gate.allowed) {
-        whisper(channel, username, gate.reason ?? "You're not eligible to enter.");
+        void client?.say(channel, gate.reason ?? `@${username}: You're not eligible to enter.`);
         return;
       }
 
@@ -545,7 +586,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .limit(1);
 
       if (existing) {
-        whisper(channel, username, phrases.enterAlreadyIn(username));
+        void client?.say(channel, phrases.enterAlreadyIn(username));
         return;
       }
 
@@ -566,7 +607,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
       if (inserted.length === 0) {
         // Concurrent insert won the race — treat as "already in", do not burn buff.
-        whisper(channel, username, phrases.enterAlreadyIn(username));
+        void client?.say(channel, phrases.enterAlreadyIn(username));
         return;
       }
 
@@ -585,8 +626,8 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const custom = await getCustomResponseFor(ch, "!help");
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}`, commands: list, theme: channelTheme })
-        : `📜 Commands: ${list}`;
-      whisper(channel, username, reply);
+        : `📜 @${username}: ${list}`;
+      void client?.say(channel, reply);
     }
 
     if (command === "!goblin" || command === "!skin") {
@@ -612,22 +653,9 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       void client?.say(channel, reply);
     }
 
-    if (command === "!hoard" || command === "!stash") {
+    if (command === "!feed" || command === "!case") {
       const ch = channel.replace(/^#/, "");
-      const { balance, earned } = await getPointsBalance(username, ch);
-      const custom = await getCustomResponseFor(ch, "!hoard");
-      if (custom) {
-        whisper(channel, username, renderTemplate(custom, { user: `@${username}`, balance, earned }));
-      } else if (earned === 0) {
-        whisper(channel, username, phrases.hoardEmpty(username));
-      } else {
-        whisper(channel, username, `🪙 ${balance}🪙 in your hoard · ${earned} earned all-time`);
-      }
-    }
-
-    if (command === "!feedgoblin" || command === "!case") {
-      const ch = channel.replace(/^#/, "");
-      const custom = await getCustomResponseFor(ch, "!feedgoblin");
+      const custom = await getCustomResponseFor(ch, "!feed");
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}` })
         : pickRandom(phrases.feedResponses);
@@ -637,7 +665,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
     if (command === "!tradeurl") {
       const tradeUrl = parts[1] ?? null;
       if (!tradeUrl || !tradeUrl.includes("steamcommunity.com/tradeoffer/new/")) {
-        whisper(channel, username, `!tradeurl <Steam trade URL> — find yours at steamcommunity.com/id/YOU/tradeoffers/privacy`);
+        void client?.say(channel, `@${username}: !tradeurl <Steam trade URL> — find yours at steamcommunity.com/id/YOU/tradeoffers/privacy`);
         return;
       }
       const [pending] = await db
@@ -652,32 +680,37 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .limit(1);
 
       if (!pending) {
-        whisper(channel, username, `No pending win found — contact the streamer if this seems wrong.`);
+        void client?.say(channel, `@${username}: No pending win found — contact the streamer if this seems wrong.`);
         return;
       }
       await db
         .update(tradeFulfillmentsTable)
         .set({ steamTradeUrl: tradeUrl })
         .where(eq(tradeFulfillmentsTable.id, pending.id));
-      whisper(channel, username, `✅ Trade URL saved! The streamer will send your skin soon 🎁`);
+      const ch = channel.replace(/^#/, "");
+      const custom = await getCustomResponseFor(ch, "!tradeurl");
+      const reply = custom
+        ? renderTemplate(custom, { user: `@${username}` })
+        : `✅ @${username}: Trade URL saved! The streamer will send your skin soon 🎁`;
+      void client?.say(channel, reply);
     }
 
-    if (command === "!points" || command === "!coins") {
+    if (command === "!coins") {
       const ch = channel.replace(/^#/, "");
       const { balance } = await getPointsBalance(username, ch);
       const entries = Math.floor(balance / REDEEM_COST_PER_ENTRY);
-      const custom = await getCustomResponseFor(ch, "!points");
+      const custom = await getCustomResponseFor(ch, "!coins");
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}`, balance, entries, cost: REDEEM_COST_PER_ENTRY })
-        : `💰 ${balance}🪙 · ${entries > 0 ? `!redeem for ${entries} extra ${entries === 1 ? "entry" : "entries"}` : `earn more by chatting!`}`;
-      whisper(channel, username, reply);
+        : `💰 @${username}: ${balance}🪙 · ${entries > 0 ? `!redeem for ${entries} extra ${entries === 1 ? "entry" : "entries"}` : `earn more by chatting!`}`;
+      void client?.say(channel, reply);
     }
 
     if (command === "!redeem") {
       const ch = channel.replace(/^#/, "");
       const settings = await getChannelSettings(ch);
       if (!settings.coinRedemptionEnabled) {
-        whisper(channel, username, `🎟️ Coin redemption is off right now.`);
+        void client?.say(channel, `🎟️ @${username}: Coin redemption is off right now.`);
         return;
       }
       const requested = Math.max(1, Math.floor(Number(parts[1] ?? 1)));
@@ -690,14 +723,14 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, ch)))
         .limit(1);
       if (!active) {
-        whisper(channel, username, `🎟️ No active giveaway to redeem into.`);
+        void client?.say(channel, `🎟️ @${username}: No active giveaway to redeem into.`);
         return;
       }
 
       // Gate redemption the same as a normal !enter (cheap fail-fast before the txn).
       const gate = await checkGating(active as Gateable, tags, channel);
       if (!gate.allowed) {
-        whisper(channel, username, gate.reason ?? "You're not eligible to redeem.");
+        void client?.say(channel, gate.reason ?? `@${username}: You're not eligible to redeem.`);
         return;
       }
 
@@ -709,9 +742,9 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (!result.ok) {
         if (result.code === "insufficient" && typeof result.balance === "number") {
           const affordable = Math.floor(result.balance / REDEEM_COST_PER_ENTRY);
-          whisper(channel, username, `🎟️ Not enough coins — you can afford ${affordable} extra ${affordable === 1 ? "entry" : "entries"} right now.`);
+          void client?.say(channel, `🎟️ @${username}: Not enough coins — you can afford ${affordable} extra ${affordable === 1 ? "entry" : "entries"} right now.`);
         } else {
-          whisper(channel, username, result.message);
+          void client?.say(channel, `@${username}: ${result.message}`);
         }
         return;
       }

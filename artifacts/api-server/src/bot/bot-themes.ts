@@ -25,6 +25,7 @@ export interface ThemePhrases {
     epic: string[];
     legendary: string[];
   };
+  lootMiss: string[];
   enterResponses: string[];
   giveawayStart: string[];
   giveawayEnd: string[];
@@ -66,6 +67,13 @@ export const THEME_META: Record<BotTheme, ThemeMeta> = {
 
 const GOBLIN_THEME: ThemePhrases = {
   lootResponses: LOOT_RESPONSES,
+  lootMiss: [
+    "pffff {user} went rummaging and found NOTHING!! Heheheh!!",
+    "HAHAHAHA!! {user} dug through da hoard and came up empty-handed!!",
+    "nope nope nope!! Da goblin hid all da loot before {user} arrived!! Hehehe!!",
+    "🕳️ {user} dug a hole and found... dirt. Classic goblin tricks.",
+    "SCREEE!! Goblin already TOOK everything before {user} showed up!!",
+  ],
   enterResponses: ENTER_RESPONSES,
   giveawayStart: GIVEAWAY_START,
   giveawayEnd: GIVEAWAY_END,
@@ -91,6 +99,13 @@ const GOBLIN_THEME: ThemePhrases = {
 };
 
 const CS2_THEME: ThemePhrases = {
+  lootMiss: [
+    "💸 {user} opened a case — it was empty. Bot already looted it.",
+    "❌ {user} missed the drop window. Float gods giveth, float gods taketh.",
+    "🔒 RNG said no for {user}. The market is brutal today.",
+    "💀 {user} checked the case and got a Factory New... disappointment.",
+    "No drop for {user}. It's giving Consumer Grade odds out here.",
+  ],
   lootResponses: {
     common: [
       "just a Consumer Grade sticker. No inspect animation for you. sadge",
