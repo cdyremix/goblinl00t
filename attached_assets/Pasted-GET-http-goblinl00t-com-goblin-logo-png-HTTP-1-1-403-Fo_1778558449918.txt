@@ -1,0 +1,37 @@
+GET
+http://goblinl00t.com/goblin-logo.png
+[HTTP/1.1 403 Forbidden 26ms]
+
+Suffixed cookie failed due to can't access property "digest", t is undefined (secure-context: false, url: http://goblinl00t.com/) clerk.browser.js:18:146122
+The script from “http://goblinl00t.com/vendors_clerk.browser_730cc2_6.10.1.js” was loaded even though its MIME type (“text/html”) is not a valid JavaScript MIME type. goblinl00t.com
+Uncaught SyntaxError: expected expression, got '<' vendors_clerk.browser_730cc2_6.10.1.js:1:1
+s.f.j@http://goblinl00t.com/clerk.browser.js:1:11569
+s.e/<@http://goblinl00t.com/clerk.browser.js:1:9558
+s.e@http://goblinl00t.com/clerk.browser.js:1:9537
+nT@http://goblinl00t.com/clerk.browser.js:18:146175
+async*create@http://goblinl00t.com/clerk.browser.js:18:146661
+#em@http://goblinl00t.com/clerk.browser.js:18:205945
+load@http://goblinl00t.com/clerk.browser.js:18:166894
+getEntryChunks@http://goblinl00t.com/assets/index-CG6RaH64.js:23:40457
+async*UN@http://goblinl00t.com/assets/index-CG6RaH64.js:23:38116
+getOrCreateInstance@http://goblinl00t.com/assets/index-CG6RaH64.js:23:38531
+_3@http://goblinl00t.com/assets/index-CG6RaH64.js:23:43297
+N3@http://goblinl00t.com/assets/index-CG6RaH64.js:23:43064
+Qh@http://goblinl00t.com/assets/index-CG6RaH64.js:8:34174
+hm@http://goblinl00t.com/assets/index-CG6RaH64.js:8:62399
+Mb@http://goblinl00t.com/assets/index-CG6RaH64.js:8:72922
+i0@http://goblinl00t.com/assets/index-CG6RaH64.js:8:106986
+e5@http://goblinl00t.com/assets/index-CG6RaH64.js:8:106049
+Lm@http://goblinl00t.com/assets/index-CG6RaH64.js:8:105877
+t0@http://goblinl00t.com/assets/index-CG6RaH64.js:8:102630
+v0@http://goblinl00t.com/assets/index-CG6RaH64.js:8:114438
+se@http://goblinl00t.com/assets/index-CG6RaH64.js:1:3842
+EventHandlerNonNull*W5/<@http://goblinl00t.com/assets/index-CG6RaH64.js:1:4231
+W5@http://goblinl00t.com/assets/index-CG6RaH64.js:1:5801
+Z5@http://goblinl00t.com/assets/index-CG6RaH64.js:1:5859
+eA@http://goblinl00t.com/assets/index-CG6RaH64.js:1:17450
+tA@http://goblinl00t.com/assets/index-CG6RaH64.js:9:34620
+@http://goblinl00t.com/assets/index-CG6RaH64.js:9:34643
+index-CG6RaH64.js:23:40625
+The script from “http://goblinl00t.com/cookieSuffix_clerk.browser_730cc2_6.10.1.js” was loaded even though its MIME type (“text/html”) is not a valid JavaScript MIME type. goblinl00t.com
+Uncaught SyntaxError: expected expression, got '<' cookieSuffix_clerk.browser_730cc2_6.10.1.js:1:1
