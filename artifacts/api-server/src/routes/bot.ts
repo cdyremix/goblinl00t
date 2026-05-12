@@ -9,6 +9,7 @@ router.get("/bot/status", (_req, res) => {
   const data = GetBotStatusResponse.parse({
     connected: state.connected,
     channel: state.channel,
+    channels: state.channels,
     username: state.username,
     uptime: state.startedAt ? Math.floor((Date.now() - state.startedAt.getTime()) / 1000) : null,
     lastMessageAt: state.lastMessageAt?.toISOString() ?? null,
@@ -21,6 +22,7 @@ router.post("/bot/restart", async (req, res) => {
   const data = RestartBotResponse.parse({
     connected: state.connected,
     channel: state.channel,
+    channels: state.channels,
     username: state.username,
     uptime: state.startedAt ? Math.floor((Date.now() - state.startedAt.getTime()) / 1000) : null,
     lastMessageAt: state.lastMessageAt?.toISOString() ?? null,

@@ -21,6 +21,7 @@ export const HealthCheckResponse = zod.object({
 export const GetBotStatusResponse = zod.object({
   connected: zod.boolean(),
   channel: zod.string(),
+  channels: zod.array(zod.string()),
   username: zod.string(),
   uptime: zod.number().nullable(),
   lastMessageAt: zod.string().nullable(),
@@ -32,6 +33,7 @@ export const GetBotStatusResponse = zod.object({
 export const RestartBotResponse = zod.object({
   connected: zod.boolean(),
   channel: zod.string(),
+  channels: zod.array(zod.string()),
   username: zod.string(),
   uptime: zod.number().nullable(),
   lastMessageAt: zod.string().nullable(),

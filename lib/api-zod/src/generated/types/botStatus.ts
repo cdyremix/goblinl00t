@@ -9,6 +9,7 @@
 export interface BotStatus {
   connected: boolean;
   channel: string;
+  channels: string[];
   username: string;
   /** @nullable */
   uptime: number | null;

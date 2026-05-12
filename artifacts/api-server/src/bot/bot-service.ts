@@ -296,11 +296,15 @@ async function logCommand(command: string, username: string, channel: string) {
 }
 
 async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: string) {
-  // Deduplicate by Twitch message ID — belt-and-suspenders on top of the
-  // generation counter. Guards against any scenario (stale client, tmi.js
-  // internal reconnect, etc.) that could deliver the same message twice.
-  const msgId = tags["id"];
-  if (msgId && markSeen(msgId)) return;
+  // Deduplicate every incoming message. Use the Twitch message UUID when
+  // available; fall back to a content fingerprint so the guard still fires
+  // even if this tmi.js build doesn't surface tags.id. The `if (msgId &&…)`
+  // form was silently skipping the check when id was undefined — replaced
+  // with an unconditional markSeen call using a reliable key.
+  const dedupKey =
+    tags["id"] ??
+    `${channel}:${(tags.username ?? "").toLowerCase()}:${message.trim()}`;
+  if (markSeen(dedupKey)) return;
 
   const username = (tags.username ?? tags["display-name"] ?? "unknown").toLowerCase();
   trackChatter(channel, username);

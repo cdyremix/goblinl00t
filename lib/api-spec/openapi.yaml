@@ -1023,6 +1023,10 @@ components:
           type: boolean
         channel:
           type: string
+        channels:
+          type: array
+          items:
+            type: string
         username:
           type: string
         uptime:
@@ -1032,6 +1036,7 @@ components:
       required:
         - connected
         - channel
+        - channels
         - username
         - uptime
         - lastMessageAt
