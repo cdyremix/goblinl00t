@@ -63,7 +63,7 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
     theme: "both",
     customizable: true,
     availableTokens: ["user", "commands", "theme"],
-    defaultResponse: "{user}: Try {commands} — full guide in the dashboard.",
+    defaultResponse: "📜 {user}: {commands}",
   },
   "!goblin":     {
     description: "Summon the bot for a themed taunt (alias: !skin)",
@@ -87,7 +87,7 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
     theme: "goblin",
     customizable: true,
     availableTokens: ["user", "balance", "earned"],
-    defaultResponse: "🪙 {user}: {balance} coins in your hoard ({earned} earned all-time).",
+    defaultResponse: "🪙 {user}: {balance}🪙 in your hoard · {earned} earned all-time",
   },
   "!feedgoblin": {
     description: "Feed the bot a snack (alias: !case)",
@@ -110,24 +110,46 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
     theme: "both",
     customizable: true,
     availableTokens: ["user", "balance", "entries", "cost"],
-    defaultResponse: "💰 {user}: You have {balance} coins (worth {entries} extra giveaway entries at {cost} coins each).",
+    defaultResponse: "💰 {user}: {balance}🪙 · !redeem for {entries} extra entries",
   },
   "!coins":      { description: "Alias of !points", cooldownSeconds: 10, theme: "both", aliasOf: "!points" },
 };
 
 /** Build the !help reply: short, theme-aware command list. Channel-scoped
  *  so per-streamer disabled commands don't show up in another channel's reply. */
+// Short per-command descriptions shown in the !help response.
+const HELP_DESCRIPTIONS: Record<string, string> = {
+  "!loot":      "grab a random item",
+  "!inventory": "see your items",
+  "!sell":      "sell <slot> or all",
+  "!use":       "activate a buff",
+  "!enter":     "join the giveaway",
+  "!giveaway":  "giveaway status",
+  "!redeem":    "coins → entries",
+  "!coins":     "coin balance",
+  "!points":    "coin balance",
+  "!hoard":     "coin balance",
+  "!steal":     "steal coins @user",
+  "!goblin":    "summon the goblin",
+  "!skin":      "summon the goblin",
+  "!feedgoblin":"feed the goblin",
+  "!case":      "open a case",
+  "!tradeurl":  "submit trade URL",
+};
+
 async function buildHelpCommandList(channel: string, activeTheme: BotTheme): Promise<string> {
   const toggles = await getAllToggles(channel);
-  const enabledCanonicals = Object.entries(BUILT_IN_COMMANDS)
+  const entries = Object.entries(BUILT_IN_COMMANDS)
     .filter(([name, meta]) => {
       if (meta.aliasOf) return false;
       if (meta.theme !== "both" && meta.theme !== activeTheme) return false;
       return typeof toggles[name] === "boolean" ? toggles[name]! : true;
     })
-    .map(([name]) => name);
-  // Cap to keep chat short; the dashboard /help has the full table.
-  return enabledCanonicals.slice(0, 10).join(" ");
+    .map(([name]) => {
+      const desc = HELP_DESCRIPTIONS[name];
+      return desc ? `${name} (${desc})` : name;
+    });
+  return entries.join(" · ");
 }
 
 /** Reverse map canonical → aliases. */
@@ -381,16 +403,16 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         channel: ch, username, item: loot.item, rarity: loot.rarity, points: 0,
       });
 
-      const slotMsg = `slot ${result.slot}/${INVENTORY_CAP}`;
+      const slotTag = `[${result.slot}/${INVENTORY_CAP}]`;
       if (loot.kind === "buff") {
         void client?.say(
           channel,
-          `${emoji} ${username} found a [BUFF] ${loot.item}! (${slotMsg}) — !use ${result.slot} to activate (${loot.flavor}, ${loot.charges} charges) or !sell ${result.slot} for ${loot.coinValue} coins.`
+          `${emoji} @${username} found [BUFF] ${loot.item}! ${slotTag} · !use ${result.slot} (${loot.charges}×) · !sell ${result.slot} for ${loot.coinValue}🪙`
         );
       } else {
         void client?.say(
           channel,
-          `${emoji} ${username} found [${loot.rarity.toUpperCase()}] ${loot.item}! (${slotMsg}) — !sell ${result.slot} for ${loot.coinValue} coins. ${flavor}`
+          `${emoji} @${username} snagged [${loot.rarity.toUpperCase()}] ${loot.item}! ${slotTag} · !sell ${result.slot} for ${loot.coinValue}🪙 · ${flavor}`
         );
       }
     }
@@ -399,17 +421,17 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const ch = channel.replace(/^#/, "");
       const items = await listInventory(ch, username);
       if (items.length === 0) {
-        void client?.say(channel, `🎒 ${username}: Your goblin pouch is empty. Try !loot to grab something!`);
+        void client?.say(channel, `🎒 @${username}: Pouch is empty — type !loot to grab something!`);
       } else {
         const lines = items.map((it, i) => {
           const e = getRarityEmoji(it.rarity);
           if (it.kind === "buff") {
-            const status = it.isActive ? `ACTIVE×${it.chargesRemaining}` : `${it.chargesRemaining} charges`;
-            return `[${i + 1}] ${e} ${it.item} (BUFF, ${status}, sell ${it.coinValue})`;
+            const status = it.isActive ? `ACTIVE·${it.chargesRemaining}×` : `${it.chargesRemaining}×`;
+            return `[${i + 1}]${e}${it.item} BUFF(${status}) !use ${i + 1}`;
           }
-          return `[${i + 1}] ${e} ${it.item} (${it.coinValue} coins)`;
+          return `[${i + 1}]${e}${it.item} ${it.coinValue}🪙 !sell ${i + 1}`;
         });
-        void client?.say(channel, `🎒 ${username} (${items.length}/${INVENTORY_CAP}): ${lines.join(" • ")}`);
+        void client?.say(channel, `🎒 @${username} [${items.length}/${INVENTORY_CAP}]: ${lines.join(" · ")}`);
       }
     }
 
@@ -417,7 +439,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const ch = channel.replace(/^#/, "");
       const items = await listInventory(ch, username);
       if (items.length === 0) {
-        void client?.say(channel, `${username}: Nothing to sell — your pouch is empty!`);
+        void client?.say(channel, `🎒 @${username}: Nothing to sell — pouch is empty!`);
         return;
       }
       const arg = (parts[1] ?? "").toLowerCase();
@@ -427,13 +449,13 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (arg === "all") {
         targetItems = items.filter((i) => i.kind === "item");
         if (targetItems.length === 0) {
-          void client?.say(channel, `${username}: All your items are buffs — !use them or !sell <slot> to dump one.`);
+          void client?.say(channel, `🧪 @${username}: All items are buffs — !use <slot> to activate or !sell <slot> to dump one.`);
           return;
         }
       } else {
         const slot = Number.parseInt(arg, 10);
         if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
-          void client?.say(channel, `${username}: Try !sell <slot 1-${items.length}> or !sell all`);
+          void client?.say(channel, `@${username}: !sell 1–${items.length} or !sell all`);
           return;
         }
         targetItems = [items[slot - 1]!];
@@ -448,11 +470,11 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         }
       }
       if (soldCount === 0) {
-        void client?.say(channel, `${username}: Sale failed — try !inventory and try again.`);
+        void client?.say(channel, `@${username}: Sale failed — check !inventory and retry.`);
         return;
       }
       const summary = soldCount === 1 ? soldNames[0] : `${soldCount} items`;
-      void client?.say(channel, `💰 ${username} sold ${summary} for ${totalCoins} coins!`);
+      void client?.say(channel, `💰 @${username} sold ${summary} for ${totalCoins}🪙!`);
     }
 
     if (command === "!use") {
@@ -460,20 +482,21 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const items = await listInventory(ch, username);
       const slot = Number.parseInt(parts[1] ?? "", 10);
       if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
-        void client?.say(channel, `${username}: Try !use <slot 1-${items.length || INVENTORY_CAP}> — buffs only.`);
+        void client?.say(channel, `@${username}: !use 1–${items.length || INVENTORY_CAP} — buffs only.`);
         return;
       }
       const target = items[slot - 1]!;
       const r = await useInventoryItem({ channel: ch, username, itemId: target.id });
       if (!r.ok) {
         if (r.reason === "not_buff") {
-          void client?.say(channel, `${username}: ${target.item} isn't a buff — !sell ${slot} for ${target.coinValue} coins instead.`);
+          void client?.say(channel, `@${username}: ${target.item} isn't a buff — !sell ${slot} for ${target.coinValue}🪙 instead.`);
         } else {
-          void client?.say(channel, `${username}: Couldn't activate that item.`);
+          void client?.say(channel, `@${username}: Couldn't activate that item.`);
         }
         return;
       }
-      void client?.say(channel, `✨ ${username} activated ${r.item!.item}! (${r.item!.chargesRemaining} charges remaining)`);
+      const charges = r.item!.chargesRemaining;
+      void client?.say(channel, `✨ @${username} activated ${r.item!.item}! (${charges} charge${charges === 1 ? "" : "s"} left)`);
     }
 
     if (command === "!enter") {
@@ -543,7 +566,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       }
 
       const phrase = formatMessage(pickRandom(phrases.enterResponses), { user: username });
-      const suffix = tickets > 1 ? ` 🧲 (Hoard Magnet: +1 ticket!)` : "";
+      const suffix = tickets > 1 ? ` 🧲 +1 bonus ticket!` : "";
       void client?.say(channel, `${phrase}${suffix}`);
     }
 
@@ -553,7 +576,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const custom = await getCustomResponseFor(ch, "!help");
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}`, commands: list, theme: channelTheme })
-        : `${username}: ${list} — full guide in the dashboard.`;
+        : `📜 @${username}: ${list}`;
       void client?.say(channel, reply);
     }
 
@@ -589,7 +612,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       } else if (earned === 0) {
         void client?.say(channel, phrases.hoardEmpty(username));
       } else {
-        void client?.say(channel, `🪙 ${username}: ${balance} coins in your hoard (${earned} earned all-time).`);
+        void client?.say(channel, `🪙 @${username}: ${balance}🪙 in your hoard · ${earned} earned all-time`);
       }
     }
 
@@ -607,7 +630,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (!tradeUrl || !tradeUrl.includes("steamcommunity.com/tradeoffer/new/")) {
         void client?.say(
           channel,
-          `${username}: Please provide your Steam trade URL — !tradeurl https://steamcommunity.com/tradeoffer/new/?partner=...`
+          `@${username}: !tradeurl <Steam trade URL> — find yours at steamcommunity.com/id/YOU/tradeoffers/privacy`
         );
         return;
       }
@@ -623,7 +646,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .limit(1);
 
       if (!pending) {
-        void client?.say(channel, `${username}: No pending giveaway win found for your account! Contact the streamer if you think this is wrong.`);
+        void client?.say(channel, `@${username}: No pending win found — contact the streamer if this seems wrong.`);
         return;
       }
       await db
@@ -640,7 +663,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const custom = await getCustomResponseFor(ch, "!points");
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}`, balance, entries, cost: REDEEM_COST_PER_ENTRY })
-        : `💰 ${username}: You have ${balance} coins (worth ${entries} extra giveaway ${entries === 1 ? "entry" : "entries"} at ${REDEEM_COST_PER_ENTRY} coins each).`;
+        : `💰 @${username}: ${balance}🪙 · ${entries > 0 ? `!redeem for ${entries} extra ${entries === 1 ? "entry" : "entries"}` : `earn more by chatting!`}`;
       void client?.say(channel, reply);
     }
 
@@ -648,7 +671,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const ch = channel.replace(/^#/, "");
       const settings = await getChannelSettings(ch);
       if (!settings.coinRedemptionEnabled) {
-        void client?.say(channel, `${username}: The goblin isn't trading coins for tickets right now.`);
+        void client?.say(channel, `🎟️ @${username}: Coin redemption is off right now.`);
         return;
       }
       const requested = Math.max(1, Math.floor(Number(parts[1] ?? 1)));
@@ -661,14 +684,14 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, ch)))
         .limit(1);
       if (!active) {
-        void client?.say(channel, `${username}: No active giveaway to redeem into right now.`);
+        void client?.say(channel, `🎟️ @${username}: No active giveaway to redeem into.`);
         return;
       }
 
       // Gate redemption the same as a normal !enter (cheap fail-fast before the txn).
       const gate = await checkGating(active as Gateable, tags, channel);
       if (!gate.allowed) {
-        void client?.say(channel, `${username}: ${gate.reason}`);
+        void client?.say(channel, `@${username}: ${gate.reason}`);
         return;
       }
 
@@ -680,14 +703,14 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (!result.ok) {
         if (result.code === "insufficient" && typeof result.balance === "number") {
           const affordable = Math.floor(result.balance / REDEEM_COST_PER_ENTRY);
-          void client?.say(channel, `${username}: Not enough coins — ${result.message}. You can afford ${affordable} extra ${affordable === 1 ? "entry" : "entries"}.`);
+          void client?.say(channel, `🎟️ @${username}: Not enough coins — you can afford ${affordable} extra ${affordable === 1 ? "entry" : "entries"} right now.`);
         } else {
-          void client?.say(channel, `${username}: ${result.message}`);
+          void client?.say(channel, `@${username}: ${result.message}`);
         }
         return;
       }
 
-      void client?.say(channel, `🎟️ ${username} redeemed ${result.pointsSpent} coins for ${result.ticketsAdded} extra ${result.ticketsAdded === 1 ? "entry" : "entries"}! Balance: ${result.balanceAfter} coins.`);
+      void client?.say(channel, `🎟️ @${username} spent ${result.pointsSpent}🪙 for ${result.ticketsAdded} extra ${result.ticketsAdded === 1 ? "entry" : "entries"}! Balance: ${result.balanceAfter}🪙`);
     }
 
     if (command === "!giveaway") {
@@ -706,7 +729,7 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
         void client?.say(
           channel,
-          `🎁 GIVEAWAY IN PROGRESS!! Prize: ${active.prize} | ${entries.length} entries so far! Type ${active.keyword} to enter!!`
+          `🎁 GIVEAWAY: ${active.prize} · ${entries.length} ${entries.length === 1 ? "entry" : "entries"} · Type ${active.keyword} to join!`
         );
       } else {
         void client?.say(channel, phrases.giveawayNone);

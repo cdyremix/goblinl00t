@@ -386,7 +386,7 @@ export async function hasActiveBuff(
 }
 
 export function inventoryFullMessage(username: string): string {
-  return `🎒 ${username}: Your goblin pouch is FULL (${INVENTORY_CAP}/${INVENTORY_CAP}). !sell something or !use a buff before grabbing more loot!`;
+  return `🎒 @${username}: Pouch is FULL [${INVENTORY_CAP}/${INVENTORY_CAP}] — !sell <slot> or !use <slot> to make room!`;
 }
 
 export { INVENTORY_CAP };
