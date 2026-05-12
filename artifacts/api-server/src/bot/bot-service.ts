@@ -236,6 +236,16 @@ const COMMAND_COOLDOWN_SECONDS: Record<string, number> = Object.fromEntries(
 // silently shared on/off state across every streamer the bot served.
 
 let client: tmi.Client | null = null;
+/**
+ * Incremented every time startBot() creates a new tmi.Client. The message
+ * handler captures this value at registration time and bails out if the
+ * module-level counter has moved on — i.e. the old client survived a failed
+ * disconnect() and is still delivering messages alongside the new one.
+ * Without this guard every chat command fires twice after a bot restart
+ * because both the stale and the fresh client call handleMessage().
+ */
+let clientGeneration = 0;
+
 let botState: BotState = {
   connected: false,
   channel: process.env["TWITCH_CHANNEL"] ?? "goblinl00t",
@@ -919,6 +929,10 @@ export async function startBot(): Promise<void> {
       try { await client.disconnect(); } catch { /* ignore */ }
     }
 
+    // Claim this generation AFTER disconnect so any in-flight messages on
+    // the old socket are already drained (or will fail the stale-gen check).
+    const gen = ++clientGeneration;
+
     client = new tmi.Client({
       options: { debug: false },
       identity: { username, password: token },
@@ -926,6 +940,9 @@ export async function startBot(): Promise<void> {
     });
 
     client.on("message", (ch, tags, message) => {
+      // Bail out if a newer client has since been created — this handler
+      // belongs to a stale connection that survived a failed disconnect().
+      if (clientGeneration !== gen) return;
       void handleMessage(ch, tags, message);
     });
 
