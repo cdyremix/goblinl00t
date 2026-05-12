@@ -85,6 +85,7 @@ async function fireDrop(channel: string, target: string): Promise<void> {
     targetUsername: target,
     amount,
   });
+  saySink?.(`#${channel}`, `👺💰 The goblin appears, hands ${target} a fistful of ${amount} coins, and cackles into the shadows!`);
 }
 
 async function fireSteal(channel: string, target: string): Promise<void> {
@@ -108,6 +109,7 @@ async function fireSteal(channel: string, target: string): Promise<void> {
     targetUsername: target,
     amount,
   });
+  saySink?.(`#${channel}`, `👺🪙 The goblin SNATCHES ${amount} coins from ${target} and disappears! "MINE!"`);
 }
 
 async function tick(): Promise<void> {
