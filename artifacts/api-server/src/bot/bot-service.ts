@@ -977,7 +977,11 @@ export async function startBot(): Promise<void> {
       // landed during the (async) connect — e.g. a Twitch-link callback
       // calling joinChannel() while we were still negotiating. Without
       // this merge those joins would be silently clobbered.
-      const merged = Array.from(new Set([...channels, ...botState.channels]));
+      // Always normalise every entry so stale `#channel` values from a
+      // previous run can't propagate and cause double-hash say() calls.
+      const merged = Array.from(
+        new Set([...channels, ...botState.channels].map(normalizeChannel))
+      );
       botState = { connected: true, channel: primaryChannel, channels: merged, username, startedAt: new Date(), lastMessageAt: null };
       logger.info({ channels: merged, username }, "Bot connected to Twitch!");
     });
