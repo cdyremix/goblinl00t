@@ -1,0 +1,77 @@
+goblin@ip-172-26-7-141:/opt/goblinl00t$ git pull origin main && ./deploy/aws-ec2/release.sh
+remote: Enumerating objects: 13, done.
+remote: Counting objects: 100% (13/13), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 7 (delta 5), reused 7 (delta 5), pack-reused 0 (from 0)
+Unpacking objects: 100% (7/7), 1.24 KiB | 97.00 KiB/s, done.
+From github.com:cdyremix/goblinl00t
+ * branch            main       -> FETCH_HEAD
+   299ebc4..b5f728d  main       -> origin/main
+Updating 299ebc4..b5f728d
+Fast-forward
+ artifacts/api-server/src/bot/bot-service.ts | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+==> [1/5] Installing dependencies
+Scope: all 9 workspace projects
+Already up to date
+Done in 549ms using pnpm v11.1.0
+==> [2/5] Building api-server + dashboard
+$ tsc --build
+$ node ./build.mjs
+
+  dist/index.mjs                       4.1mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.0kb
+  dist/pino-pretty.mjs               114.6kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                   6.7mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.9kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+
+⚡ Done in 1021ms
+$ vite build --config vite.config.ts
+vite v7.3.2 building client environment for production...
+src/components/ui/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/collapsible.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+src/components/ui/dropdown-menu.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+✓ 1974 modules transformed.
+dist/public/index.html                   1.78 kB │ gzip:   0.73 kB
+dist/public/assets/index-12s8rNE7.css  183.11 kB │ gzip:  25.67 kB
+dist/public/assets/index-R8cfJr5W.js   896.02 kB │ gzip: 256.87 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 8.14s
+==> [3/5] Swapping dashboard into /opt/goblinl00t/web
+==> [4/5] Syncing DB schema (drizzle-kit push)
+$ drizzle-kit push --config ./drizzle.config.ts
+Reading config file '/opt/goblinl00t/lib/db/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+[i] No changes detected
+==> [5/5] Restarting goblin-l00t service
+● goblin-l00t.service - Goblin L00t API + Twitch bot
+     Loaded: loaded (/etc/systemd/system/goblin-l00t.service; enabled; preset: enabled)
+     Active: active (running) since Tue 2026-05-12 06:34:43 UTC; 2s ago
+   Main PID: 1478640 (node)
+      Tasks: 11 (limit: 2209)
+     Memory: 132.6M (peak: 150.4M)
+        CPU: 1.224s
+     CGroup: /system.slice/goblin-l00t.service
+             └─1478640 /usr/bin/node --enable-source-maps /opt/goblinl00t/artifacts/api-server/dist/index.mjs
+
+May 12 06:34:45 ip-172-26-7-141 goblin-l00t[1478640]: Upserting final batch of 1 items
+May 12 06:34:45 ip-172-26-7-141 goblin-l00t[1478640]: Sync complete: 1 items synced
+May 12 06:34:45 ip-172-26-7-141 goblin-l00t[1478640]: Syncing customers
+May 12 06:34:45 ip-172-26-7-141 goblin-l00t[1478640]: Fetching items to sync from Stripe
+May 12 06:34:45 ip-172-26-7-141 goblin-l00t[1478640]: Sync complete: 0 items synced
+
+Deployed. Tail logs: journalctl -u goblin-l00t -f
+goblin@ip-172-26-7-141:/opt/goblinl00t$ curl -s http://localhost:80/api/bot/status | python3 -m json.tool
+Expecting value: line 1 column 1 (char 0)
