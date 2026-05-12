@@ -3,11 +3,13 @@ import {
   useGetStatsOverview,
   useGetRecentLoot,
   useListGiveaways,
+  useRestartBot,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AlertCircle, Crown, Gem, Activity, Users, Zap, Trophy, Coins } from "lucide-react";
+import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ChatUsers } from "@/pages/chat-users";
@@ -24,7 +26,12 @@ import { OnboardingChecklist } from "@/components/onboarding-checklist";
  */
 export function Dashboard() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: botStatus, isLoading: botLoading } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
+  const { data: botStatus, isLoading: botLoading, refetch: refetchBotStatus } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
+  const { mutate: restartBot, isPending: restarting } = useRestartBot({
+    mutation: {
+      onSuccess: () => { void refetchBotStatus(); },
+    },
+  });
 
   const { data: stats, isLoading: statsLoading } = useGetStatsOverview({ range: "stream" });
   const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 10, since: "stream" });
@@ -66,13 +73,27 @@ export function Dashboard() {
                   ONLINE
                 </span>
               ) : (
-                <span className="flex items-center gap-2 text-destructive font-bold tracking-wide" data-testid="status-disconnected">
-                  <AlertCircle className="w-3.5 h-3.5" />
+                <span className="flex items-center gap-2 text-red-500 font-bold tracking-wide" data-testid="status-disconnected">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                  </span>
                   OFFLINE
                 </span>
               )}
             </div>
           </div>
+          {/* Restart Bot button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => restartBot()}
+            disabled={restarting}
+            className="gap-2 rounded-full"
+            data-testid="btn-restart-bot"
+          >
+            <RefreshCw className={`w-4 h-4 ${restarting ? "animate-spin" : ""}`} />
+            {restarting ? "Restarting…" : "Restart Bot"}
+          </Button>
         </div>
       </div>
 

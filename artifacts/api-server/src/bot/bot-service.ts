@@ -225,6 +225,22 @@ export interface BotState {
 
 const COMMAND_COOLDOWNS = new Map<string, Map<string, number>>();
 
+/**
+ * Short-term dedup cache for Twitch message IDs. tmi.js assigns each chat
+ * message a UUID via `tags.id`; if the same ID arrives twice within the TTL
+ * (stale client, tmi.js reconnect, etc.) we silently drop the duplicate.
+ * Entries are pruned when the set grows large enough to avoid a memory leak.
+ */
+const SEEN_MESSAGE_IDS = new Set<string>();
+const SEEN_MESSAGE_TTL_MS = 10_000;
+function markSeen(id: string): boolean {
+  if (SEEN_MESSAGE_IDS.has(id)) return true; // duplicate
+  SEEN_MESSAGE_IDS.add(id);
+  // Evict after TTL — fire-and-forget, no timer leak risk.
+  setTimeout(() => SEEN_MESSAGE_IDS.delete(id), SEEN_MESSAGE_TTL_MS);
+  return false;
+}
+
 const COMMAND_COOLDOWN_SECONDS: Record<string, number> = Object.fromEntries(
   Object.entries(BUILT_IN_COMMANDS).map(([k, v]) => [k, v.cooldownSeconds])
 );
@@ -280,6 +296,12 @@ async function logCommand(command: string, username: string, channel: string) {
 }
 
 async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: string) {
+  // Deduplicate by Twitch message ID — belt-and-suspenders on top of the
+  // generation counter. Guards against any scenario (stale client, tmi.js
+  // internal reconnect, etc.) that could deliver the same message twice.
+  const msgId = tags["id"];
+  if (msgId && markSeen(msgId)) return;
+
   const username = (tags.username ?? tags["display-name"] ?? "unknown").toLowerCase();
   trackChatter(channel, username);
   const msg = message.trim();
