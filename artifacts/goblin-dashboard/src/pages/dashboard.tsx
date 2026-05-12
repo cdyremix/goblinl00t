@@ -51,44 +51,42 @@ export function Dashboard() {
           <p className="text-muted-foreground mt-2 text-lg">The heart of the goblin cave.</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Bot status pill */}
-          <div className="flex items-center gap-3 bg-card px-4 py-2 rounded-full border border-border">
-            <Activity className="w-5 h-5 text-muted-foreground" />
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Status</span>
-              {botLoading ? (
-                <Skeleton className="h-5 w-24" />
-              ) : botStatus?.connected ? (
-                <span className="flex items-center gap-2 text-green-500 font-bold tracking-wide" data-testid="status-connected">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                  </span>
-                  ONLINE
-                </span>
-              ) : (
-                <span className="flex items-center gap-2 text-red-500 font-bold tracking-wide" data-testid="status-disconnected">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                  </span>
-                  OFFLINE
-                </span>
-              )}
-            </div>
-          </div>
+        <div className="flex items-center gap-2 bg-card border border-border rounded-full px-1 py-1">
           {/* Restart Bot button */}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => restartBot()}
             disabled={restarting}
-            className="gap-2 rounded-full"
+            className="gap-2 rounded-full h-8 px-3 text-muted-foreground hover:text-foreground"
             data-testid="btn-restart-bot"
           >
-            <RefreshCw className={`w-4 h-4 ${restarting ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
             {restarting ? "Restarting…" : "Restart Bot"}
           </Button>
+
+          <div className="w-px h-5 bg-border" />
+
+          {/* Bot status */}
+          <div className="flex items-center gap-2 px-3">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            {botLoading ? (
+              <Skeleton className="h-4 w-16" />
+            ) : botStatus?.connected ? (
+              <span className="flex items-center gap-1.5 text-green-500 font-bold text-sm tracking-wide" data-testid="status-connected">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                ONLINE
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-red-500 font-bold text-sm tracking-wide" data-testid="status-disconnected">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                OFFLINE
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
