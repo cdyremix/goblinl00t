@@ -246,7 +246,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="font-medium">Help &amp; Guide</span>
           </Link>
           <a
-            href="https://discord.gg/"
+            href="https://discord.gg/WqAy3rhMh"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent transition-colors"
