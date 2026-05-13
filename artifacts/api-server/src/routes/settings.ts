@@ -217,4 +217,51 @@ router.put("/settings", async (req, res) => {
   res.json(serializeSettings(updated!));
 });
 
+router.post("/settings/test-webhook", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [user] = await db.select({ url: usersTable.discordWebhookUrl })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId))
+    .limit(1);
+
+  const url = user?.url;
+  if (!url) {
+    res.status(400).json({ error: "No Discord webhook URL saved. Save a webhook URL first." });
+    return;
+  }
+  if (!/^https:\/\/(?:discord\.com|discordapp\.com)\/api\/webhooks\//.test(url)) {
+    res.status(400).json({ error: "Saved webhook URL is invalid." });
+    return;
+  }
+
+  const body = {
+    embeds: [{
+      title: "🧪 Goblin L00t — Test Notification",
+      description: "**Winner:** TestViewer123\n**Prize:** Epic Goblin Sword\n**Entries:** 42\n\nIf you can see this, your webhook is wired up correctly!",
+      color: 0xf5aa1e,
+      footer: { text: "Goblin L00t · Test" },
+      timestamp: new Date().toISOString(),
+    }],
+  };
+
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) {
+      res.status(502).json({ error: `Discord returned ${r.status} — check that the webhook URL is still valid.` });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : "Network error";
+    res.status(502).json({ error: `Could not reach Discord: ${errMessage}` });
+  }
+});
+
 export default router;

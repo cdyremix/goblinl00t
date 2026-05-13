@@ -23,7 +23,7 @@ import * as z from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
-import { Plus, Trophy, ChevronRight, Clock, Hash, Package, Heart, Star, Coins, Trash2, FlaskConical, Play, Sparkles, Users, ChevronDown, Zap } from "lucide-react";
+import { Plus, Trophy, ChevronRight, Check, Clock, Hash, Package, Heart, Star, Coins, Trash2, FlaskConical, Play, Sparkles, Users, ChevronDown, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { InventoryPicker, type PickedItem } from "@/components/inventory-picker";
@@ -65,6 +65,7 @@ export function Giveaways() {
   // Expanded by default — the create form is the primary action on this
   // page, so we show it up front rather than tucked behind a "+ New" toggle.
   const [createFormOpen, setCreateFormOpen] = useState(true);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
 
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
@@ -100,6 +101,18 @@ export function Giveaways() {
     form.setValue("prizeIconUrl", item.iconUrl);
     setPickedIcon(item.iconUrl);
     setPickerOpen(false);
+  }
+
+  async function nextStep() {
+    const fieldsToValidate: (keyof FormValues)[] = [];
+    if (wizardStep === 1) {
+      fieldsToValidate.push("prizeKind", "prize");
+      if (prizeKind === "bot_coins") fieldsToValidate.push("prizeBotCoins");
+    } else if (wizardStep === 2) {
+      fieldsToValidate.push("title", "keyword");
+    }
+    const ok = fieldsToValidate.length === 0 || await form.trigger(fieldsToValidate as never);
+    if (ok) setWizardStep((s) => Math.min(s + 1, 3) as 1 | 2 | 3);
   }
 
   function onSubmit(values: FormValues) {
@@ -148,6 +161,7 @@ export function Giveaways() {
           });
           form.reset();
           setPickedIcon(null);
+          setWizardStep(1);
           queryClient.invalidateQueries({ queryKey: getListGiveawaysQueryKey() });
         },
         onError: () => {
@@ -209,380 +223,386 @@ export function Giveaways() {
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <CardContent className="pt-0">
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Title</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Epic Mount Drop" {...field} className="bg-background" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <CardContent className="pt-0 space-y-4">
+                  {/* Step progress indicator */}
+                  <div className="flex items-center">
+                    {([{ label: "Prize", step: 1 }, { label: "Entry Rules", step: 2 }, { label: "Review", step: 3 }] as const).map(({ label, step }, i) => {
+                      const done = wizardStep > step;
+                      const active = wizardStep === step;
+                      return (
+                        <div key={step} className={`flex items-center ${i < 2 ? "flex-1" : ""}`}>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
+                              done ? "bg-primary text-primary-foreground" :
+                              active ? "bg-primary/15 border border-primary text-primary" :
+                              "bg-muted/30 border border-border/60 text-muted-foreground"
+                            }`}>
+                              {done ? <Check className="w-3 h-3" /> : step}
+                            </div>
+                            <span className={`text-[11px] font-medium whitespace-nowrap transition-colors ${
+                              active ? "text-foreground" : done ? "text-primary" : "text-muted-foreground/50"
+                            }`}>{label}</span>
+                          </div>
+                          {i < 2 && <div className={`flex-1 h-px mx-2 transition-colors ${wizardStep > step ? "bg-primary/50" : "bg-border/40"}`} />}
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                  {/* Prize source selector */}
-                  <FormField
-                    control={form.control}
-                    name="prizeKind"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Prize Source</FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={(v) => {
-                            const next = v as "cs2" | "bot_item" | "bot_coins";
-                            field.onChange(next);
-                            if (next !== "cs2") {
-                              form.setValue("prizeAssetId", undefined);
-                              form.setValue("prizeIconUrl", undefined);
-                              setPickedIcon(null);
-                            }
-                            if (next === "bot_coins") {
-                              form.setValue("prize", "Bag of Coins", { shouldValidate: true });
-                            } else if (next === "bot_item") {
-                              form.setValue("prize", "Random Goblin Loot", { shouldValidate: true });
-                            } else {
-                              form.setValue("prize", "", { shouldValidate: false });
-                            }
-                          }}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="bg-background" data-testid="select-prize-source">
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="cs2">🔫 CS2 Skin</SelectItem>
-                            <SelectItem value="bot_item">👺 Goblin Horde</SelectItem>
-                            <SelectItem value="bot_coins">🪙 Coins</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
 
-                  {prizeKind === "cs2" && (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name="prize"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>CS2 Skin</FormLabel>
-                            <FormControl>
-                              <button
-                                type="button"
-                                onClick={() => setPickerOpen(true)}
-                                className="w-full flex items-center gap-3 p-3 rounded-md border border-input bg-background text-left hover:border-primary/50 transition-colors"
-                                data-testid="button-open-prize-picker"
-                              >
-                                {pickedIcon ? (
-                                  <img src={pickedIcon} alt="" className="w-12 h-12 object-contain rounded bg-background/50 shrink-0" />
-                                ) : (
-                                  <div className="w-12 h-12 flex items-center justify-center rounded bg-muted shrink-0">
-                                    <Package className="w-5 h-5 text-muted-foreground" />
-                                  </div>
+                      {/* ── Step 1: Prize ─────────────────────────────────── */}
+                      {wizardStep === 1 && (
+                        <>
+                          <FormField
+                            control={form.control}
+                            name="prizeKind"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Prize Source</FormLabel>
+                                <Select
+                                  value={field.value}
+                                  onValueChange={(v) => {
+                                    const next = v as "cs2" | "bot_item" | "bot_coins";
+                                    field.onChange(next);
+                                    if (next !== "cs2") {
+                                      form.setValue("prizeAssetId", undefined);
+                                      form.setValue("prizeIconUrl", undefined);
+                                      setPickedIcon(null);
+                                    }
+                                    if (next === "bot_coins") {
+                                      form.setValue("prize", "Bag of Coins", { shouldValidate: true });
+                                    } else if (next === "bot_item") {
+                                      form.setValue("prize", "Random Goblin Loot", { shouldValidate: true });
+                                    } else {
+                                      form.setValue("prize", "", { shouldValidate: false });
+                                    }
+                                  }}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger className="bg-background" data-testid="select-prize-source">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="cs2">🔫 CS2 Skin</SelectItem>
+                                    <SelectItem value="bot_item">👺 Goblin Horde</SelectItem>
+                                    <SelectItem value="bot_coins">🪙 Coins</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )}
+                          />
+
+                          {prizeKind === "cs2" && (
+                            <>
+                              <FormField
+                                control={form.control}
+                                name="prize"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>CS2 Skin</FormLabel>
+                                    <FormControl>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPickerOpen(true)}
+                                        className="w-full flex items-center gap-3 p-3 rounded-md border border-input bg-background text-left hover:border-primary/50 transition-colors"
+                                        data-testid="button-open-prize-picker"
+                                      >
+                                        {pickedIcon ? (
+                                          <img src={pickedIcon} alt="" className="w-12 h-12 object-contain rounded bg-background/50 shrink-0" />
+                                        ) : (
+                                          <div className="w-12 h-12 flex items-center justify-center rounded bg-muted shrink-0">
+                                            <Package className="w-5 h-5 text-muted-foreground" />
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          {field.value ? (
+                                            <span className="text-sm font-medium text-foreground truncate block">{field.value}</span>
+                                          ) : (
+                                            <span className="text-sm text-muted-foreground">Click to pick from your CS2 inventory</span>
+                                          )}
+                                        </div>
+                                      </button>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
                                 )}
-                                <div className="flex-1 min-w-0">
-                                  {field.value ? (
-                                    <span className="text-sm font-medium text-foreground truncate block">{field.value}</span>
-                                  ) : (
-                                    <span className="text-sm text-muted-foreground">Click to pick from your CS2 inventory</span>
+                              />
+                              <FormField
+                                control={form.control}
+                                name="prizeBotCoins"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Bonus Coins (optional)</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
+                                        <Input type="number" min={1} placeholder="0" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} className="pl-9 bg-background" data-testid="input-cs2-bonus-coins" />
+                                      </div>
+                                    </FormControl>
+                                    <p className="text-[11px] text-muted-foreground">Awarded to the winner on top of the skin.</p>
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="prizeBotRarity"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Rarity Hint (optional)</FormLabel>
+                                    <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
+                                      <FormControl>
+                                        <SelectTrigger className="bg-background" data-testid="select-cs2-rarity"><SelectValue placeholder="Any rarity" /></SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="common">Common</SelectItem>
+                                        <SelectItem value="uncommon">Uncommon</SelectItem>
+                                        <SelectItem value="rare">Rare</SelectItem>
+                                        <SelectItem value="epic">Epic</SelectItem>
+                                        <SelectItem value="legendary">Legendary</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-[11px] text-muted-foreground">Cosmetic flavor for the announcement.</p>
+                                  </FormItem>
+                                )}
+                              />
+                            </>
+                          )}
+
+                          {prizeKind === "bot_item" && (
+                            <>
+                              <FormField control={form.control} name="prize" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Display Name</FormLabel>
+                                  <FormControl><Input placeholder="Random Goblin Loot" {...field} className="bg-background" /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )} />
+                              <FormField control={form.control} name="prizeBotCoins" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Bonus Coins (optional)</FormLabel>
+                                  <FormControl>
+                                    <div className="relative">
+                                      <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
+                                      <Input type="number" min={1} placeholder="0" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} className="pl-9 bg-background" data-testid="input-bot-item-bonus-coins" />
+                                    </div>
+                                  </FormControl>
+                                  <p className="text-[11px] text-muted-foreground">Awarded to the winner on top of the loot.</p>
+                                </FormItem>
+                              )} />
+                              <FormField control={form.control} name="prizeBotRarity" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Rarity Hint (optional)</FormLabel>
+                                  <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
+                                    <FormControl>
+                                      <SelectTrigger className="bg-background" data-testid="select-bot-rarity"><SelectValue placeholder="Any rarity (winner gets a juiced roll)" /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="common">Common</SelectItem>
+                                      <SelectItem value="uncommon">Uncommon</SelectItem>
+                                      <SelectItem value="rare">Rare</SelectItem>
+                                      <SelectItem value="epic">Epic</SelectItem>
+                                      <SelectItem value="legendary">Legendary</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="text-[11px] text-muted-foreground">Goblin rolls a random item into the winner's inventory.</p>
+                                </FormItem>
+                              )} />
+                            </>
+                          )}
+
+                          {prizeKind === "bot_coins" && (
+                            <>
+                              <FormField control={form.control} name="prize" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Display Name</FormLabel>
+                                  <FormControl><Input placeholder="Bag of Coins" {...field} className="bg-background" /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )} />
+                              <FormField control={form.control} name="prizeBotCoins" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Coin Amount</FormLabel>
+                                  <FormControl>
+                                    <div className="relative">
+                                      <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
+                                      <Input type="number" min={1} placeholder="1000" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} className="pl-9 bg-background" data-testid="input-bot-coins" />
+                                    </div>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )} />
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      {/* ── Step 2: Entry Rules ────────────────────────────── */}
+                      {wizardStep === 2 && (
+                        <>
+                          <FormField control={form.control} name="title" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Title</FormLabel>
+                              <FormControl><Input placeholder="Epic Mount Drop" {...field} className="bg-background" /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+
+                          <FormField control={form.control} name="keyword" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Keyword</FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">!</span>
+                                  <Input placeholder="loot" {...field} className="pl-6 bg-background" />
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+
+                          <FormField control={form.control} name="description" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Description (Optional)</FormLabel>
+                              <FormControl>
+                                <Textarea placeholder="Details for the viewers..." {...field} className="resize-none bg-background" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+
+                          <div className="space-y-3 rounded-md border border-border/50 bg-background/30 p-3">
+                            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Entry Requirements</p>
+                            <FormField control={form.control} name="requireFollower" render={({ field }) => (
+                              <FormItem className="flex items-center justify-between gap-3 space-y-0">
+                                <div className="flex items-center gap-2">
+                                  <Heart className="w-4 h-4 text-pink-400" />
+                                  <Label htmlFor="req-follower" className="text-sm font-normal cursor-pointer">Followers only</Label>
+                                </div>
+                                <FormControl>
+                                  <Switch id="req-follower" checked={field.value} onCheckedChange={field.onChange} data-testid="switch-require-follower" />
+                                </FormControl>
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name="subscriberOnly" render={({ field }) => (
+                              <FormItem className="flex items-center justify-between gap-3 space-y-0">
+                                <div className="flex items-center gap-2">
+                                  <Star className="w-4 h-4 text-purple-400" />
+                                  <Label htmlFor="sub-only" className="text-sm font-normal cursor-pointer">Subscribers only</Label>
+                                </div>
+                                <FormControl>
+                                  <Switch id="sub-only" checked={field.value} onCheckedChange={(v) => { field.onChange(v); if (!v) form.setValue("minSubTier", undefined); }} data-testid="switch-subscriber-only" />
+                                </FormControl>
+                              </FormItem>
+                            )} />
+                            {subscriberOnly && (
+                              <FormField control={form.control} name="minSubTier" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs text-muted-foreground">Minimum tier</FormLabel>
+                                  <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
+                                    <FormControl>
+                                      <SelectTrigger className="bg-background" data-testid="select-min-tier"><SelectValue placeholder="Any tier" /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="1000">Tier 1+</SelectItem>
+                                      <SelectItem value="2000">Tier 2+</SelectItem>
+                                      <SelectItem value="3000">Tier 3 only</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )} />
+                            )}
+                          </div>
+
+                          <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/20 p-3 text-xs text-muted-foreground">
+                            <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                            <span>Viewers can also <span className="font-mono text-amber-400">!redeem</span> coins for extra entries (100 coins = 1 entry).</span>
+                          </div>
+                        </>
+                      )}
+
+                      {/* ── Step 3: Review & Launch ────────────────────────── */}
+                      {wizardStep === 3 && (
+                        <div className="space-y-3">
+                          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Review your giveaway</p>
+                          <div className="rounded-lg border border-border/50 bg-muted/10 divide-y divide-border/40 text-sm">
+                            <div className="flex items-start gap-3 p-3">
+                              <span className="text-base shrink-0">{prizeKind === "cs2" ? "🔫" : prizeKind === "bot_item" ? "👺" : "🪙"}</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Prize</p>
+                                <p className="font-semibold text-foreground truncate">{form.getValues("prize")}</p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  {form.getValues("prizeBotCoins") && (
+                                    <span className="text-[11px] text-amber-400 flex items-center gap-1">
+                                      <Coins className="w-3 h-3" />
+                                      {prizeKind === "bot_coins" ? form.getValues("prizeBotCoins") : `+${form.getValues("prizeBotCoins")}`} coins
+                                    </span>
+                                  )}
+                                  {form.getValues("prizeBotRarity") && (
+                                    <span className="text-[11px] text-muted-foreground capitalize">{form.getValues("prizeBotRarity")}</span>
                                   )}
                                 </div>
-                              </button>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="prizeBotCoins"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Bonus Coins (optional)</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  placeholder="0"
-                                  value={field.value ?? ""}
-                                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                                  className="pl-9 bg-background"
-                                  data-testid="input-cs2-bonus-coins"
-                                />
                               </div>
-                            </FormControl>
-                            <p className="text-[11px] text-muted-foreground">Awarded to the winner on top of the skin.</p>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="prizeBotRarity"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Rarity Hint (optional)</FormLabel>
-                            <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
-                              <FormControl>
-                                <SelectTrigger className="bg-background" data-testid="select-cs2-rarity">
-                                  <SelectValue placeholder="Any rarity" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="common">Common</SelectItem>
-                                <SelectItem value="uncommon">Uncommon</SelectItem>
-                                <SelectItem value="rare">Rare</SelectItem>
-                                <SelectItem value="epic">Epic</SelectItem>
-                                <SelectItem value="legendary">Legendary</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <p className="text-[11px] text-muted-foreground">Cosmetic flavor for the announcement.</p>
-                          </FormItem>
-                        )}
-                      />
-                    </>
-                  )}
-
-                  {prizeKind === "bot_item" && (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name="prize"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Display Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Random Goblin Loot" {...field} className="bg-background" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="prizeBotCoins"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Bonus Coins (optional)</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  placeholder="0"
-                                  value={field.value ?? ""}
-                                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                                  className="pl-9 bg-background"
-                                  data-testid="input-bot-item-bonus-coins"
-                                />
+                            </div>
+                            <div className="p-3 space-y-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Title</span>
+                                <span className="font-medium text-foreground text-right truncate max-w-[60%]">{form.getValues("title")}</span>
                               </div>
-                            </FormControl>
-                            <p className="text-[11px] text-muted-foreground">Awarded to the winner on top of the loot.</p>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="prizeBotRarity"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Rarity Hint (optional)</FormLabel>
-                            <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
-                              <FormControl>
-                                <SelectTrigger className="bg-background" data-testid="select-bot-rarity">
-                                  <SelectValue placeholder="Any rarity (winner gets a juiced roll)" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="common">Common</SelectItem>
-                                <SelectItem value="uncommon">Uncommon</SelectItem>
-                                <SelectItem value="rare">Rare</SelectItem>
-                                <SelectItem value="epic">Epic</SelectItem>
-                                <SelectItem value="legendary">Legendary</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <p className="text-[11px] text-muted-foreground">Goblin rolls a random item into the winner's inventory.</p>
-                          </FormItem>
-                        )}
-                      />
-                    </>
-                  )}
-
-                  {prizeKind === "bot_coins" && (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name="prize"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Display Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Bag of Coins" {...field} className="bg-background" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="prizeBotCoins"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Coin Amount</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  placeholder="1000"
-                                  value={field.value ?? ""}
-                                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                                  className="pl-9 bg-background"
-                                  data-testid="input-bot-coins"
-                                />
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Keyword</span>
+                                <span className="font-mono text-foreground">!{form.getValues("keyword")}</span>
                               </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </>
-                  )}
-
-                  <FormField
-                    control={form.control}
-                    name="keyword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Keyword</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">!</span>
-                            <Input placeholder="loot" {...field} className="pl-6 bg-background" />
+                              {form.getValues("description") && (
+                                <div className="pt-1.5 border-t border-border/30">
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-1">Description</p>
+                                  <p className="text-xs text-foreground/80 leading-relaxed">{form.getValues("description")}</p>
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-3 flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mr-1">Gates</span>
+                              {form.getValues("requireFollower") && (
+                                <Badge variant="secondary" className="text-pink-400 border-pink-400/30 bg-pink-400/10 text-[10px] gap-1">
+                                  <Heart className="w-2.5 h-2.5" /> Followers
+                                </Badge>
+                              )}
+                              {form.getValues("subscriberOnly") && (
+                                <Badge variant="secondary" className="text-purple-400 border-purple-400/30 bg-purple-400/10 text-[10px] gap-1">
+                                  <Star className="w-2.5 h-2.5" /> Subs{form.getValues("minSubTier") ? ` T${Number(form.getValues("minSubTier")) / 1000}+` : ""}
+                                </Badge>
+                              )}
+                              {!form.getValues("requireFollower") && !form.getValues("subscriberOnly") && (
+                                <span className="text-xs text-muted-foreground">Open to everyone</span>
+                              )}
+                            </div>
                           </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Details for the viewers..." {...field} className="resize-none bg-background" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Gating */}
-                  <div className="space-y-3 rounded-md border border-border/50 bg-background/30 p-3">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Entry Requirements</p>
-
-                    <FormField
-                      control={form.control}
-                      name="requireFollower"
-                      render={({ field }) => (
-                        <FormItem className="flex items-center justify-between gap-3 space-y-0">
-                          <div className="flex items-center gap-2">
-                            <Heart className="w-4 h-4 text-pink-400" />
-                            <Label htmlFor="req-follower" className="text-sm font-normal cursor-pointer">
-                              Followers only
-                            </Label>
-                          </div>
-                          <FormControl>
-                            <Switch
-                              id="req-follower"
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                              data-testid="switch-require-follower"
-                            />
-                          </FormControl>
-                        </FormItem>
+                        </div>
                       )}
-                    />
 
-                    <FormField
-                      control={form.control}
-                      name="subscriberOnly"
-                      render={({ field }) => (
-                        <FormItem className="flex items-center justify-between gap-3 space-y-0">
-                          <div className="flex items-center gap-2">
-                            <Star className="w-4 h-4 text-purple-400" />
-                            <Label htmlFor="sub-only" className="text-sm font-normal cursor-pointer">
-                              Subscribers only
-                            </Label>
-                          </div>
-                          <FormControl>
-                            <Switch
-                              id="sub-only"
-                              checked={field.value}
-                              onCheckedChange={(v) => {
-                                field.onChange(v);
-                                if (!v) form.setValue("minSubTier", undefined);
-                              }}
-                              data-testid="switch-subscriber-only"
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-
-                    {subscriberOnly && (
-                      <FormField
-                        control={form.control}
-                        name="minSubTier"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs text-muted-foreground">Minimum tier</FormLabel>
-                            <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || undefined)}>
-                              <FormControl>
-                                <SelectTrigger className="bg-background" data-testid="select-min-tier">
-                                  <SelectValue placeholder="Any tier" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="1000">Tier 1+</SelectItem>
-                                <SelectItem value="2000">Tier 2+</SelectItem>
-                                <SelectItem value="3000">Tier 3 only</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
+                      {/* Navigation buttons */}
+                      <div className="flex gap-2 pt-1">
+                        {wizardStep > 1 && (
+                          <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setWizardStep((s) => (s - 1) as 1 | 2 | 3)}>
+                            Back
+                          </Button>
                         )}
-                      />
-                    )}
-                  </div>
+                        {wizardStep < 3 ? (
+                          <Button type="button" size="sm" className="flex-1" onClick={nextStep}>
+                            Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                          </Button>
+                        ) : (
+                          <Button type="submit" disabled={createMutation.isPending} size="sm" className="flex-1 font-bold" data-testid="button-create-giveaway">
+                            {createMutation.isPending ? "Forging..." : "Create Giveaway"}
+                          </Button>
+                        )}
+                      </div>
 
-                  <div className="flex items-start gap-2 rounded-md bg-amber-500/5 border border-amber-500/20 p-3 text-xs text-muted-foreground">
-                    <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span>
-                      Viewers can also <span className="font-mono text-amber-400">!redeem</span> coins for extra entries (100 coins = 1 entry).
-                    </span>
-                  </div>
-
-                  <Button type="submit" disabled={createMutation.isPending} className="w-full font-bold" data-testid="button-create-giveaway">
-                    {createMutation.isPending ? "Forging..." : "Create Giveaway"}
-                  </Button>
-                </form>
-              </Form>
+                    </form>
+                  </Form>
                 </CardContent>
               </CollapsibleContent>
             </Collapsible>

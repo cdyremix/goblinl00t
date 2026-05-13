@@ -4,8 +4,10 @@ import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings2, Crosshair, Sword, Save, CheckCircle2,
-  AlertCircle, User2, ShieldCheck, Unlink, Terminal, Plus, Trash2, Clock, ChevronDown
+  AlertCircle, User2, ShieldCheck, Unlink, Terminal, Plus, Trash2, Clock, ChevronDown,
+  Send, Loader2,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -767,17 +769,41 @@ function DiscordWebhookSection({
   saving: boolean;
   onSave: (v: string | null) => void;
 }) {
+  const { getToken } = useAuth();
+  const { toast } = useToast();
   const [draft, setDraft] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
   const display = draft ?? value ?? "";
   const trimmed = display.trim();
   const isWebhook = /^https:\/\/(?:[a-z]+\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/i.test(trimmed);
   const valid = trimmed === "" || isWebhook;
   const changed = (trimmed === "" ? null : trimmed) !== (value ?? null);
+  const savedIsValid = value !== null && /^https:\/\/(?:discord\.com|discordapp\.com)\/api\/webhooks\//.test(value);
 
   function handleSave() {
     if (!valid || !changed) return;
     onSave(trimmed === "" ? null : trimmed);
     setDraft(null);
+  }
+
+  async function handleTest() {
+    setTesting(true);
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/settings/test-webhook", { method: "POST", headers });
+      const body = await r.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (r.ok) {
+        toast({ title: "Test sent!", description: "Check your Discord channel for the test embed." });
+      } else {
+        toast({ title: "Test failed", description: body.error ?? "Something went wrong.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Test failed", description: "Network error — check your connection.", variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
   }
 
   return (
@@ -807,10 +833,25 @@ function DiscordWebhookSection({
           <Save className="w-3.5 h-3.5 mr-1" />
           Save
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!savedIsValid || changed || testing}
+          onClick={handleTest}
+          data-testid="button-test-discord-webhook"
+        >
+          {testing ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+          Send test
+        </Button>
       </div>
       {!valid && (
         <p className="text-xs text-destructive">
           That doesn't look like a Discord webhook URL. It should start with <code>https://discord.com/api/webhooks/</code>.
+        </p>
+      )}
+      {savedIsValid && !changed && (
+        <p className="text-xs text-muted-foreground">
+          Webhook saved. Use "Send test" to fire a sample embed to your Discord channel.
         </p>
       )}
     </div>

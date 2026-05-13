@@ -287,9 +287,17 @@ export function Stats() {
                 );
               })
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <Trophy className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p>No loot data in this window.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                  <Trophy className="w-7 h-7 text-amber-400/60" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">No loot activity yet</p>
+                  <p className="text-xs text-muted-foreground">Loot data shows up after viewers use <span className="font-mono text-primary">!loot</span> in chat.</p>
+                </div>
+                <a href="/giveaway" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+                  Start a giveaway →
+                </a>
               </div>
             )}
           </CardContent>
@@ -336,9 +344,17 @@ export function Stats() {
                 );
               })
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p>No command activity in this window.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                  <BarChart3 className="w-7 h-7 text-blue-400/60" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">No command activity yet</p>
+                  <p className="text-xs text-muted-foreground">Commands appear here once viewers start using them in chat.</p>
+                </div>
+                <a href="/commands" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
+                  Configure commands →
+                </a>
               </div>
             )}
           </CardContent>

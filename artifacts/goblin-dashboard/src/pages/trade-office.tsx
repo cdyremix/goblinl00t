@@ -497,14 +497,22 @@ export default function TradeOffice() {
       )}
 
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 text-center space-y-3 rounded-xl border border-dashed border-border">
-          <Package className="w-10 h-10 text-muted-foreground/40" />
-          <div>
-            <p className="text-sm text-muted-foreground font-medium">No trade records yet</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              Trade records are created automatically when you end a giveaway with a winner.
+        <div className="flex flex-col items-center justify-center py-16 text-center space-y-4 rounded-xl border border-dashed border-border bg-muted/5">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Package className="w-8 h-8 text-primary/60" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-foreground">No trades yet</p>
+            <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
+              Trade records appear here automatically when you end a giveaway and a winner is selected.
             </p>
           </div>
+          <a
+            href="/giveaway"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+          >
+            Start your first giveaway →
+          </a>
         </div>
       ) : (
         <div className="space-y-2">
