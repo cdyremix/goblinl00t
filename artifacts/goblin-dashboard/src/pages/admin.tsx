@@ -42,7 +42,7 @@ interface AdminUser {
   subscriptionTier: Tier;
   tierSelected: boolean;
   isAdmin: boolean;
-  isDev: boolean;
+  isStaff: boolean;
   botTheme: string;
   botName: string;
   goblinEventsEnabled: boolean;
@@ -222,10 +222,10 @@ export function Admin() {
       }
       const body =
         action === "make-admin"
-          ? { isAdmin: true, isDev: false }
-          : action === "make-dev"
-            ? { isAdmin: false, isDev: true }
-            : { isAdmin: false, isDev: false };
+          ? { isAdmin: true, isStaff: false }
+          : action === "make-staff"
+            ? { isAdmin: false, isStaff: true }
+            : { isAdmin: false, isStaff: false };
       const r = await authedFetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -245,8 +245,8 @@ export function Admin() {
         const label =
           result.action === "make-admin"
             ? "Promoted to super admin"
-            : result.action === "make-dev"
-              ? "Promoted to dev"
+            : result.action === "make-staff"
+              ? "Promoted to staff"
               : "Demoted to regular user";
         toast({ title: label });
       }
@@ -565,7 +565,7 @@ function CreateUserDialog({
   // chosen tier). "dev" = full feature bypass, no admin. "admin" = full
   // super-user. Modeled as a single value (rather than two booleans) so
   // the UI can't accidentally check both.
-  const [role, setRole] = useState<"none" | "dev" | "admin">("none");
+  const [role, setRole] = useState<"none" | "staff" | "admin">("none");
   // Inline validation state. `touched` only flips after the user has
   // blurred a field (or attempted submit), so the dialog doesn't yell
   // at them while they're still typing the first character.
@@ -633,7 +633,7 @@ function CreateUserDialog({
           twitchUsername: twitchTrimmed || null,
           subscriptionTier: tier,
           isAdmin: role === "admin",
-          isDev: role === "dev",
+          isStaff: role === "staff",
         }),
       });
       const json = (await r.json().catch(() => ({}))) as {
@@ -859,11 +859,11 @@ function CreateUserDialog({
                 testId="role-none"
               />
               <RolePill
-                active={role === "dev"}
-                onClick={() => setRole("dev")}
-                title="Dev"
+                active={role === "staff"}
+                onClick={() => setRole("staff")}
+                title="Staff"
                 desc="Full bot/dashboard access. No admin panel."
-                testId="role-dev"
+                testId="role-staff"
               />
               <RolePill
                 active={role === "admin"}
@@ -934,7 +934,7 @@ function StatCard({ label, value, icon }: { label: string; value: number | strin
 
 type QuickAction =
   | "make-admin"
-  | "make-dev"
+  | "make-staff"
   | "make-regular"
   | "verify-email";
 
@@ -970,9 +970,9 @@ function UserRow({
               ADMIN
             </Badge>
           )}
-          {user.isDev && !user.isAdmin && (
+          {user.isStaff && !user.isAdmin && (
             <Badge className="gap-1 text-[10px] bg-sky-500/20 text-sky-300 border-sky-500/40" variant="outline">
-              DEV
+              STAFF
             </Badge>
           )}
           {user.emailVerified === true ? (
@@ -1069,15 +1069,15 @@ function UserRow({
               Make super admin
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={user.isDev && !user.isAdmin}
-              onClick={() => onQuickAction("make-dev")}
-              data-testid={`menu-make-dev-${user.id}`}
+              disabled={user.isStaff && !user.isAdmin}
+              onClick={() => onQuickAction("make-staff")}
+              data-testid={`menu-make-staff-${user.id}`}
             >
               <UserCog className="w-3.5 h-3.5 mr-2 text-sky-400" />
-              Make dev account
+              Make staff account
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={!user.isAdmin && !user.isDev}
+              disabled={!user.isAdmin && !user.isStaff}
               onClick={() => onQuickAction("make-regular")}
               data-testid={`menu-make-regular-${user.id}`}
             >
@@ -1617,7 +1617,7 @@ function SubscriptionSection({
 }) {
   const [tier, setTier] = useState<Tier>(detail.user.subscriptionTier);
   const [isAdmin, setIsAdmin] = useState(detail.user.isAdmin);
-  const [isDev, setIsDev] = useState(detail.user.isDev);
+  const [isStaff, setIsStaff] = useState(detail.user.isStaff);
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1627,7 +1627,7 @@ function SubscriptionSection({
   useEffect(() => {
     setTier(detail.user.subscriptionTier);
     setIsAdmin(detail.user.isAdmin);
-    setIsDev(detail.user.isDev);
+    setIsStaff(detail.user.isStaff);
   }, [detail]);
 
   async function save() {
@@ -1637,7 +1637,7 @@ function SubscriptionSection({
       const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionTier: tier, isAdmin, isDev }),
+        body: JSON.stringify({ subscriptionTier: tier, isAdmin, isStaff }),
       });
       if (!r.ok) {
         const { message } = await parseApiError(r);
@@ -1697,9 +1697,9 @@ function SubscriptionSection({
                   checked={isAdmin}
                   onCheckedChange={(v) => {
                     setIsAdmin(v);
-                    // Mutex with dev — admin already implies feature
-                    // bypass and adds admin powers, so dev becomes a no-op.
-                    if (v) setIsDev(false);
+                    // Mutex with staff — admin already implies feature
+                    // bypass and adds admin powers, so staff becomes a no-op.
+                    if (v) setIsStaff(false);
                   }}
                   data-testid="switch-edit-admin"
                 />
@@ -1708,16 +1708,16 @@ function SubscriptionSection({
             </div>
           </div>
           <div>
-            <Label>Dev account</Label>
+            <Label>Staff account</Label>
             <div className="flex items-center gap-2 h-10">
               <Switch
-                checked={isDev}
+                checked={isStaff}
                 onCheckedChange={(v) => {
-                  setIsDev(v);
+                  setIsStaff(v);
                   if (v) setIsAdmin(false);
                 }}
                 disabled={isAdmin}
-                data-testid="switch-edit-dev"
+                data-testid="switch-edit-staff"
               />
               <span className="text-sm text-muted-foreground">
                 Bypass all feature gates (no admin panel)

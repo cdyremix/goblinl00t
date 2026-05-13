@@ -190,7 +190,7 @@ router.post("/giveaway", async (req, res) => {
  * channel — matches the rest of giveaway.ts' channel resolution).
  */
 router.post("/giveaway/seed-test", async (req, res) => {
-  // Gate: caller must be authenticated AND have isAdmin or isDev in the DB.
+  // Gate: caller must be authenticated AND have isAdmin or isStaff in the DB.
   // This replaces the old NODE_ENV check so admins/devs can seed test
   // giveaways in production (e.g. to verify the elimination wheel before a
   // stream) without needing a separate dev build.
@@ -204,8 +204,8 @@ router.post("/giveaway/seed-test", async (req, res) => {
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId))
     .limit(1);
-  if (!callerRow?.isAdmin && !callerRow?.isDev) {
-    res.status(403).json({ error: "Seeding test giveaways requires an admin or dev account" });
+  if (!callerRow?.isAdmin && !callerRow?.isStaff) {
+    res.status(403).json({ error: "Seeding test giveaways requires an admin or staff account" });
     return;
   }
   let channel = "goblinl00t";
@@ -256,7 +256,7 @@ router.post("/giveaway/seed-test", async (req, res) => {
  * via onConflictDoNothing on the (giveawayId, username) unique index.
  */
 router.post("/giveaway/:id/seed-entries", async (req, res) => {
-  // Gate: caller must be authenticated AND have isAdmin or isDev.
+  // Gate: caller must be authenticated AND have isAdmin or isStaff.
   // This replaces the old NODE_ENV check — see /seed-test for rationale.
   const { userId: seedUserId } = getAuth(req);
   if (!seedUserId) {
@@ -264,12 +264,12 @@ router.post("/giveaway/:id/seed-entries", async (req, res) => {
     return;
   }
   const [seedCallerRow] = await db
-    .select({ isAdmin: usersTable.isAdmin, isDev: usersTable.isDev })
+    .select({ isAdmin: usersTable.isAdmin, isStaff: usersTable.isStaff })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, seedUserId))
     .limit(1);
-  if (!seedCallerRow?.isAdmin && !seedCallerRow?.isDev) {
-    res.status(403).json({ error: "Seeding entries requires an admin or dev account" });
+  if (!seedCallerRow?.isAdmin && !seedCallerRow?.isStaff) {
+    res.status(403).json({ error: "Seeding entries requires an admin or staff account" });
     return;
   }
   const id = Number(req.params["id"]);

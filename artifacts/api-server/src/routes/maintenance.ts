@@ -19,23 +19,23 @@ const router = Router();
 router.get("/maintenance/status", async (req, res) => {
   const enabled = await getMaintenanceEnabled();
   let isAdmin = false;
-  let isDev = false;
+  let isStaff = false;
   try {
     const { userId } = getAuth(req);
     if (userId) {
       const [row] = await db
-        .select({ isAdmin: usersTable.isAdmin, isDev: usersTable.isDev })
+        .select({ isAdmin: usersTable.isAdmin, isStaff: usersTable.isStaff })
         .from(usersTable)
         .where(eq(usersTable.clerkUserId, userId))
         .limit(1);
       isAdmin = !!row?.isAdmin;
-      isDev = !!row?.isDev;
+      isStaff = !!row?.isStaff;
     }
   } catch {
     // Auth resolution is best-effort — anonymous callers (or a Clerk
     // session lookup hiccup) just default to non-admin and see the wall.
   }
-  res.json({ enabled, isAdmin, isDev });
+  res.json({ enabled, isAdmin, isStaff });
 });
 
 /**

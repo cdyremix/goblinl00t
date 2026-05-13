@@ -70,15 +70,15 @@ export async function maintenanceGuard(
     const { userId } = getAuth(req);
     if (userId) {
       const [row] = await db
-        .select({ isAdmin: usersTable.isAdmin, isDev: usersTable.isDev })
+        .select({ isAdmin: usersTable.isAdmin, isStaff: usersTable.isStaff })
         .from(usersTable)
         .where(eq(usersTable.clerkUserId, userId))
         .limit(1);
-      // Both super-users (isAdmin) AND internal dev/QA accounts (isDev)
-      // bypass the wall — the whole point of an isDev flag is that those
-      // accounts can exercise the live app during a closed-beta window
+      // Both super-users (isAdmin) AND staff/moderator accounts (isStaff)
+      // bypass the wall — the whole point of the isStaff flag is that those
+      // accounts can manage the live app during a maintenance window
       // without being granted full /admin/* powers.
-      if (row?.isAdmin || row?.isDev) {
+      if (row?.isAdmin || row?.isStaff) {
         next();
         return;
       }

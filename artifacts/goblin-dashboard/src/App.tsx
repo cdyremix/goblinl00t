@@ -188,7 +188,7 @@ function SignInPage() {
         fallbackRedirectUrl={`${basePath}/dashboard`}
       />
       {/* Admin / dev 2FA bypass link — visible to everyone but only works
-          for accounts flagged isAdmin or isDev in the DB. */}
+          for accounts flagged isAdmin or isStaff in the DB. */}
       <p className="text-xs text-muted-foreground/50">
         Admin or dev?{" "}
         <a
@@ -228,7 +228,7 @@ function AppRouter() {
           even ship the page in published builds. */}
       {import.meta.env.DEV && <Route path="/dev-sign-in" component={DevSignIn} />}
       {/* Admin/dev 2FA bypass — NOT gated on import.meta.env.DEV because it must
-          work in production too. The server endpoint enforces isAdmin||isDev. */}
+          work in production too. The server endpoint enforces isAdmin||isStaff. */}
       <Route path="/admin-bypass" component={AdminBypassSignIn} />
       <Route path="/dashboard">
         <ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>

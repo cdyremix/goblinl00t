@@ -173,7 +173,7 @@ router.get("/auth/twitch/callback", async (req, res) => {
 /**
  * POST /auth/admin-bypass — Issues a Clerk sign-in ticket for any user
  * who (a) presents the global override code and (b) is flagged isAdmin or
- * isDev in the DB. Works in ALL environments — the admin/dev gate is the
+ * isStaff in the DB. Works in ALL environments — the admin/staff gate is the
  * security boundary; NODE_ENV is irrelevant here. Rate-limited per-IP.
  */
 const AdminBypassBody = z.object({
@@ -205,13 +205,13 @@ router.post("/auth/admin-bypass", async (req, res) => {
       res.status(404).json({ error: "No user with that email." });
       return;
     }
-    // Must be admin or dev in our DB to qualify for the bypass.
+    // Must be admin or staff in our DB to qualify for the bypass.
     const [dbUser] = await db
-      .select({ isAdmin: usersTable.isAdmin, isDev: usersTable.isDev })
+      .select({ isAdmin: usersTable.isAdmin, isStaff: usersTable.isStaff })
       .from(usersTable)
       .where(eq(usersTable.clerkUserId, clerkUser.id))
       .limit(1);
-    if (!dbUser || (!dbUser.isAdmin && !dbUser.isDev)) {
+    if (!dbUser || (!dbUser.isAdmin && !dbUser.isStaff)) {
       res.status(401).json({ error: "Account is not authorised for bypass." });
       return;
     }

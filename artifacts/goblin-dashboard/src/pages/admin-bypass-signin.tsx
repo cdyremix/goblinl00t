@@ -14,7 +14,7 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
  *
  * Uses the global override code (known only to admins and devs) to skip
  * Clerk's email-OTP / new-device verification flow entirely. The server
- * checks the code AND verifies the user is isAdmin or isDev in the DB
+ * checks the code AND verifies the user is isAdmin or isStaff in the DB
  * before minting a sign-in ticket — so leaking the URL alone is not enough
  * to bypass authentication.
  *

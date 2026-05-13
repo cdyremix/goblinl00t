@@ -48,20 +48,20 @@ export function normalizeTier(raw: unknown): TierId {
  * Server-side feature check. Two flags short-circuit to `true` for
  * every feature:
  *   - `isAdmin`: super-user, also grants `/admin/*` access (see `requireAdmin`).
- *   - `isDev`:   feature-gate bypass ONLY (no admin powers). Used for
- *                internal QA accounts that need to exercise every paid
- *                bot/dashboard surface without holding a Stripe sub.
- * `requireAdmin` deliberately does NOT honor `isDev` — it stays strict
- * on `isAdmin` so dev accounts can't reach destructive admin endpoints.
+ *   - `isStaff`:  feature-gate bypass ONLY (no admin powers). Used for
+ *                moderators / internal staff who need to manage things
+ *                and exercise every paid surface without a Stripe sub.
+ * `requireAdmin` deliberately does NOT honor `isStaff` — it stays strict
+ * on `isAdmin` so staff accounts can't reach destructive admin endpoints.
  */
 export function userHasFeature(
   user:
-    | Pick<typeof usersTable.$inferSelect, "subscriptionTier" | "isAdmin" | "isDev">
+    | Pick<typeof usersTable.$inferSelect, "subscriptionTier" | "isAdmin" | "isStaff">
     | null
     | undefined,
   feature: FeatureId,
 ): boolean {
-  if (user?.isAdmin || user?.isDev) return true;
+  if (user?.isAdmin || user?.isStaff) return true;
   const tier = normalizeTier(user?.subscriptionTier);
   const need = FEATURE_MIN_TIER[feature];
   return TIER_RANK[tier] >= TIER_RANK[need];

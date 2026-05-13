@@ -12,7 +12,7 @@ import {
 } from "@/lib/plans";
 
 interface MeResponse {
-  user: { subscriptionTier: string; isAdmin?: boolean; isDev?: boolean };
+  user: { subscriptionTier: string; isAdmin?: boolean; isStaff?: boolean };
 }
 
 /**
@@ -30,7 +30,7 @@ export function useSubscriptionTier(): {
   tier: TierId;
   loading: boolean;
   isAdmin: boolean;
-  isDev: boolean;
+  isStaff: boolean;
   hasFeature: (f: FeatureId) => boolean;
 } {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -54,17 +54,17 @@ export function useSubscriptionTier(): {
   const tier: TierId =
     raw === "premium" || raw === "pro" || raw === "free" ? raw : "free";
   const isAdmin = !!data?.user.isAdmin;
-  // Dev accounts get every feature unlocked but DO NOT pass the
-  // `/admin/*` gate — keep these flags distinct so dev accounts can't
+  // Staff accounts get every feature unlocked but DO NOT pass the
+  // `/admin/*` gate — keep these flags distinct so staff accounts can't
   // reach destructive admin endpoints (mirrors `tier-helpers.ts`).
-  const isDev = !!data?.user.isDev;
+  const isStaff = !!data?.user.isStaff;
 
   return {
     tier,
     loading: !enabled || isLoading,
     isAdmin,
-    isDev,
-    hasFeature: (f: FeatureId) => isAdmin || isDev || hasFeature(tier, f),
+    isStaff,
+    hasFeature: (f: FeatureId) => isAdmin || isStaff || hasFeature(tier, f),
   };
 }
 

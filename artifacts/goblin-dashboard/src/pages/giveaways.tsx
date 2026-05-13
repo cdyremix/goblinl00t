@@ -68,7 +68,7 @@ export function Giveaways() {
 
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
-  const { hasFeature: hasTierFeature, isAdmin, isDev } = useSubscriptionTier();
+  const { hasFeature: hasTierFeature, isAdmin, isStaff } = useSubscriptionTier();
   const hasUnlimited = hasTierFeature("unlimited-giveaways");
 
   const createMutation = useCreateGiveaway();
@@ -185,7 +185,7 @@ export function Giveaways() {
       </div>
 
       {/* Hero — the streamer's primary action lives here. */}
-      <SpotlightCard giveaway={spotlight} canSeedTest={isAdmin || isDev} />
+      <SpotlightCard giveaway={spotlight} canSeedTest={isAdmin || isStaff} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Create Form */}
@@ -651,16 +651,16 @@ export function Giveaways() {
   );
 }
 
-// Shown to admin/dev accounts only — lets them forge a pre-seeded giveaway
+// Shown to admin/staff accounts only — lets them forge a pre-seeded giveaway
 // to test the elimination wheel without waiting for real chat entries.
-// Visible in both dev and production builds; the server gates on isAdmin||isDev.
+// Visible in both dev and production builds; the server gates on isAdmin||isStaff.
 function TestGiveawayButton() {
-  const { isAdmin, isDev } = useSubscriptionTier();
+  const { isAdmin, isStaff } = useSubscriptionTier();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const seedTest = useSeedTestGiveaway();
 
-  if (!isAdmin && !isDev) return null;
+  if (!isAdmin && !isStaff) return null;
 
   return (
     <Button
@@ -1199,7 +1199,7 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
   const isEnded = giveaway.status === "ended";
   const entryCount = giveaway.entryCount ?? 0;
 
-  const { isAdmin: rowIsAdmin, isDev: rowIsDev } = useSubscriptionTier();
+  const { isAdmin: rowIsAdmin, isStaff: rowIsStaff } = useSubscriptionTier();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const seedEntries = useSeedGiveawayEntries();
@@ -1316,7 +1316,7 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
           </div>
         </Link>
         <div className="shrink-0 flex items-center gap-2">
-          {(isPending || isActive) && entryCount < 5 && (rowIsAdmin || rowIsDev) && (
+          {(isPending || isActive) && entryCount < 5 && (rowIsAdmin || rowIsStaff) && (
             <Button
               size="sm"
               variant="outline"

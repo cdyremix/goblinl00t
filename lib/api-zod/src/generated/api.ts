@@ -8,7 +8,7 @@
 import * as zod from "zod";
 
 /**
- * @summary Issue a Clerk sign-in ticket for an admin or dev user using the global bypass code. Works in all environments; the backend validates that the user is isAdmin or isDev before minting the token.
+ * @summary Issue a Clerk sign-in ticket for an admin or staff user using the global bypass code. Works in all environments; the backend validates that the user is isAdmin or isStaff before minting the token.
 
  */
 export const AdminBypassSignInBody = zod.object({

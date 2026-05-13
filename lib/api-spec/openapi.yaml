@@ -35,9 +35,9 @@ paths:
       operationId: adminBypassSignIn
       tags: [auth]
       summary: >
-        Issue a Clerk sign-in ticket for an admin or dev user using the global
+        Issue a Clerk sign-in ticket for an admin or staff user using the global
         bypass code. Works in all environments; the backend validates that the
-        user is isAdmin or isDev before minting the token.
+        user is isAdmin or isStaff before minting the token.
       requestBody:
         required: true
         content:

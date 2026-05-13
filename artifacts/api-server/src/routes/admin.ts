@@ -36,15 +36,15 @@ const CreateUserBody = z
     // effectively a placeholder until the OAuth round-trip lands.
     twitchUsername: z.string().trim().min(1).max(64).optional().nullable(),
     isAdmin: z.boolean().optional(),
-    isDev: z.boolean().optional(),
+    isStaff: z.boolean().optional(),
     subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
   })
-  // Mutually exclusive — admin already implies feature bypass; the dev
+  // Mutually exclusive — admin already implies feature bypass; the staff
   // flag is for accounts that should NOT have admin powers, so allowing
   // both at once would be a UX trap (the admin Switch silently wins).
-  .refine((d) => !(d.isAdmin && d.isDev), {
-    message: "isAdmin and isDev are mutually exclusive",
-    path: ["isDev"],
+  .refine((d) => !(d.isAdmin && d.isStaff), {
+    message: "isAdmin and isStaff are mutually exclusive",
+    path: ["isStaff"],
   });
 
 // Same RFC5322-ish pattern Zod uses internally; pulled out so the
@@ -79,17 +79,17 @@ router.post("/admin/users", async (req, res) => {
     res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
     return;
   }
-  const { email, password, twitchUsername, isAdmin, isDev, subscriptionTier } = parsed.data;
+  const { email, password, twitchUsername, isAdmin, isStaff, subscriptionTier } = parsed.data;
   // Normalize lowercase up front so uniqueness check + insert + bot
   // channel join all key on the same string.
   const normalizedTwitch = twitchUsername ? twitchUsername.toLowerCase() : null;
 
-  // Admin AND dev accounts skip the Clerk email-verification round-trip.
-  // Both roles are operator-provisioned (internal staff / QA), so a
+  // Admin AND staff accounts skip the Clerk email-verification round-trip.
+  // Both roles are operator-provisioned (internal staff / moderators), so a
   // verification code email isn't useful — the admin already owns the
   // mailbox or is just seeding a throwaway login. Streamer rows still
   // get the standard verification flow.
-  const skipEmailVerification = isAdmin === true || isDev === true;
+  const skipEmailVerification = isAdmin === true || isStaff === true;
 
   // Validation runs unconditionally now — even super-admins can't seed
   // weak/breached creds. Clerk's own pwned + strength checks fire on
@@ -202,7 +202,7 @@ router.post("/admin/users", async (req, res) => {
         // Null → user shows as "Unknown Goblin" in the UI until then.
         twitchUsername: normalizedTwitch,
         isAdmin: isAdmin ?? false,
-        isDev: isDev ?? false,
+        isStaff: isStaff ?? false,
         subscriptionTier: subscriptionTier ?? "free",
         // Skip the post-signup tier picker for admin-created accounts —
         // the operator already chose the tier in the dialog.
@@ -258,7 +258,7 @@ router.get("/admin/users", async (req, res) => {
       subscriptionTier: usersTable.subscriptionTier,
       tierSelected: usersTable.tierSelected,
       isAdmin: usersTable.isAdmin,
-      isDev: usersTable.isDev,
+      isStaff: usersTable.isStaff,
       botTheme: usersTable.botTheme,
       botName: usersTable.botName,
       goblinEventsEnabled: usersTable.goblinEventsEnabled,
@@ -460,7 +460,7 @@ const PatchUserBody = z.object({
   // Subscription / role.
   subscriptionTier: z.enum(["free", "premium", "pro"]).optional(),
   isAdmin: z.boolean().optional(),
-  isDev: z.boolean().optional(),
+  isStaff: z.boolean().optional(),
   tierSelected: z.boolean().optional(),
   // Bot config.
   botTheme: z.enum(["goblin", "cs2"]).optional(),
@@ -523,18 +523,18 @@ router.patch("/admin/users/:id", async (req, res) => {
 
   // Snapshot the previous row BEFORE the update for two reasons:
   //   1) `twitchUsername` change → part old / join new bot channel.
-  //   2) `isAdmin`/`isDev` mutex enforcement (these flags are mutually
+  //   2) `isAdmin`/`isStaff` mutex enforcement (these flags are mutually
   //      exclusive by design — admin already implies feature bypass; a
-  //      dev account exists precisely to grant feature bypass WITHOUT
+  //      staff account exists precisely to grant feature bypass WITHOUT
   //      admin powers). Partial PATCHes can otherwise sneak both true
-  //      (e.g. user is already isDev=true, admin sets isAdmin=true and
-  //      omits isDev). Compute the EFFECTIVE post-update flags and
+  //      (e.g. user is already isStaff=true, admin sets isAdmin=true and
+  //      omits isStaff). Compute the EFFECTIVE post-update flags and
   //      reject if both would land true.
   const [before] = await db
     .select({
       twitchUsername: usersTable.twitchUsername,
       isAdmin: usersTable.isAdmin,
-      isDev: usersTable.isDev,
+      isStaff: usersTable.isStaff,
     })
     .from(usersTable)
     .where(eq(usersTable.id, id))
@@ -544,11 +544,11 @@ router.patch("/admin/users/:id", async (req, res) => {
     return;
   }
   const nextIsAdmin = updates.isAdmin ?? before.isAdmin;
-  const nextIsDev = updates.isDev ?? before.isDev;
-  if (nextIsAdmin && nextIsDev) {
+  const nextIsStaff = updates.isStaff ?? before.isStaff;
+  if (nextIsAdmin && nextIsStaff) {
     res.status(400).json({
       error:
-        "isAdmin and isDev are mutually exclusive. Clear one before setting the other.",
+        "isAdmin and isStaff are mutually exclusive. Clear one before setting the other.",
     });
     return;
   }
@@ -570,7 +570,7 @@ router.patch("/admin/users/:id", async (req, res) => {
   // immediately follow up with a separate email-verify call. Best-effort
   // — Clerk failures are logged but don't roll back the role change.
   const justBecamePrivileged =
-    (nextIsAdmin && !before.isAdmin) || (nextIsDev && !before.isDev);
+    (nextIsAdmin && !before.isAdmin) || (nextIsStaff && !before.isStaff);
   if (justBecamePrivileged) {
     try {
       const cu = await clerkClient.users.getUser(updated.clerkUserId);
