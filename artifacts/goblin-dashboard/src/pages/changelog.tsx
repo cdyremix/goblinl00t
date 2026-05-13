@@ -36,6 +36,18 @@ export default function Changelog() {
         <p className="text-sm text-muted-foreground mt-1">What's new in Goblin L00t</p>
       </div>
 
+      <Entry version="v1.0" date="May 2026">
+        <Item type="new">Scheduled Announcements — add timed bot messages that auto-post to chat on a repeating interval. Managed from the Loot Horde page.</Item>
+        <Item type="new">OBS browser-source overlay — live loot ticker at <code>/overlay/:channel</code>. Copy the link from the dashboard stream banner (Horde Master).</Item>
+        <Item type="new">!top command — bot posts the top 5 coin holders for the channel in chat.</Item>
+        <Item type="new">!gift command — viewers can transfer coins to each other (<code>!gift @username amount</code>), respecting per-channel coin caps.</Item>
+        <Item type="new">Per-giveaway analytics — entry rate chart, ticket-source breakdown, and redemption vs manual counts on each giveaway detail page.</Item>
+        <Item type="new">Viewer retention card on the Ledger — shows the percentage of active viewers who also participated the prior week.</Item>
+        <Item type="new">Stream session timer — live uptime counter next to the ONLINE indicator on the dashboard.</Item>
+        <Item type="change">Scheduled Announcements moved from Forge to Loot Horde, below the live giveaway card. Collapsible and closed by default.</Item>
+        <Item type="change">Forge settings reorganised — Random Goblin Events grouped inside Economy &amp; Loot; Discord Webhook promoted to its own standalone section.</Item>
+      </Entry>
+
       <Entry version="v0.9" date="May 2026">
         <Item type="new">Staff role — grants full bot/dashboard access and feature-gate bypass without admin panel access.</Item>
         <Item type="new">Goblin Advisor AI report on the Ledger page (pro tier) — engagement and monetization insights powered by GPT.</Item>
