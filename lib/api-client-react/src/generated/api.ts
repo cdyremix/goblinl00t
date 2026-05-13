@@ -22,6 +22,7 @@ import type {
   AdjustCoinsResponse,
   AdminBypassBody,
   AdminBypassResult,
+  AiEngagementReport,
   BotCommand,
   BotSettings,
   BotStatus,
@@ -39,6 +40,7 @@ import type {
   DisconnectSteam200,
   EndGiveawayRequest,
   EngagementReport,
+  GetAiEngagementReportParams,
   GetCommandStatsParams,
   GetEngagementReportParams,
   GetRecentLootParams,
@@ -399,6 +401,168 @@ export const useRestartBot = <
   TContext
 > => {
   return useMutation(getRestartBotMutationOptions(options));
+};
+
+/**
+ * @summary Remove the bot from your Twitch channel (soft disconnect, no OAuth lost)
+ */
+export const getBotPartChannelUrl = () => {
+  return `/api/bot/part-channel`;
+};
+
+export const botPartChannel = async (
+  options?: RequestInit,
+): Promise<BotStatus> => {
+  return customFetch<BotStatus>(getBotPartChannelUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getBotPartChannelMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof botPartChannel>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof botPartChannel>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["botPartChannel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof botPartChannel>>,
+    void
+  > = () => {
+    return botPartChannel(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BotPartChannelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof botPartChannel>>
+>;
+
+export type BotPartChannelMutationError = ErrorType<void>;
+
+/**
+ * @summary Remove the bot from your Twitch channel (soft disconnect, no OAuth lost)
+ */
+export const useBotPartChannel = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof botPartChannel>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof botPartChannel>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getBotPartChannelMutationOptions(options));
+};
+
+/**
+ * @summary Re-add the bot to your Twitch channel
+ */
+export const getBotJoinChannelUrl = () => {
+  return `/api/bot/join-channel`;
+};
+
+export const botJoinChannel = async (
+  options?: RequestInit,
+): Promise<BotStatus> => {
+  return customFetch<BotStatus>(getBotJoinChannelUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getBotJoinChannelMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof botJoinChannel>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof botJoinChannel>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["botJoinChannel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof botJoinChannel>>,
+    void
+  > = () => {
+    return botJoinChannel(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BotJoinChannelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof botJoinChannel>>
+>;
+
+export type BotJoinChannelMutationError = ErrorType<void>;
+
+/**
+ * @summary Re-add the bot to your Twitch channel
+ */
+export const useBotJoinChannel = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof botJoinChannel>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof botJoinChannel>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getBotJoinChannelMutationOptions(options));
 };
 
 /**
@@ -2499,6 +2663,108 @@ export function useGetEngagementReport<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetEngagementReportQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary AI-generated stream engagement and monetization report. Goblin King (pro) tier only. Analyzes the streamer's stats window and returns structured insights + action items.
+
+ */
+export const getGetAiEngagementReportUrl = (
+  params?: GetAiEngagementReportParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stats/ai-report?${stringifiedParams}`
+    : `/api/stats/ai-report`;
+};
+
+export const getAiEngagementReport = async (
+  params?: GetAiEngagementReportParams,
+  options?: RequestInit,
+): Promise<AiEngagementReport> => {
+  return customFetch<AiEngagementReport>(getGetAiEngagementReportUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAiEngagementReportQueryKey = (
+  params?: GetAiEngagementReportParams,
+) => {
+  return [`/api/stats/ai-report`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetAiEngagementReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAiEngagementReport>>,
+  TError = ErrorType<void>,
+>(
+  params?: GetAiEngagementReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAiEngagementReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAiEngagementReportQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAiEngagementReport>>
+  > = ({ signal }) =>
+    getAiEngagementReport(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAiEngagementReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAiEngagementReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAiEngagementReport>>
+>;
+export type GetAiEngagementReportQueryError = ErrorType<void>;
+
+/**
+ * @summary AI-generated stream engagement and monetization report. Goblin King (pro) tier only. Analyzes the streamer's stats window and returns structured insights + action items.
+
+ */
+
+export function useGetAiEngagementReport<
+  TData = Awaited<ReturnType<typeof getAiEngagementReport>>,
+  TError = ErrorType<void>,
+>(
+  params?: GetAiEngagementReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAiEngagementReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAiEngagementReportQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

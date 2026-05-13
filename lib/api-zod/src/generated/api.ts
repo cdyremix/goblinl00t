@@ -53,6 +53,30 @@ export const RestartBotResponse = zod.object({
 });
 
 /**
+ * @summary Remove the bot from your Twitch channel (soft disconnect, no OAuth lost)
+ */
+export const BotPartChannelResponse = zod.object({
+  connected: zod.boolean(),
+  channel: zod.string(),
+  channels: zod.array(zod.string()),
+  username: zod.string(),
+  uptime: zod.number().nullable(),
+  lastMessageAt: zod.string().nullable(),
+});
+
+/**
+ * @summary Re-add the bot to your Twitch channel
+ */
+export const BotJoinChannelResponse = zod.object({
+  connected: zod.boolean(),
+  channel: zod.string(),
+  channels: zod.array(zod.string()),
+  username: zod.string(),
+  uptime: zod.number().nullable(),
+  lastMessageAt: zod.string().nullable(),
+});
+
+/**
  * @summary List giveaways
  */
 export const listGiveawaysQueryLimitDefault = 20;
@@ -788,6 +812,35 @@ export const GetEngagementReportResponse = zod.object({
       detail: zod.string(),
     }),
   ),
+});
+
+/**
+ * @summary AI-generated stream engagement and monetization report. Goblin King (pro) tier only. Analyzes the streamer's stats window and returns structured insights + action items.
+
+ */
+export const getAiEngagementReportQueryRangeDefault = `all`;
+
+export const GetAiEngagementReportQueryParams = zod.object({
+  range: zod
+    .enum(["day", "week", "month", "year", "all", "stream"])
+    .default(getAiEngagementReportQueryRangeDefault)
+    .describe(
+      "Time window for stats. `stream` filters since the caller's streamStartedAt.",
+    ),
+});
+
+export const GetAiEngagementReportResponse = zod.object({
+  report: zod.string().describe("Full narrative report text"),
+  sections: zod.array(
+    zod.object({
+      title: zod.string(),
+      insight: zod.string(),
+      action: zod.string(),
+    }),
+  ),
+  generatedAt: zod.string(),
+  range: zod.string(),
+  cached: zod.boolean().optional(),
 });
 
 /**

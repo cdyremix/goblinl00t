@@ -6,6 +6,7 @@ import {
   useGetCommandStats,
   useGetTopLooters,
   useGetEngagementReport,
+  useGetAiEngagementReport,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { BarChart3, Trophy, Gem, Users, Zap, Gift, Command, Clock, Lightbulb, AlertTriangle, Download, Lock } from "lucide-react";
+import { BarChart3, Trophy, Gem, Users, Zap, Gift, Command, Clock, Lightbulb, AlertTriangle, Download, Lock, Sparkles, Crown, ArrowRight, RefreshCw } from "lucide-react";
 import { useSubscriptionTier, LockedHint } from "@/hooks/use-tier";
 import { Link } from "wouter";
 
@@ -37,7 +38,7 @@ export function Stats() {
   // CSV export + extended ledger ranges are gated behind the
   // "full-ledger-export" feature (Horde Master+). Free tier still sees
   // Day / Week with a locked hint pointing at upgrade.
-  const { hasFeature: hasTierFeature } = useSubscriptionTier();
+  const { hasFeature: hasTierFeature, tier } = useSubscriptionTier();
   const canExport = hasTierFeature("full-ledger-export");
   // Pin free users back to "week" if they had selected a paid range and
   // got downgraded — prevents stale state from masking the gate.
@@ -91,10 +92,18 @@ export function Stats() {
     }
   }
 
+  const canAiReport = hasTierFeature("advanced-analytics");
+  const [aiReportEnabled, setAiReportEnabled] = useState(false);
+
   const { data: overview, isLoading: overviewLoading } = useGetStatsOverview({ range: effectiveRange });
   const { data: commandStats, isLoading: commandsLoading } = useGetCommandStats({ range: effectiveRange });
   const { data: topLooters, isLoading: lootersLoading } = useGetTopLooters({ limit: 10, range: effectiveRange });
   const { data: engagement, isLoading: engagementLoading } = useGetEngagementReport({ range: effectiveRange });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: aiReport, isLoading: aiReportLoading, refetch: refetchAiReport, isFetching: aiReportFetching } = useGetAiEngagementReport(
+    { range: effectiveRange },
+    { query: { enabled: canAiReport && aiReportEnabled, staleTime: 10 * 60 * 1000 } as any }
+  );
 
   const maxCommandCount = commandStats ? Math.max(...commandStats.map((c) => c.usageCount), 1) : 1;
   const maxPoints = topLooters ? Math.max(...topLooters.map((u) => u.totalPoints), 1) : 1;
@@ -335,6 +344,138 @@ export function Stats() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── AI Engagement Report ─────────────────────────────────────── */}
+      <Card className="border-border/50 mt-2">
+        <CardHeader className="border-b border-border/50">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4.5 h-4.5 text-amber-400" />
+              </div>
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Goblin Advisor
+                  <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                    <Crown className="w-3 h-3" /> Goblin King
+                  </span>
+                  {aiReport?.cached && (
+                    <span className="text-xs text-muted-foreground font-normal">· cached</span>
+                  )}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  AI-powered engagement analysis and growth recommendations for your channel.
+                </p>
+              </div>
+            </div>
+
+            {canAiReport && (
+              <div className="flex items-center gap-2 shrink-0">
+                {aiReportEnabled && aiReport && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void refetchAiReport()}
+                    disabled={aiReportFetching}
+                    className="gap-1.5 text-muted-foreground h-8"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${aiReportFetching ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                )}
+                {!aiReportEnabled ? (
+                  <Button
+                    size="sm"
+                    onClick={() => setAiReportEnabled(true)}
+                    className="gap-2 bg-amber-600 hover:bg-amber-500 text-white"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Generate Report
+                  </Button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-6">
+          {/* Not on pro tier */}
+          {!canAiReport && (
+            <div className="flex flex-col items-center justify-center py-10 text-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Lock className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Goblin King feature</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                  Upgrade to Goblin King to unlock AI-powered analysis — growth tips, top viewer recognition, and monetization opportunities.
+                </p>
+              </div>
+              <Link href="/account?tab=rank">
+                <Button className="gap-2 mt-1">
+                  <Crown className="w-4 h-4" />
+                  Upgrade to Goblin King
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+              <LockedHint feature="advanced-analytics" />
+            </div>
+          )}
+
+          {/* Pro — not yet triggered */}
+          {canAiReport && !aiReportEnabled && (
+            <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-amber-400 animate-pulse" />
+              </div>
+              <p className="font-semibold text-foreground">Ready to analyze your channel</p>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Click <strong>Generate Report</strong> above to get AI-powered insights for the selected time range.
+                Reports are cached for 10 minutes.
+              </p>
+            </div>
+          )}
+
+          {/* Loading */}
+          {canAiReport && aiReportEnabled && aiReportLoading && (
+            <div className="space-y-4">
+              <Skeleton className="h-16 w-full rounded-xl" />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-xl" />
+              ))}
+            </div>
+          )}
+
+          {/* Report */}
+          {canAiReport && aiReportEnabled && !aiReportLoading && aiReport && (
+            <div className="space-y-5">
+              {/* Executive summary */}
+              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/15">
+                <p className="text-sm text-foreground leading-relaxed">{aiReport.report}</p>
+              </div>
+
+              {/* Sections */}
+              {aiReport.sections.map((section, i) => (
+                <div key={i} className="p-4 rounded-xl bg-card border border-border/50 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
+                    <h4 className="font-semibold text-sm text-foreground">{section.title}</h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground pl-6">{section.insight}</p>
+                  <div className="flex items-start gap-2 pl-6">
+                    <ArrowRight className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                    <p className="text-sm text-foreground">{section.action}</p>
+                  </div>
+                </div>
+              ))}
+
+              <p className="text-xs text-muted-foreground text-right">
+                Generated {new Date(aiReport.generatedAt).toLocaleString()}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { eq, desc, count, sum, sql, and, gte, inArray } from "drizzle-orm";
 import { GetTopLootersQueryParams } from "@workspace/api-zod";
 import { requireStreamerChannel, resolveStreamerChannelForRead } from "../lib/auth-helpers";
 import { userHasFeature } from "../lib/tier-helpers";
+import { openai } from "@workspace/integrations-openai-ai-server";
 
 const router: IRouter = Router();
 
@@ -268,6 +269,128 @@ router.get("/stats/engagement", async (req, res) => {
     },
     tips,
   });
+});
+
+/**
+ * Simple in-memory cache for AI reports — keyed by `channel:range`.
+ * Avoids hammering the LLM on every page refresh; entries expire after 10 min.
+ */
+const aiReportCache = new Map<string, { data: object; expiresAt: number }>();
+
+/**
+ * GET /stats/ai-report?range=... — AI-generated engagement + monetization
+ * report for the caller's channel. Gated to `advanced-analytics` (pro tier).
+ */
+router.get("/stats/ai-report", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+
+  if (!userHasFeature(ctx.user, "advanced-analytics")) {
+    res.status(403).json({
+      error: "AI reports are a Goblin King (pro) perk.",
+      feature: "advanced-analytics",
+    });
+    return;
+  }
+
+  const range = parseRange(req.query["range"]);
+  const since = await resolveSince(req, range);
+
+  const cacheKey = `${ctx.channel}:${range}`;
+  const cached = aiReportCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.json({ ...cached.data, cached: true });
+    return;
+  }
+
+  const lootChan = eq(lootDropsTable.channel, ctx.channel);
+  const cmdChan  = eq(commandLogsTable.channel, ctx.channel);
+  const givChan  = eq(giveawaysTable.channel, ctx.channel);
+  const lootWhere = since ? and(lootChan, gte(lootDropsTable.droppedAt, since)) : lootChan;
+  const cmdWhere  = since ? and(cmdChan, gte(commandLogsTable.executedAt, since)) : cmdChan;
+  const givWhere  = since ? and(givChan, gte(giveawaysTable.createdAt, since)) : givChan;
+
+  const [[lootRow], [cmdRow], [givRow], [uniqueRow], topLooters, topCmds] = await Promise.all([
+    db.select({ count: count() }).from(lootDropsTable).where(lootWhere),
+    db.select({ count: count() }).from(commandLogsTable).where(cmdWhere),
+    db.select({ count: count() }).from(giveawaysTable).where(givWhere),
+    db.select({ count: sql<number>`count(distinct ${lootDropsTable.username})` }).from(lootDropsTable).where(lootWhere),
+    db.select({
+      username: lootDropsTable.username,
+      totalPoints: sum(lootDropsTable.points),
+      lootCount: count(),
+    }).from(lootDropsTable).where(lootWhere).groupBy(lootDropsTable.username)
+      .orderBy(desc(sum(lootDropsTable.points))).limit(5),
+    db.select({ command: commandLogsTable.command, usageCount: count() })
+      .from(commandLogsTable).where(cmdWhere).groupBy(commandLogsTable.command)
+      .orderBy(desc(count())).limit(5),
+  ]);
+
+  const metrics = {
+    lootDrops: Number(lootRow?.count ?? 0),
+    commandsFired: Number(cmdRow?.count ?? 0),
+    giveaways: Number(givRow?.count ?? 0),
+    uniqueChatters: Number(uniqueRow?.count ?? 0),
+    topLooters: topLooters.map((r) => ({ username: r.username, coins: Number(r.totalPoints ?? 0), drops: Number(r.lootCount) })),
+    topCommands: topCmds.map((r) => ({ command: r.command, uses: Number(r.usageCount) })),
+    range,
+    channel: ctx.channel,
+  };
+
+  const prompt = `You are a Twitch stream growth advisor specializing in chat engagement and monetization for Goblin L00t — a loot-drop and giveaway bot.
+
+Analyze the following stream statistics for the Twitch channel "${ctx.channel}" over the "${range}" period:
+- Loot drops: ${metrics.lootDrops}
+- Commands fired: ${metrics.commandsFired}
+- Giveaways run: ${metrics.giveaways}
+- Unique chatters who earned coins: ${metrics.uniqueChatters}
+- Top 5 chatters by coins: ${metrics.topLooters.map((u) => `${u.username} (${u.coins} coins, ${u.drops} drops)`).join(", ") || "none"}
+- Top 5 commands used: ${metrics.topCommands.map((c) => `${c.command} (${c.uses}x)`).join(", ") || "none"}
+
+Return a JSON object with this exact structure (no markdown, no code fences — raw JSON only):
+{
+  "report": "<2-3 sentence executive summary of the channel's engagement health>",
+  "sections": [
+    {
+      "title": "<short section title>",
+      "insight": "<specific observation about what the data shows>",
+      "action": "<concrete 1-2 sentence action the streamer should take>"
+    }
+  ]
+}
+
+Generate 3-5 sections covering: engagement trends, top performer recognition, command/giveaway optimization, and monetization opportunities. Be specific, actionable, and encouraging. Focus on what's working and what quick wins are available.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 1500,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    let parsed: { report?: string; sections?: Array<{ title: string; insight: string; action: string }> };
+    try {
+      parsed = JSON.parse(raw) as typeof parsed;
+    } catch {
+      parsed = { report: raw, sections: [] };
+    }
+
+    const result = {
+      report: parsed.report ?? "Unable to generate report at this time.",
+      sections: parsed.sections ?? [],
+      generatedAt: new Date().toISOString(),
+      range,
+      cached: false,
+    };
+
+    aiReportCache.set(cacheKey, { data: result, expiresAt: Date.now() + 10 * 60 * 1000 });
+    res.json(result);
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    req.log.error({ errMessage }, "AI report generation failed");
+    res.status(500).json({ error: "Failed to generate AI report. Try again in a moment." });
+  }
 });
 
 /**

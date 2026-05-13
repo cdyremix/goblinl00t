@@ -781,6 +781,21 @@ export interface GiveawayPreset {
   createdAt: string;
 }
 
+export type AiEngagementReportSectionsItem = {
+  title: string;
+  insight: string;
+  action: string;
+};
+
+export interface AiEngagementReport {
+  /** Full narrative report text */
+  report: string;
+  sections: AiEngagementReportSectionsItem[];
+  generatedAt: string;
+  range: string;
+  cached?: boolean;
+}
+
 export type CreateGiveawayPresetPrizeKind =
   (typeof CreateGiveawayPresetPrizeKind)[keyof typeof CreateGiveawayPresetPrizeKind];
 
@@ -891,6 +906,13 @@ export type GetTopLootersParams = {
 };
 
 export type GetEngagementReportParams = {
+  /**
+   * Time window for stats. `stream` filters since the caller's streamStartedAt.
+   */
+  range?: StatsRangeParameter;
+};
+
+export type GetAiEngagementReportParams = {
   /**
    * Time window for stats. `stream` filters since the caller's streamStartedAt.
    */

@@ -4,15 +4,20 @@ import {
   useGetRecentLoot,
   useListGiveaways,
   useRestartBot,
+  useBotPartChannel,
+  useBotJoinChannel,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw } from "lucide-react";
+import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ChatUsers } from "@/pages/chat-users";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
+import { useToast } from "@/hooks/use-toast";
 
 /**
  * Operations Center.
@@ -24,6 +29,8 @@ import { ChatUsers } from "@/pages/chat-users";
  * Start Stream toggle.
  */
 export function Dashboard() {
+  const { getToken } = useAuth();
+  const { toast } = useToast();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: botStatus, isLoading: botLoading, refetch: refetchBotStatus } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
   const { mutate: restartBot, isPending: restarting } = useRestartBot({
@@ -31,6 +38,36 @@ export function Dashboard() {
       onSuccess: () => { void refetchBotStatus(); },
     },
   });
+  const { mutate: partChannel, isPending: parting } = useBotPartChannel({
+    mutation: {
+      onSuccess: () => {
+        void refetchBotStatus();
+        toast({ title: "Bot disconnected", description: "The goblin left your channel. Reconnect any time." });
+      },
+      onError: () => toast({ title: "Failed to disconnect bot", variant: "destructive" }),
+    },
+  });
+  const { mutate: joinChannel, isPending: joining } = useBotJoinChannel({
+    mutation: {
+      onSuccess: () => {
+        void refetchBotStatus();
+        toast({ title: "Bot reconnected", description: "The goblin is back in your channel!" });
+      },
+      onError: () => toast({ title: "Failed to reconnect bot", variant: "destructive" }),
+    },
+  });
+
+  // Fetch the user's own Twitch channel to know whether the bot is in it.
+  const { data: profileData } = useQuery<{ user: { twitchUsername: string | null } }>({
+    queryKey: ["users", "me"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/users/me", { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    },
+  });
+  const myChannel = profileData?.user.twitchUsername?.toLowerCase() ?? null;
+  const botIsInMyChannel = myChannel ? (botStatus?.channels ?? []).includes(myChannel) : null;
 
   const { data: stats, isLoading: statsLoading } = useGetStatsOverview({ range: "stream" });
   const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 10, since: "stream" });
@@ -51,8 +88,8 @@ export function Dashboard() {
           <p className="text-muted-foreground mt-2 text-lg">The heart of the goblin cave.</p>
         </div>
 
-        <div className="flex items-center gap-2 bg-card border border-border rounded-full px-1 py-1">
-          {/* Restart Bot button */}
+        <div className="flex items-center gap-2 bg-card border border-border rounded-full px-1 py-1 flex-wrap">
+          {/* Restart Bot */}
           <Button
             variant="ghost"
             size="sm"
@@ -64,6 +101,40 @@ export function Dashboard() {
             <RefreshCw className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
             {restarting ? "Restarting…" : "Restart Bot"}
           </Button>
+
+          {/* Disconnect / Reconnect — only show when we know the user's channel */}
+          {myChannel && (
+            <>
+              <div className="w-px h-5 bg-border" />
+              {botIsInMyChannel ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => partChannel()}
+                  disabled={parting}
+                  className="gap-2 rounded-full h-8 px-3 text-muted-foreground hover:text-destructive"
+                  data-testid="btn-disconnect-bot"
+                  title="Remove the bot from your channel (Twitch link stays intact)"
+                >
+                  <WifiOff className="w-3.5 h-3.5" />
+                  {parting ? "Disconnecting…" : "Disconnect Bot"}
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => joinChannel()}
+                  disabled={joining}
+                  className="gap-2 rounded-full h-8 px-3 text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                  data-testid="btn-reconnect-bot"
+                  title="Re-add the bot to your channel"
+                >
+                  <Wifi className="w-3.5 h-3.5" />
+                  {joining ? "Reconnecting…" : "Reconnect Bot"}
+                </Button>
+              )}
+            </>
+          )}
 
           <div className="w-px h-5 bg-border" />
 

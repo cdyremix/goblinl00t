@@ -98,6 +98,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/BotStatus"
 
+  /bot/part-channel:
+    post:
+      operationId: botPartChannel
+      tags: [bot]
+      summary: Remove the bot from your Twitch channel (soft disconnect, no OAuth lost)
+      responses:
+        "200":
+          description: Bot parted the channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotStatus"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
+  /bot/join-channel:
+    post:
+      operationId: botJoinChannel
+      tags: [bot]
+      summary: Re-add the bot to your Twitch channel
+      responses:
+        "200":
+          description: Bot joined the channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotStatus"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
   /giveaway:
     get:
       operationId: listGiveaways
@@ -611,6 +645,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EngagementReport"
+
+  /stats/ai-report:
+    get:
+      operationId: getAiEngagementReport
+      tags: [stats]
+      summary: >
+        AI-generated stream engagement and monetization report. Goblin King (pro) tier only.
+        Analyzes the streamer's stats window and returns structured insights + action items.
+      parameters:
+        - $ref: "#/components/parameters/StatsRange"
+      responses:
+        "200":
+          description: AI report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiEngagementReport"
+        "403":
+          description: Requires Goblin King (pro) tier
+        "401":
+          description: Unauthorized
 
   /stream/status:
     get:
@@ -2174,6 +2229,32 @@ components:
         - requireFollower
         - subscriberOnly
         - createdAt
+
+    AiEngagementReport:
+      type: object
+      properties:
+        report:
+          type: string
+          description: Full narrative report text
+        sections:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              insight:
+                type: string
+              action:
+                type: string
+            required: [title, insight, action]
+        generatedAt:
+          type: string
+        range:
+          type: string
+        cached:
+          type: boolean
+      required: [report, sections, generatedAt, range]
 
     CreateGiveawayPreset:
       type: object
