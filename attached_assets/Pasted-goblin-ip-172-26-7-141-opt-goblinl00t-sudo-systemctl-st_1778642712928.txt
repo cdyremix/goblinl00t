@@ -1,0 +1,69 @@
+goblin@ip-172-26-7-141:/opt/goblinl00t$ sudo systemctl status goblin-l00t
+● goblin-l00t.service - Goblin L00t API + Twitch bot
+     Loaded: loaded (/etc/systemd/system/goblin-l00t.service; enabled; preset: enabled)
+     Active: activating (auto-restart) (Result: exit-code) since Wed 2026-05-13 03:24:55 UTC; 1s ago
+    Process: 1491030 ExecStart=/usr/bin/node --enable-source-maps /opt/goblinl00t/artifacts/api-server/dist/index.mjs (>
+   Main PID: 1491030 (code=exited, status=1/FAILURE)
+        CPU: 718ms
+
+goblin@ip-172-26-7-141:/opt/goblinl00t$ sudo journalctl -u goblin-l00t -n 60 --no-pager
+May 13 03:24:38 ip-172-26-7-141 goblin-l00t[1490996]: Error: AI_INTEGRATIONS_OPENAI_BASE_URL must be set. Did you forget to provision the OpenAI AI integration?
+May 13 03:24:38 ip-172-26-7-141 goblin-l00t[1490996]:     at <anonymous> (/opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4:9)
+May 13 03:24:38 ip-172-26-7-141 goblin-l00t[1490996]:     at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+May 13 03:24:38 ip-172-26-7-141 goblin-l00t[1490996]:     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+May 13 03:24:38 ip-172-26-7-141 goblin-l00t[1490996]:     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+May 13 03:24:38 ip-172-26-7-141 goblin-l00t[1490996]: Node.js v22.22.2
+May 13 03:24:38 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Main process exited, code=exited, status=1/FAILURE
+May 13 03:24:38 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Failed with result 'exit-code'.
+May 13 03:24:43 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Scheduled restart job, restart counter is at 33.
+May 13 03:24:43 ip-172-26-7-141 systemd[1]: Started goblin-l00t.service - Goblin L00t API + Twitch bot.
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]: /opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]:   throw new Error(
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]:         ^
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]: Error: AI_INTEGRATIONS_OPENAI_BASE_URL must be set. Did you forget to provision the OpenAI AI integration?
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]:     at <anonymous> (/opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4:9)
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]:     at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]:     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]:     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+May 13 03:24:43 ip-172-26-7-141 goblin-l00t[1491007]: Node.js v22.22.2
+May 13 03:24:43 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Main process exited, code=exited, status=1/FAILURE
+May 13 03:24:43 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Failed with result 'exit-code'.
+May 13 03:24:49 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Scheduled restart job, restart counter is at 34.
+May 13 03:24:49 ip-172-26-7-141 systemd[1]: Started goblin-l00t.service - Goblin L00t API + Twitch bot.
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]: /opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]:   throw new Error(
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]:         ^
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]: Error: AI_INTEGRATIONS_OPENAI_BASE_URL must be set. Did you forget to provision the OpenAI AI integration?
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]:     at <anonymous> (/opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4:9)
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]:     at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]:     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]:     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+May 13 03:24:49 ip-172-26-7-141 goblin-l00t[1491018]: Node.js v22.22.2
+May 13 03:24:49 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Main process exited, code=exited, status=1/FAILURE
+May 13 03:24:49 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Failed with result 'exit-code'.
+May 13 03:24:54 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Scheduled restart job, restart counter is at 35.
+May 13 03:24:54 ip-172-26-7-141 systemd[1]: Started goblin-l00t.service - Goblin L00t API + Twitch bot.
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]: /opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]:   throw new Error(
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]:         ^
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]: Error: AI_INTEGRATIONS_OPENAI_BASE_URL must be set. Did you forget to provision the OpenAI AI integration?
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]:     at <anonymous> (/opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4:9)
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]:     at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]:     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]:     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+May 13 03:24:55 ip-172-26-7-141 goblin-l00t[1491030]: Node.js v22.22.2
+May 13 03:24:55 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Main process exited, code=exited, status=1/FAILURE
+May 13 03:24:55 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Failed with result 'exit-code'.
+May 13 03:25:00 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Scheduled restart job, restart counter is at 36.
+May 13 03:25:00 ip-172-26-7-141 systemd[1]: Started goblin-l00t.service - Goblin L00t API + Twitch bot.
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]: /opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]:   throw new Error(
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]:         ^
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]: Error: AI_INTEGRATIONS_OPENAI_BASE_URL must be set. Did you forget to provision the OpenAI AI integration?
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]:     at <anonymous> (/opt/goblinl00t/lib/integrations-openai-ai-server/src/client.ts:4:9)
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]:     at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]:     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]:     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+May 13 03:25:01 ip-172-26-7-141 goblin-l00t[1491045]: Node.js v22.22.2
+May 13 03:25:01 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Main process exited, code=exited, status=1/FAILURE
+May 13 03:25:01 ip-172-26-7-141 systemd[1]: goblin-l00t.service: Failed with result 'exit-code'.
