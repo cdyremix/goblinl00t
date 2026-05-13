@@ -100,9 +100,9 @@ export function Stats() {
   const { data: topLooters, isLoading: lootersLoading } = useGetTopLooters({ limit: 10, range: effectiveRange });
   const { data: engagement, isLoading: engagementLoading } = useGetEngagementReport({ range: effectiveRange });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: aiReport, isLoading: aiReportLoading, refetch: refetchAiReport, isFetching: aiReportFetching } = useGetAiEngagementReport(
+  const { data: aiReport, isLoading: aiReportLoading, isError: aiReportError, error: aiReportErrorDetail, refetch: refetchAiReport, isFetching: aiReportFetching } = useGetAiEngagementReport(
     { range: effectiveRange },
-    { query: { enabled: canAiReport && aiReportEnabled, staleTime: 10 * 60 * 1000 } as any }
+    { query: { enabled: canAiReport && aiReportEnabled, staleTime: 10 * 60 * 1000, retry: false } as any }
   );
 
   const maxCommandCount = commandStats ? Math.max(...commandStats.map((c) => c.usageCount), 1) : 1;
@@ -443,6 +443,15 @@ export function Stats() {
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 w-full rounded-xl" />
               ))}
+            </div>
+          )}
+
+          {/* Error state */}
+          {canAiReport && aiReportEnabled && !aiReportLoading && aiReportError && (
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+              {(aiReportErrorDetail as any)?.response?.data?.error
+                ?? (aiReportErrorDetail as any)?.message
+                ?? "Failed to generate AI report. Try again in a moment."}
             </div>
           )}
 

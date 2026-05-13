@@ -388,6 +388,11 @@ Generate 3-5 sections covering: engagement trends, top performer recognition, co
     res.json(result);
   } catch (err) {
     const errMessage = err instanceof Error ? err.message : String(err);
+    if (errMessage.includes("AI_INTEGRATIONS_OPENAI_BASE_URL") || errMessage.includes("AI_INTEGRATIONS_OPENAI_API_KEY")) {
+      req.log.warn({ errMessage }, "AI report unavailable: OpenAI integration not configured");
+      res.status(503).json({ error: "AI reports are not available in this environment. The OpenAI integration is only active on Replit-hosted deployments." });
+      return;
+    }
     req.log.error({ errMessage }, "AI report generation failed");
     res.status(500).json({ error: "Failed to generate AI report. Try again in a moment." });
   }
