@@ -68,7 +68,7 @@ export function Giveaways() {
 
   const { data: giveaways, isLoading } = useListGiveaways();
   const { data: currentGiveaway } = useGetCurrentGiveaway();
-  const { hasFeature: hasTierFeature } = useSubscriptionTier();
+  const { hasFeature: hasTierFeature, isAdmin, isDev } = useSubscriptionTier();
   const hasUnlimited = hasTierFeature("unlimited-giveaways");
 
   const createMutation = useCreateGiveaway();
@@ -185,7 +185,7 @@ export function Giveaways() {
       </div>
 
       {/* Hero — the streamer's primary action lives here. */}
-      <SpotlightCard giveaway={spotlight} />
+      <SpotlightCard giveaway={spotlight} canSeedTest={isAdmin || isDev} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Create Form */}
@@ -651,15 +651,17 @@ export function Giveaways() {
   );
 }
 
-// Header-bar shortcut that spins up a fresh giveaway pre-loaded with ~30
-// fake entries so the streamer can demo the wheel without rallying real
-// chatters. Calls POST /giveaway/seed-test (dev-gated server-side — won't
-// run in prod). Shown next to the page title so it's always reachable
-// regardless of whether a giveaway already exists.
+// Shown to admin/dev accounts only — lets them forge a pre-seeded giveaway
+// to test the elimination wheel without waiting for real chat entries.
+// Visible in both dev and production builds; the server gates on isAdmin||isDev.
 function TestGiveawayButton() {
+  const { isAdmin, isDev } = useSubscriptionTier();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const seedTest = useSeedTestGiveaway();
+
+  if (!isAdmin && !isDev) return null;
+
   return (
     <Button
       variant="outline"
@@ -676,7 +678,7 @@ function TestGiveawayButton() {
           onError: () =>
             toast({
               title: "Couldn't create test giveaway",
-              description: "Test giveaways are dev-only. They're disabled in production.",
+              description: "Something went wrong. Make sure your account has admin or dev access.",
               variant: "destructive",
             }),
         })
@@ -936,7 +938,7 @@ function CollapsibleSection({
 // demoed without waiting for chat to type.
 // =====================================================================
 
-function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) {
+function SpotlightCard({ giveaway, canSeedTest }: { giveaway: Giveaway | null | undefined; canSeedTest: boolean }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { isSignedIn } = useAuth();
@@ -998,7 +1000,7 @@ function SpotlightCard({ giveaway }: { giveaway: Giveaway | null | undefined }) 
   const isPending = giveaway.status === "pending";
   const isActive = giveaway.status === "active";
   const entryCount = giveaway.entryCount ?? 0;
-  const needsTestEntries = entryCount < 5;
+  const needsTestEntries = canSeedTest && entryCount < 5;
 
   function handleSeed() {
     if (!giveaway) return;
@@ -1197,6 +1199,7 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
   const isEnded = giveaway.status === "ended";
   const entryCount = giveaway.entryCount ?? 0;
 
+  const { isAdmin: rowIsAdmin, isDev: rowIsDev } = useSubscriptionTier();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const seedEntries = useSeedGiveawayEntries();
@@ -1313,7 +1316,7 @@ function GiveawayRow({ giveaway, isCurrent }: { giveaway: Giveaway; isCurrent: b
           </div>
         </Link>
         <div className="shrink-0 flex items-center gap-2">
-          {(isPending || isActive) && entryCount < 5 && (
+          {(isPending || isActive) && entryCount < 5 && (rowIsAdmin || rowIsDev) && (
             <Button
               size="sm"
               variant="outline"

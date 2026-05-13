@@ -242,7 +242,7 @@ function MaintenanceModal() {
         )}
 
         <div className="mt-6 pt-5 border-t border-[#1c2421] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#9e9585]">
-          <span>Dev / testing access only</span>
+          <span>Admin &amp; staff access only during maintenance</span>
           <DevLoginButton />
         </div>
       </div>
@@ -274,7 +274,7 @@ function DevLoginButton() {
       data-testid="link-dev-login"
     >
       <LogIn className="w-3.5 h-3.5" />
-      Dev login
+      Admin login
     </a>
   );
 }

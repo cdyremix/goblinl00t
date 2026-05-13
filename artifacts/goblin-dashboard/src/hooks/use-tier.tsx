@@ -30,6 +30,7 @@ export function useSubscriptionTier(): {
   tier: TierId;
   loading: boolean;
   isAdmin: boolean;
+  isDev: boolean;
   hasFeature: (f: FeatureId) => boolean;
 } {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -62,6 +63,7 @@ export function useSubscriptionTier(): {
     tier,
     loading: !enabled || isLoading,
     isAdmin,
+    isDev,
     hasFeature: (f: FeatureId) => isAdmin || isDev || hasFeature(tier, f),
   };
 }

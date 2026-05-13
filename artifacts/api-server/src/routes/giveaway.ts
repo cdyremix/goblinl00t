@@ -190,21 +190,26 @@ router.post("/giveaway", async (req, res) => {
  * channel — matches the rest of giveaway.ts' channel resolution).
  */
 router.post("/giveaway/seed-test", async (req, res) => {
-  // Same prod-gate as /seed-entries — see that handler for rationale.
-  if (process.env["NODE_ENV"] === "production") {
-    res.status(403).json({ error: "Seeding is disabled in production" });
+  // Gate: caller must be authenticated AND have isAdmin or isDev in the DB.
+  // This replaces the old NODE_ENV check so admins/devs can seed test
+  // giveaways in production (e.g. to verify the elimination wheel before a
+  // stream) without needing a separate dev build.
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Must be signed in to seed test giveaways" });
     return;
   }
-  const { userId } = getAuth(req);
-  let channel = "goblinl00t";
-  if (userId) {
-    const [user] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.clerkUserId, userId))
-      .limit(1);
-    if (user?.twitchUsername) channel = user.twitchUsername.toLowerCase();
+  const [callerRow] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, userId))
+    .limit(1);
+  if (!callerRow?.isAdmin && !callerRow?.isDev) {
+    res.status(403).json({ error: "Seeding test giveaways requires an admin or dev account" });
+    return;
   }
+  let channel = "goblinl00t";
+  if (callerRow?.twitchUsername) channel = callerRow.twitchUsername.toLowerCase();
 
   // End any currently active giveaway (matches /giveaway/:id/start behavior so
   // the "currently active" UI never has two rows competing for the spotlight).
@@ -251,10 +256,20 @@ router.post("/giveaway/seed-test", async (req, res) => {
  * via onConflictDoNothing on the (giveawayId, username) unique index.
  */
 router.post("/giveaway/:id/seed-entries", async (req, res) => {
-  // Gate dev/test seeders out of production so a stray button click on the
-  // live deployment can't dump 30 fake viewers into a real channel's stats.
-  if (process.env["NODE_ENV"] === "production") {
-    res.status(403).json({ error: "Seeding is disabled in production" });
+  // Gate: caller must be authenticated AND have isAdmin or isDev.
+  // This replaces the old NODE_ENV check — see /seed-test for rationale.
+  const { userId: seedUserId } = getAuth(req);
+  if (!seedUserId) {
+    res.status(401).json({ error: "Must be signed in to seed entries" });
+    return;
+  }
+  const [seedCallerRow] = await db
+    .select({ isAdmin: usersTable.isAdmin, isDev: usersTable.isDev })
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, seedUserId))
+    .limit(1);
+  if (!seedCallerRow?.isAdmin && !seedCallerRow?.isDev) {
+    res.status(403).json({ error: "Seeding entries requires an admin or dev account" });
     return;
   }
   const id = Number(req.params["id"]);
