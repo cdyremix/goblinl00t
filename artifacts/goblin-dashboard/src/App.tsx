@@ -23,6 +23,7 @@ import { Admin } from "@/pages/admin";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import Changelog from "@/pages/changelog";
+import SupportPage from "@/pages/support";
 import NotFound from "@/pages/not-found";
 import DevSignIn from "@/pages/dev-sign-in";
 import AdminBypassSignIn from "@/pages/admin-bypass-signin";
@@ -279,6 +280,9 @@ function AppRouter() {
       </Route>
       <Route path="/changelog">
         <Layout><Changelog /></Layout>
+      </Route>
+      <Route path="/support">
+        <Layout><SupportPage /></Layout>
       </Route>
       <Route component={NotFound} />
     </Switch>

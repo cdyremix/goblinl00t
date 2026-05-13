@@ -1,165 +1,11 @@
-import { useState } from "react";
-import { useAuth, useUser } from "@clerk/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { useLocation } from "wouter";
 import {
   BookOpen, LayoutDashboard, Gift, BarChart3, Settings2, Send, User, Coins, Sparkles,
-  MessageSquare, Tv, Bug, Lightbulb, HelpCircle, ChevronRight, Swords, Package,
-  Zap, Trophy, ShieldCheck, CheckCircle2, Loader2,
+  ChevronRight, Swords, Package, Zap, Trophy, ShieldCheck, HeartHandshake,
 } from "lucide-react";
-
-/* ─── Support form ─── */
-
-type Category = "bug" | "feature" | "help" | "other";
-
-const CATEGORIES: { value: Category; label: string; icon: React.ReactNode; description: string }[] = [
-  { value: "bug",     label: "Bug Report",       icon: <Bug className="w-4 h-4" />,        description: "Something isn't working correctly" },
-  { value: "feature", label: "Feature Request",  icon: <Lightbulb className="w-4 h-4" />,  description: "An idea or improvement suggestion" },
-  { value: "help",    label: "General Help",     icon: <HelpCircle className="w-4 h-4" />, description: "A question about setup or usage" },
-  { value: "other",   label: "Other",            icon: <MessageSquare className="w-4 h-4" />, description: "Anything else" },
-];
-
-function SupportForm() {
-  const { getToken } = useAuth();
-  const { user } = useUser();
-
-  const [category, setCategory] = useState<Category>("help");
-  const [email, setEmail]       = useState(user?.primaryEmailAddress?.emailAddress ?? "");
-  const [subject, setSubject]   = useState("");
-  const [message, setMessage]   = useState("");
-  const [busy, setBusy]         = useState(false);
-  const [done, setDone]         = useState(false);
-  const [error, setError]       = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const token = await getToken().catch(() => null);
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const r = await fetch("/api/support/tickets", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ category, email: email.trim(), subject: subject.trim(), message: message.trim() }),
-      });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({})) as { error?: string; fields?: Record<string, string> };
-        const fieldMsg = body.fields ? Object.values(body.fields)[0] : null;
-        setError(fieldMsg ?? body.error ?? "Something went wrong — please try again.");
-        return;
-      }
-      setDone(true);
-    } catch {
-      setError("Network error — check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (done) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-        <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center">
-          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-        </div>
-        <p className="font-semibold text-foreground">Ticket submitted!</p>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          We've got your message. You'll hear back at <span className="text-foreground">{email}</span> as soon as possible.
-        </p>
-        <Button variant="outline" size="sm" className="mt-2" onClick={() => { setDone(false); setSubject(""); setMessage(""); }}>
-          Submit another
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-5">
-      {/* Category picker */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c.value}
-            type="button"
-            onClick={() => setCategory(c.value)}
-            className={`flex flex-col gap-1.5 p-3 rounded-lg border text-left transition-colors text-sm ${
-              category === c.value
-                ? "border-primary/60 bg-primary/10 text-foreground"
-                : "border-border/40 bg-muted/10 text-muted-foreground hover:bg-muted/20 hover:text-foreground"
-            }`}
-          >
-            <span className={category === c.value ? "text-primary" : ""}>{c.icon}</span>
-            <span className="font-medium leading-tight">{c.label}</span>
-            <span className="text-[10px] leading-tight text-muted-foreground">{c.description}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="support-email">Your email</Label>
-          <Input
-            id="support-email"
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="support-subject">Subject</Label>
-          <Input
-            id="support-subject"
-            placeholder="Brief summary of your issue"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            maxLength={120}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="support-message">Message</Label>
-        <Textarea
-          id="support-message"
-          placeholder={
-            category === "bug"
-              ? "What happened? What did you expect? Steps to reproduce…"
-              : category === "feature"
-                ? "Describe the feature you'd like and why it would be useful…"
-                : "How can we help?"
-          }
-          rows={5}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          maxLength={4000}
-          required
-        />
-        <p className="text-[10px] text-muted-foreground text-right">{message.length}/4000</p>
-      </div>
-
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
-
-      <Button type="submit" disabled={busy} className="w-full sm:w-auto">
-        {busy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-        Send ticket
-      </Button>
-    </form>
-  );
-}
 
 /* ─── Quick-start steps ─── */
 
@@ -359,21 +205,6 @@ export function HelpGuide() {
         <p className="text-muted-foreground mt-2 text-lg">Everything you need to set up, run, and get the most out of Goblin L00t.</p>
       </div>
 
-      {/* Support form */}
-      <section id="support" className="space-y-4">
-        <div>
-          <h2 className="text-xl font-bold text-foreground">Contact Support</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Report a bug, request a feature, or ask for help — we'll get back to you by email.
-          </p>
-        </div>
-        <Card className="border-border/50">
-          <CardContent className="p-6">
-            <SupportForm />
-          </CardContent>
-        </Card>
-      </section>
-
       {/* Quick start */}
       <section className="space-y-4">
         <div>
@@ -482,15 +313,15 @@ export function HelpGuide() {
 
       {/* Footer callout */}
       <div className="flex items-center gap-4 p-5 rounded-lg border border-primary/20 bg-primary/5">
-        <Coins className="w-6 h-6 text-primary shrink-0" />
+        <HeartHandshake className="w-6 h-6 text-primary shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-foreground text-sm">Still stuck?</p>
           <p className="text-xs text-muted-foreground">
-            Use the Contact Support form above and we'll get back to you directly.
+            Open a support ticket and we'll get back to you directly by email.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => document.getElementById("support")?.scrollIntoView({ behavior: "smooth" })}>
-          Get help
+        <Button variant="outline" size="sm" asChild>
+          <a href="/support">Contact Support</a>
         </Button>
       </div>
 

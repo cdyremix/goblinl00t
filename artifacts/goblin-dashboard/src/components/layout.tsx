@@ -246,9 +246,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="font-medium">Help &amp; Guide</span>
           </Link>
           <Link
-            href="/help#support"
+            href="/support"
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-              location.startsWith("/help")
+              location.startsWith("/support")
                 ? "bg-primary/10 text-primary border border-primary/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
             }`}
