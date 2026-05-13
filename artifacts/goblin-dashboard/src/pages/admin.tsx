@@ -1228,7 +1228,7 @@ function IdentitySection({
   const [steamUsername, setSteamUsername] = useState(detail.user.steamUsername ?? "");
   const [email, setEmail] = useState(detail.clerk?.email ?? "");
   const [password, setPassword] = useState("");
-  const [busyKind, setBusyKind] = useState<"profile" | "email" | "password" | "verify" | null>(null);
+  const [busyKind, setBusyKind] = useState<"profile" | "email" | "password" | "verify" | "role" | null>(null);
 
   // Per-card error state — surfaced inline next to the offending field
   // (and at the top of the card for non-field errors) instead of being
@@ -1241,8 +1241,12 @@ function IdentitySection({
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
   // Tiny "Saved ✓" pulse instead of a toast — same surface, cheaper UX.
-  const [savedFlash, setSavedFlash] = useState<"profile" | "email" | "password" | "verify" | null>(null);
-  function flashSaved(kind: "profile" | "email" | "password" | "verify") {
+  const [isAdmin, setIsAdmin] = useState(detail.user.isAdmin);
+  const [isStaff, setIsStaff] = useState(detail.user.isStaff);
+  const [roleError, setRoleError] = useState<string | null>(null);
+
+  const [savedFlash, setSavedFlash] = useState<"profile" | "email" | "password" | "verify" | "role" | null>(null);
+  function flashSaved(kind: "profile" | "email" | "password" | "verify" | "role") {
     setSavedFlash(kind);
     setTimeout(() => setSavedFlash((cur) => (cur === kind ? null : cur)), 2400);
   }
@@ -1253,6 +1257,8 @@ function IdentitySection({
     setTwitchUsername(detail.user.twitchUsername ?? "");
     setSteamUsername(detail.user.steamUsername ?? "");
     setEmail(detail.clerk?.email ?? "");
+    setIsAdmin(detail.user.isAdmin);
+    setIsStaff(detail.user.isStaff);
   }, [detail]);
 
   async function saveProfile() {
@@ -1600,8 +1606,77 @@ function IdentitySection({
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Role</h3>
+          <div className="space-y-2">
+            <div>
+              <Label>Super admin</Label>
+              <div className="flex items-center gap-2 h-10">
+                <Switch
+                  checked={isAdmin}
+                  onCheckedChange={(v) => { setIsAdmin(v); if (v) setIsStaff(false); }}
+                  data-testid="switch-edit-admin"
+                />
+                <span className="text-sm text-muted-foreground">Bypass all gates + admin panel</span>
+              </div>
+            </div>
+            <div>
+              <Label>Staff account</Label>
+              <div className="flex items-center gap-2 h-10">
+                <Switch
+                  checked={isStaff}
+                  onCheckedChange={(v) => { setIsStaff(v); if (v) setIsAdmin(false); }}
+                  disabled={isAdmin}
+                  data-testid="switch-edit-staff"
+                />
+                <span className="text-sm text-muted-foreground">Bypass all feature gates (no admin panel)</span>
+              </div>
+            </div>
+          </div>
+          {roleError && (
+            <p className="text-xs text-destructive flex items-center gap-1.5" role="alert">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {roleError}
+            </p>
+          )}
+          <div className="flex items-center gap-3">
+            <Button onClick={saveRole} disabled={busyKind === "role"} data-testid="button-save-role">
+              {busyKind === "role" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Save
+            </Button>
+            {savedFlash === "role" && (
+              <span className="text-xs text-emerald-300 flex items-center gap-1" data-testid="flash-role-saved">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
+
+  async function saveRole() {
+    setBusyKind("role");
+    setRoleError(null);
+    try {
+      const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isAdmin, isStaff }),
+      });
+      if (!r.ok) {
+        const { message } = await parseApiError(r);
+        setRoleError(message);
+        return;
+      }
+      flashSaved("role");
+      onSaved();
+    } finally {
+      setBusyKind(null);
+    }
+  }
 }
 
 /* ───────────────── Subscription tab ───────────────── */
@@ -1616,8 +1691,6 @@ function SubscriptionSection({
   onChanged: () => void;
 }) {
   const [tier, setTier] = useState<Tier>(detail.user.subscriptionTier);
-  const [isAdmin, setIsAdmin] = useState(detail.user.isAdmin);
-  const [isStaff, setIsStaff] = useState(detail.user.isStaff);
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1626,8 +1699,6 @@ function SubscriptionSection({
 
   useEffect(() => {
     setTier(detail.user.subscriptionTier);
-    setIsAdmin(detail.user.isAdmin);
-    setIsStaff(detail.user.isStaff);
   }, [detail]);
 
   async function save() {
@@ -1637,7 +1708,7 @@ function SubscriptionSection({
       const r = await authedFetch(`/api/admin/users/${detail.user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionTier: tier, isAdmin, isStaff }),
+        body: JSON.stringify({ subscriptionTier: tier }),
       });
       if (!r.ok) {
         const { message } = await parseApiError(r);
@@ -1675,54 +1746,19 @@ function SubscriptionSection({
       <Card>
         <CardContent className="p-4 space-y-3">
           <h3 className="font-semibold text-sm">Manual entitlement (DB override)</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>Tier</Label>
-              <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
-                <SelectTrigger data-testid="select-edit-tier"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="free">Free</SelectItem>
-                  <SelectItem value="premium">Premium</SelectItem>
-                  <SelectItem value="pro">Pro</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Comp / partner override only. Active Stripe subs re-overwrite this on the next read.
-              </p>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Super admin</Label>
-              <div className="flex items-center gap-2 h-10">
-                <Switch
-                  checked={isAdmin}
-                  onCheckedChange={(v) => {
-                    setIsAdmin(v);
-                    // Mutex with staff — admin already implies feature
-                    // bypass and adds admin powers, so staff becomes a no-op.
-                    if (v) setIsStaff(false);
-                  }}
-                  data-testid="switch-edit-admin"
-                />
-                <span className="text-sm text-muted-foreground">Bypass all gates + admin panel</span>
-              </div>
-            </div>
-          </div>
           <div>
-            <Label>Staff account</Label>
-            <div className="flex items-center gap-2 h-10">
-              <Switch
-                checked={isStaff}
-                onCheckedChange={(v) => {
-                  setIsStaff(v);
-                  if (v) setIsAdmin(false);
-                }}
-                disabled={isAdmin}
-                data-testid="switch-edit-staff"
-              />
-              <span className="text-sm text-muted-foreground">
-                Bypass all feature gates (no admin panel)
-              </span>
-            </div>
+            <Label>Tier</Label>
+            <Select value={tier} onValueChange={(v) => setTier(v as Tier)}>
+              <SelectTrigger data-testid="select-edit-tier"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="free">Free</SelectItem>
+                <SelectItem value="premium">Premium</SelectItem>
+                <SelectItem value="pro">Pro</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Comp / partner override only. Active Stripe subs re-overwrite this on the next read.
+            </p>
           </div>
           {saveError && (
             <p
