@@ -11,3 +11,4 @@ export * from "./goblin_events";
 export * from "./giveaway_presets";
 export * from "./waitlist_emails";
 export * from "./app_settings";
+export * from "./support_tickets";

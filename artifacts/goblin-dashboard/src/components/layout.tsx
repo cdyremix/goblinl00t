@@ -245,16 +245,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <BookOpen className="w-4 h-4 shrink-0" />
             <span className="font-medium">Help &amp; Guide</span>
           </Link>
-          <a
-            href="https://discord.gg/WqAy3rhMh"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent transition-colors"
-            data-testid="link-discord"
+          <Link
+            href="/help#support"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              location.startsWith("/help")
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
+            }`}
+            data-testid="link-contact-support"
           >
             <MessageCircle className="w-4 h-4 shrink-0" />
-            <span className="font-medium">Join Discord</span>
-          </a>
+            <span className="font-medium">Contact Support</span>
+          </Link>
           <div className="px-3 pt-1 flex items-center gap-3 text-[10px] text-muted-foreground/60 uppercase tracking-wider">
             <Link href="/terms" className="hover:text-foreground" data-testid="link-terms">Terms</Link>
             <span>·</span>

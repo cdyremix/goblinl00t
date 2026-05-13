@@ -1,80 +1,174 @@
+import { useState } from "react";
+import { useAuth, useUser } from "@clerk/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   BookOpen, LayoutDashboard, Gift, BarChart3, Settings2, Send, User, Coins, Sparkles,
   MessageSquare, Tv, Bug, Lightbulb, HelpCircle, ChevronRight, Swords, Package,
-  Zap, Trophy, ShieldCheck, ExternalLink, ArrowRight,
+  Zap, Trophy, ShieldCheck, CheckCircle2, Loader2,
 } from "lucide-react";
 
-const DISCORD_INVITE = "https://discord.gg/WqAy3rhMh";
+/* ─── Support form ─── */
 
-/* ─── Support section ─── */
+type Category = "bug" | "feature" | "help" | "other";
 
-interface SupportCard {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  channel: string;
-  cta: string;
-  color: string;
-}
-
-const SUPPORT_CARDS: SupportCard[] = [
-  {
-    icon: <Bug className="w-5 h-5" />,
-    title: "Report a Bug",
-    description: "Something broken? Post in our Discord and we'll squash it.",
-    channel: "#bug-reports",
-    cta: "Open bug reports",
-    color: "text-red-400 bg-red-500/10 border-red-500/20",
-  },
-  {
-    icon: <Lightbulb className="w-5 h-5" />,
-    title: "Request a Feature",
-    description: "Got an idea that would make the goblin more powerful? We want to hear it.",
-    channel: "#feature-requests",
-    cta: "Submit an idea",
-    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  },
-  {
-    icon: <HelpCircle className="w-5 h-5" />,
-    title: "Get Help",
-    description: "Can't find the answer here? Ask our community or ping staff directly.",
-    channel: "#help-desk",
-    cta: "Ask in Discord",
-    color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-  },
+const CATEGORIES: { value: Category; label: string; icon: React.ReactNode; description: string }[] = [
+  { value: "bug",     label: "Bug Report",       icon: <Bug className="w-4 h-4" />,        description: "Something isn't working correctly" },
+  { value: "feature", label: "Feature Request",  icon: <Lightbulb className="w-4 h-4" />,  description: "An idea or improvement suggestion" },
+  { value: "help",    label: "General Help",     icon: <HelpCircle className="w-4 h-4" />, description: "A question about setup or usage" },
+  { value: "other",   label: "Other",            icon: <MessageSquare className="w-4 h-4" />, description: "Anything else" },
 ];
+
+function SupportForm() {
+  const { getToken } = useAuth();
+  const { user } = useUser();
+
+  const [category, setCategory] = useState<Category>("help");
+  const [email, setEmail]       = useState(user?.primaryEmailAddress?.emailAddress ?? "");
+  const [subject, setSubject]   = useState("");
+  const [message, setMessage]   = useState("");
+  const [busy, setBusy]         = useState(false);
+  const [done, setDone]         = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/support/tickets", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ category, email: email.trim(), subject: subject.trim(), message: message.trim() }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({})) as { error?: string; fields?: Record<string, string> };
+        const fieldMsg = body.fields ? Object.values(body.fields)[0] : null;
+        setError(fieldMsg ?? body.error ?? "Something went wrong — please try again.");
+        return;
+      }
+      setDone(true);
+    } catch {
+      setError("Network error — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+        <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center">
+          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+        </div>
+        <p className="font-semibold text-foreground">Ticket submitted!</p>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          We've got your message. You'll hear back at <span className="text-foreground">{email}</span> as soon as possible.
+        </p>
+        <Button variant="outline" size="sm" className="mt-2" onClick={() => { setDone(false); setSubject(""); setMessage(""); }}>
+          Submit another
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-5">
+      {/* Category picker */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            onClick={() => setCategory(c.value)}
+            className={`flex flex-col gap-1.5 p-3 rounded-lg border text-left transition-colors text-sm ${
+              category === c.value
+                ? "border-primary/60 bg-primary/10 text-foreground"
+                : "border-border/40 bg-muted/10 text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+            }`}
+          >
+            <span className={category === c.value ? "text-primary" : ""}>{c.icon}</span>
+            <span className="font-medium leading-tight">{c.label}</span>
+            <span className="text-[10px] leading-tight text-muted-foreground">{c.description}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="support-email">Your email</Label>
+          <Input
+            id="support-email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="support-subject">Subject</Label>
+          <Input
+            id="support-subject"
+            placeholder="Brief summary of your issue"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            maxLength={120}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="support-message">Message</Label>
+        <Textarea
+          id="support-message"
+          placeholder={
+            category === "bug"
+              ? "What happened? What did you expect? Steps to reproduce…"
+              : category === "feature"
+                ? "Describe the feature you'd like and why it would be useful…"
+                : "How can we help?"
+          }
+          rows={5}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          maxLength={4000}
+          required
+        />
+        <p className="text-[10px] text-muted-foreground text-right">{message.length}/4000</p>
+      </div>
+
+      {error && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
+
+      <Button type="submit" disabled={busy} className="w-full sm:w-auto">
+        {busy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+        Send ticket
+      </Button>
+    </form>
+  );
+}
 
 /* ─── Quick-start steps ─── */
 
 const QUICK_START = [
-  {
-    step: 1,
-    title: "Create your account",
-    body: "Sign up at goblinl00t.com. The bot works out of the box on the Free tier — no credit card needed.",
-  },
-  {
-    step: 2,
-    title: "Link your Twitch channel",
-    body: "Go to Account → Channel tab and click Authorize on Twitch. The bot joins your chat within seconds of authorization.",
-  },
-  {
-    step: 3,
-    title: "Pick a theme",
-    body: "Head to Forge → Theme. Choose Goblin (fantasy) or CS2 (gaming). This swaps the loot pool, bot quips, and chat command aliases.",
-  },
-  {
-    step: 4,
-    title: "Tell your viewers",
-    body: 'Let your chat know they can type !loot to roll for drops and !coins to check their balance. That\'s all they need to get started.',
-  },
-  {
-    step: 5,
-    title: "Run your first giveaway",
-    body: "Open Loot Horde, fill out the form, and click Start. Viewers enter with !enter. End it with the Elimination Wheel when you're ready to pick a winner.",
-  },
+  { step: 1, title: "Create your account", body: "Sign up at goblinl00t.com. The bot works out of the box on the Free tier — no credit card needed." },
+  { step: 2, title: "Link your Twitch channel", body: "Go to Account → Channel tab and click Authorize on Twitch. The bot joins your chat within seconds of authorization." },
+  { step: 3, title: "Pick a theme", body: "Head to Forge → Theme. Choose Goblin (fantasy) or CS2 (gaming). This swaps the loot pool, bot quips, and chat command aliases." },
+  { step: 4, title: "Tell your viewers", body: "Let your chat know they can type !loot to roll for drops and !coins to check their balance. That's all they need to get started." },
+  { step: 5, title: "Run your first giveaway", body: "Open Loot Horde, fill out the form, and click Start. Viewers enter with !enter. End it with the Elimination Wheel when you're ready to pick a winner." },
 ];
 
 /* ─── Feature sections ─── */
@@ -198,7 +292,7 @@ const SECTIONS: Section[] = [
     bullets: [
       { title: "Free — Cave Dweller", body: "Bot in chat, loot drops, giveaways, basic stats, coin economy, inventory system. All core features." },
       { title: "Premium — Horde Master", body: "Everything in Free plus Discord webhook for winner announcements, giveaway presets, and CSV export." },
-      { title: "Pro — Goblin King", body: "Everything in Premium plus the AI Goblin Advisor on the Ledger page and priority Discord support." },
+      { title: "Pro — Goblin King", body: "Everything in Premium plus the AI Goblin Advisor on the Ledger page and priority support." },
     ],
   },
   {
@@ -219,60 +313,38 @@ interface CommandRow {
   command: string;
   description: string;
   alias?: string;
-  viewers?: boolean;
 }
 
 const COMMANDS: CommandRow[] = [
-  { command: "!loot", description: "Roll for a random loot drop. Bumped by the luck buff if active." },
-  { command: "!inventory", description: "Show your current 5-slot pouch in chat." },
-  { command: "!sell <slot|all>", description: "Sell one item or your whole pouch for coins. Coin Pouch buff doubles payout." },
-  { command: "!use <slot>", description: "Activate a buff item. Luck and coin buffs are single-use." },
-  { command: "!coins", description: "Show your coin balance.", alias: "!points" },
-  { command: "!hoard", description: "Show your coin balance with goblin flavor text.", alias: "!stash (CS2)" },
-  { command: "!enter", description: "Spend coins to enter the active giveaway. Ticket Charm adds a bonus entry." },
-  { command: "!giveaway", description: "Show the active giveaway title and keyword." },
-  { command: "!redeem", description: "Convert coins into giveaway entries (requires Coin Redemption to be enabled in Forge)." },
-  { command: "!tradeurl <link>", description: "Save your Steam trade URL so the streamer can deliver CS2 prizes." },
-  { command: "!goblin", description: "Random goblin taunt or flavor text.", alias: "!skin (CS2)" },
-  { command: "!steal", description: "Attempt to steal coins from another viewer.", alias: "!scam (CS2)" },
-  { command: "!feedgoblin", description: "Feed the goblin / open a case (themed flavor, no mechanical effect).", alias: "!case (CS2)" },
-  { command: "!help", description: "Lists all enabled commands for this channel." },
+  { command: "!loot",             description: "Roll for a random loot drop. Bumped by the luck buff if active." },
+  { command: "!inventory",        description: "Show your current 5-slot pouch in chat." },
+  { command: "!sell <slot|all>",  description: "Sell one item or your whole pouch for coins. Coin Pouch buff doubles payout." },
+  { command: "!use <slot>",       description: "Activate a buff item. Luck and coin buffs are single-use." },
+  { command: "!coins",            description: "Show your coin balance.", alias: "!points" },
+  { command: "!hoard",            description: "Show your coin balance with goblin flavor text.", alias: "!stash (CS2)" },
+  { command: "!enter",            description: "Spend coins to enter the active giveaway. Ticket Charm adds a bonus entry." },
+  { command: "!giveaway",         description: "Show the active giveaway title and keyword." },
+  { command: "!redeem",           description: "Convert coins into giveaway entries (requires Coin Redemption to be enabled in Forge)." },
+  { command: "!tradeurl <link>",  description: "Save your Steam trade URL so the streamer can deliver CS2 prizes." },
+  { command: "!goblin",           description: "Random goblin taunt or flavor text.", alias: "!skin (CS2)" },
+  { command: "!steal",            description: "Attempt to steal coins from another viewer.", alias: "!scam (CS2)" },
+  { command: "!feedgoblin",       description: "Feed the goblin / open a case (themed flavor).", alias: "!case (CS2)" },
+  { command: "!help",             description: "Lists all enabled commands for this channel." },
 ];
 
 /* ─── FAQ ─── */
 
 const FAQ = [
-  {
-    q: "The bot isn't posting in my chat — what's wrong?",
-    a: "First check that your Twitch channel is linked in Account → Channel. Then look at the Dashboard bot status indicator. If it shows offline, the bot may not have a valid OAuth token — contact support in Discord.",
-  },
-  {
-    q: "A viewer's coins are wrong — can I fix it?",
-    a: "Yes. Go to Dashboard → Chat Users, find the viewer, and use Adjust Coins. You can add or subtract any amount. The change is immediate.",
-  },
-  {
-    q: "What happens when a viewer's inventory is full and they !loot?",
-    a: "If all 5 slots are occupied, the loot drop automatically converts to a coin credit instead. The viewer still gets rewarded — they just don't get the item.",
-  },
-  {
-    q: "Do CS2 trade URLs expire?",
-    a: "Steam trade URLs can be revoked by the viewer or expire if they change Steam settings. If a trade fails, ask the winner to share a fresh URL via !tradeurl.",
-  },
-  {
-    q: "Can I run multiple giveaways at the same time?",
-    a: "Only one giveaway can be active at a time per channel. Start the next one after ending the current one.",
-  },
-  {
-    q: "How do I change the bot's language/style?",
-    a: "Switch themes in Forge → Theme. For individual commands, use the custom response editor in Spells — you can write your own chat replies using tokens like {user} and {balance}.",
-  },
-  {
-    q: "Can viewers on my channel spend coins they earned on another channel?",
-    a: "No. Coins are strictly per-channel. A viewer's balance in your chat is entirely separate from any other streamer using Goblin L00t.",
-  },
+  { q: "The bot isn't posting in my chat — what's wrong?", a: "First check that your Twitch channel is linked in Account → Channel. Then look at the Dashboard bot status indicator. If it shows offline, the bot may not have a valid OAuth token — submit a support ticket above." },
+  { q: "A viewer's coins are wrong — can I fix it?", a: "Yes. Go to Dashboard → Chat Users, find the viewer, and use Adjust Coins. You can add or subtract any amount. The change is immediate." },
+  { q: "What happens when a viewer's inventory is full and they !loot?", a: "If all 5 slots are occupied, the loot drop automatically converts to a coin credit instead. The viewer still gets rewarded — they just don't get the item." },
+  { q: "Do CS2 trade URLs expire?", a: "Steam trade URLs can be revoked by the viewer or expire if they change Steam settings. If a trade fails, ask the winner to share a fresh URL via !tradeurl." },
+  { q: "Can I run multiple giveaways at the same time?", a: "Only one giveaway can be active at a time per channel. Start the next one after ending the current one." },
+  { q: "How do I change the bot's language/style?", a: "Switch themes in Forge → Theme. For individual commands, use the custom response editor in Spells — you can write your own chat replies using tokens like {user} and {balance}." },
+  { q: "Can viewers on my channel spend coins they earned on another channel?", a: "No. Coins are strictly per-channel. A viewer's balance in your chat is entirely separate from any other streamer using Goblin L00t." },
 ];
 
-/* ─── Component ─── */
+/* ─── Page ─── */
 
 export function HelpGuide() {
   return (
@@ -287,53 +359,19 @@ export function HelpGuide() {
         <p className="text-muted-foreground mt-2 text-lg">Everything you need to set up, run, and get the most out of Goblin L00t.</p>
       </div>
 
-      {/* Support & feedback */}
-      <section className="space-y-4">
+      {/* Support form */}
+      <section id="support" className="space-y-4">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Support &amp; Feedback</h2>
+          <h2 className="text-xl font-bold text-foreground">Contact Support</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Join the Discord community — file a ticket, suggest a feature, or just ask a question.
+            Report a bug, request a feature, or ask for help — we'll get back to you by email.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {SUPPORT_CARDS.map((card) => (
-            <a
-              key={card.title}
-              href={DISCORD_INVITE}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group block"
-            >
-              <Card className={`h-full border transition-colors hover:bg-muted/20 ${card.color}`}>
-                <CardContent className="p-5 space-y-3">
-                  <div className={`flex items-center gap-2 font-semibold ${card.color.split(" ")[0]}`}>
-                    {card.icon}
-                    {card.title}
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{card.description}</p>
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="font-mono text-[10px]">{card.channel}</Badge>
-                    <span className={`text-xs flex items-center gap-1 ${card.color.split(" ")[0]} group-hover:gap-2 transition-all`}>
-                      {card.cta} <ExternalLink className="w-3 h-3" />
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </a>
-          ))}
-        </div>
-        <div className="flex items-center gap-3 p-4 rounded-lg border border-border/40 bg-muted/10">
-          <MessageSquare className="w-5 h-5 text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Goblin L00t Community Discord</p>
-            <p className="text-xs text-muted-foreground">Bug reports · feature requests · help desk · streamer showcase</p>
-          </div>
-          <Button size="sm" asChild>
-            <a href={DISCORD_INVITE} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 shrink-0">
-              Join Discord <ArrowRight className="w-3.5 h-3.5" />
-            </a>
-          </Button>
-        </div>
+        <Card className="border-border/50">
+          <CardContent className="p-6">
+            <SupportForm />
+          </CardContent>
+        </Card>
       </section>
 
       {/* Quick start */}
@@ -357,7 +395,7 @@ export function HelpGuide() {
         </div>
       </section>
 
-      {/* Feature sections */}
+      {/* Feature guide */}
       <section className="space-y-4">
         <div>
           <h2 className="text-xl font-bold text-foreground">Feature Guide</h2>
@@ -442,19 +480,17 @@ export function HelpGuide() {
         </div>
       </section>
 
-      {/* Footer CTA */}
+      {/* Footer callout */}
       <div className="flex items-center gap-4 p-5 rounded-lg border border-primary/20 bg-primary/5">
         <Coins className="w-6 h-6 text-primary shrink-0" />
-        <div className="flex-1 min-w-0 space-y-0.5">
-          <p className="font-semibold text-foreground text-sm">Still stuck? The community has you covered.</p>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-foreground text-sm">Still stuck?</p>
           <p className="text-xs text-muted-foreground">
-            Join the Discord server and post in <span className="font-mono text-primary">#help-desk</span>. Staff and experienced streamers check it daily.
+            Use the Contact Support form above and we'll get back to you directly.
           </p>
         </div>
-        <Button variant="outline" size="sm" asChild className="shrink-0">
-          <a href={DISCORD_INVITE} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
-            Discord <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+        <Button variant="outline" size="sm" onClick={() => document.getElementById("support")?.scrollIntoView({ behavior: "smooth" })}>
+          Get help
         </Button>
       </div>
 

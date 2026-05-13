@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
   Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock, UserPlus,
-  CheckCircle2, XCircle, MoreHorizontal, UserCog, UserX,
+  CheckCircle2, XCircle, MoreHorizontal, UserCog, UserX, Inbox, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { PasswordInput } from "@/components/password-input";
 import {
@@ -64,6 +64,20 @@ interface AdminUser {
 interface AdminStats {
   total: number; free: number; premium: number; pro: number;
   twitchLinked: number; steamLinked: number; admins: number;
+}
+
+interface SupportTicket {
+  id: number;
+  clerkUserId: string | null;
+  email: string;
+  twitchUsername: string | null;
+  category: "bug" | "feature" | "help" | "other";
+  subject: string;
+  message: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  adminNote: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AdminUserDetail {
@@ -167,6 +181,15 @@ export function Admin() {
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const { toast } = useToast();
+
+  const ticketsQuery = useQuery<{ tickets: SupportTicket[] }>({
+    queryKey: ["admin", "tickets"],
+    queryFn: async () => {
+      const r = await authedFetch("/api/admin/support/tickets");
+      if (!r.ok) throw new Error(`Failed: ${r.status}`);
+      return r.json();
+    },
+  });
 
   const usersQuery = useQuery<{ users: AdminUser[] }>({
     queryKey: ["admin", "users"],
@@ -366,6 +389,13 @@ export function Admin() {
           )}
         </CardContent>
       </Card>
+
+      <SupportTicketsSection
+        tickets={ticketsQuery.data?.tickets ?? []}
+        loading={ticketsQuery.isLoading}
+        authedFetch={authedFetch}
+        onUpdated={() => qc.invalidateQueries({ queryKey: ["admin", "tickets"] })}
+      />
 
       <CreateUserDialog
         open={creatingUser}
@@ -2020,6 +2050,201 @@ function DangerSection({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ───────────────── Support Tickets section ───────────────── */
+
+const STATUS_META: Record<SupportTicket["status"], { label: string; className: string }> = {
+  open:        { label: "Open",        className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  in_progress: { label: "In Progress", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  resolved:    { label: "Resolved",    className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  closed:      { label: "Closed",      className: "bg-muted/40 text-muted-foreground border-border/40" },
+};
+
+const CATEGORY_META: Record<SupportTicket["category"], { label: string; className: string }> = {
+  bug:     { label: "Bug",     className: "bg-red-500/15 text-red-400 border-red-500/30" },
+  feature: { label: "Feature", className: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
+  help:    { label: "Help",    className: "bg-sky-500/15 text-sky-400 border-sky-500/30" },
+  other:   { label: "Other",   className: "bg-muted/40 text-muted-foreground border-border/40" },
+};
+
+function TicketRow({
+  ticket,
+  authedFetch,
+  onUpdated,
+}: {
+  ticket: SupportTicket;
+  authedFetch: ReturnType<typeof useAuthedFetch>;
+  onUpdated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState(ticket.status);
+  const [note, setNote] = useState(ticket.adminNote ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const { toast } = useToast();
+
+  async function save() {
+    setSaving(true);
+    try {
+      const r = await authedFetch(`/api/admin/support/tickets/${ticket.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, adminNote: note || null }),
+      });
+      if (!r.ok) {
+        toast({ title: "Save failed", variant: "destructive" });
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      onUpdated();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const sm = STATUS_META[ticket.status];
+  const cm = CATEGORY_META[ticket.category];
+
+  return (
+    <div className="border-b border-border/40 last:border-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-start gap-3 px-5 py-3.5 hover:bg-muted/20 transition-colors text-left"
+      >
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className={`text-[10px] ${sm.className}`}>{sm.label}</Badge>
+            <Badge variant="outline" className={`text-[10px] ${cm.className}`}>{cm.label}</Badge>
+            <span className="text-sm font-medium text-foreground truncate">{ticket.subject}</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {ticket.twitchUsername ? (
+              <span className="text-primary font-mono">@{ticket.twitchUsername}</span>
+            ) : (
+              ticket.email
+            )}
+            {" · "}
+            {new Date(ticket.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+          </p>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />}
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-4 border-t border-border/30 pt-4 bg-muted/5">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Message</p>
+            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{ticket.message}</p>
+          </div>
+          <div className="text-xs text-muted-foreground space-y-0.5">
+            <p>Email: <span className="text-foreground">{ticket.email}</span></p>
+            {ticket.clerkUserId && <p>Clerk ID: <span className="font-mono text-foreground">{ticket.clerkUserId}</span></p>}
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
+              <Select value={status} onValueChange={(v) => setStatus(v as SupportTicket["status"])}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin note</label>
+              <Input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Internal note…"
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+              Save
+            </Button>
+            {saved && (
+              <span className="text-xs text-emerald-300 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SupportTicketsSection({
+  tickets,
+  loading,
+  authedFetch,
+  onUpdated,
+}: {
+  tickets: SupportTicket[];
+  loading: boolean;
+  authedFetch: ReturnType<typeof useAuthedFetch>;
+  onUpdated: () => void;
+}) {
+  const [statusFilter, setStatusFilter] = useState<SupportTicket["status"] | "all">("all");
+
+  const filtered = statusFilter === "all"
+    ? tickets
+    : tickets.filter((t) => t.status === statusFilter);
+
+  const openCount = tickets.filter((t) => t.status === "open").length;
+
+  return (
+    <Card className="border-border/50">
+      <CardHeader className="border-b border-border/50">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <CardTitle className="flex items-center gap-2 font-medieval text-xl">
+            <Inbox className="w-5 h-5 text-primary" />
+            Support Tickets
+            {openCount > 0 && (
+              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 font-mono text-xs" variant="outline">
+                {openCount} open
+              </Badge>
+            )}
+          </CardTitle>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+            <SelectTrigger className="h-8 text-sm w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All tickets</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="p-8 text-sm text-muted-foreground text-center">Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-8 text-sm text-muted-foreground text-center flex flex-col items-center gap-2">
+            <Inbox className="w-8 h-8 text-muted-foreground/40" />
+            {statusFilter === "all" ? "No tickets yet." : `No ${statusFilter.replace("_", " ")} tickets.`}
+          </div>
+        ) : (
+          <div>
+            {filtered.map((t) => (
+              <TicketRow key={t.id} ticket={t} authedFetch={authedFetch} onUpdated={onUpdated} />
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

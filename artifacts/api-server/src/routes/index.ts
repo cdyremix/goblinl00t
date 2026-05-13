@@ -19,6 +19,7 @@ import giveawayPresetsRouter from "./giveaway-presets";
 import stripeRouter from "./stripe";
 import adminRouter from "./admin";
 import maintenanceRouter from "./maintenance";
+import supportRouter from "./support";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(giveawayPresetsRouter);
 router.use(stripeRouter);
 router.use(adminRouter);
 router.use(maintenanceRouter);
+router.use(supportRouter);
 
 export default router;
