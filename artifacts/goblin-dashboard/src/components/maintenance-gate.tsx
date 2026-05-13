@@ -23,7 +23,7 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
  * provisioned. Everything else is blocked until either maintenance mode
  * is off OR the caller's server-resolved `isAdmin` flag is true.
  */
-const ALLOWED_PATH_PREFIXES = ["/sign-in", "/terms", "/privacy"];
+const ALLOWED_PATH_PREFIXES = ["/sign-in", "/admin-bypass", "/terms", "/privacy"];
 
 function pathIsAllowed(path: string): boolean {
   return ALLOWED_PATH_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
