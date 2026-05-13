@@ -260,94 +260,108 @@ export function Giveaways() {
       <SpotlightCard giveaway={spotlight} canSeedTest={isAdmin || isStaff} />
 
       {/* Scheduled Announcements */}
-      <Card className="border-border/50">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
-            <CardTitle className="text-base">Scheduled Announcements</CardTitle>
-            <Hint text="The bot posts these messages to your chat on a timer. Useful for reminding viewers about commands, socials, or giveaways." side="right" />
-          </div>
-          <CardDescription>Auto-posted to chat on a repeating timer while the bot is live.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            {announcementsLoading ? (
-              <>
-                <div className="h-14 rounded-lg bg-muted animate-pulse" />
-                <div className="h-14 rounded-lg bg-muted animate-pulse" />
-              </>
-            ) : (announcements ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground py-1">No announcements yet — add one below.</p>
-            ) : (
-              (announcements ?? []).map((ann) => (
-                <div key={ann.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/20 p-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{ann.message}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Every {ann.intervalMinutes} min
-                      {ann.lastPostedAt && ` · last posted ${new Date(ann.lastPostedAt).toLocaleTimeString()}`}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={ann.enabled}
-                    onCheckedChange={(v) => toggleAnnouncement.mutate({ id: ann.id, enabled: v })}
-                    disabled={toggleAnnouncement.isPending}
-                  />
+      <Collapsible>
+        <Card className="border-border/50">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-muted/20 transition-colors rounded-lg"
+            >
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-primary shrink-0" />
+                <span className="text-base font-semibold text-foreground">Scheduled Announcements</span>
+                {(announcements ?? []).length > 0 && (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {(announcements ?? []).filter((a) => a.enabled).length} active
+                  </span>
+                )}
+                <Hint text="The bot posts these messages to your chat on a timer. Useful for reminding viewers about commands, socials, or giveaways." side="right" />
+              </div>
+              <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="pt-0 space-y-4">
+              <div className="space-y-2">
+                {announcementsLoading ? (
+                  <>
+                    <div className="h-14 rounded-lg bg-muted animate-pulse" />
+                    <div className="h-14 rounded-lg bg-muted animate-pulse" />
+                  </>
+                ) : (announcements ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-1">No announcements yet — add one below.</p>
+                ) : (
+                  (announcements ?? []).map((ann) => (
+                    <div key={ann.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/20 p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{ann.message}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Every {ann.intervalMinutes} min
+                          {ann.lastPostedAt && ` · last posted ${new Date(ann.lastPostedAt).toLocaleTimeString()}`}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={ann.enabled}
+                        onCheckedChange={(v) => toggleAnnouncement.mutate({ id: ann.id, enabled: v })}
+                        disabled={toggleAnnouncement.isPending}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => deleteAnnouncement.mutate(ann.id)}
+                        disabled={deleteAnnouncement.isPending}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
+                <p className="text-sm font-medium text-foreground">Add Announcement</p>
+                <Textarea
+                  placeholder="Message to post in chat…"
+                  value={newAnnMsg}
+                  onChange={(e) => setNewAnnMsg(e.target.value)}
+                  className="resize-none text-sm"
+                  rows={2}
+                  maxLength={500}
+                />
+                <div className="flex items-center gap-3">
+                  <Select value={newAnnInterval} onValueChange={setNewAnnInterval}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">Every 15 min</SelectItem>
+                      <SelectItem value="30">Every 30 min</SelectItem>
+                      <SelectItem value="60">Every hour</SelectItem>
+                      <SelectItem value="120">Every 2 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => deleteAnnouncement.mutate(ann.id)}
-                    disabled={deleteAnnouncement.isPending}
+                    onClick={() => {
+                      if (!newAnnMsg.trim()) return;
+                      createAnnouncement.mutate({
+                        message: newAnnMsg.trim(),
+                        intervalMinutes: Number(newAnnInterval),
+                      });
+                    }}
+                    disabled={!newAnnMsg.trim() || createAnnouncement.isPending}
+                    size="sm"
+                    className="gap-2"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Plus className="w-4 h-4" />
+                    Add
                   </Button>
                 </div>
-              ))
-            )}
-          </div>
-
-          <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
-            <p className="text-sm font-medium text-foreground">Add Announcement</p>
-            <Textarea
-              placeholder="Message to post in chat…"
-              value={newAnnMsg}
-              onChange={(e) => setNewAnnMsg(e.target.value)}
-              className="resize-none text-sm"
-              rows={2}
-              maxLength={500}
-            />
-            <div className="flex items-center gap-3">
-              <Select value={newAnnInterval} onValueChange={setNewAnnInterval}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15">Every 15 min</SelectItem>
-                  <SelectItem value="30">Every 30 min</SelectItem>
-                  <SelectItem value="60">Every hour</SelectItem>
-                  <SelectItem value="120">Every 2 hours</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                onClick={() => {
-                  if (!newAnnMsg.trim()) return;
-                  createAnnouncement.mutate({
-                    message: newAnnMsg.trim(),
-                    intervalMinutes: Number(newAnnInterval),
-                  });
-                }}
-                disabled={!newAnnMsg.trim() || createAnnouncement.isPending}
-                size="sm"
-                className="gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Create Form */}
