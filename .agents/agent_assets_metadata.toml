@@ -6,3 +6,9 @@ id = "ejz5EN_6tsnZGFsM4m3_6"
 uri = "file://goblinl00t-deploy.tar.gz"
 type = "unspecified"
 title = "goblinl00t-deploy.tar.gz"
+
+[[outputs]]
+id = "diQSEgG3jz2Ok_u0R8v4D"
+uri = "file://deploy/discord-server-template.md"
+type = "text"
+title = "Goblin L00t Discord Server Template"
