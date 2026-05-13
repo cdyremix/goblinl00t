@@ -20,7 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
 import { Plus, Trophy, ChevronRight, Check, Clock, Hash, Package, Heart, Star, Coins, Trash2, FlaskConical, Play, Sparkles, Users, ChevronDown, Zap } from "lucide-react";
@@ -71,6 +71,64 @@ export function Giveaways() {
   const { data: currentGiveaway } = useGetCurrentGiveaway();
   const { hasFeature: hasTierFeature, isAdmin, isStaff } = useSubscriptionTier();
   const hasUnlimited = hasTierFeature("unlimited-giveaways");
+
+  const { getToken } = useAuth();
+  const [newAnnMsg, setNewAnnMsg] = useState("");
+  const [newAnnInterval, setNewAnnInterval] = useState("30");
+
+  const { data: announcements, isLoading: announcementsLoading } = useQuery({
+    queryKey: ["announcements"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/settings/announcements", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return [];
+      return res.json() as Promise<Array<{ id: number; message: string; intervalMinutes: number; enabled: boolean; lastPostedAt: string | null }>>;
+    },
+  });
+
+  const createAnnouncement = useMutation({
+    mutationFn: async (data: { message: string; intervalMinutes: number }) => {
+      const token = await getToken();
+      const res = await fetch("/api/settings/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to create announcement");
+      return res.json();
+    },
+    onSuccess: () => {
+      setNewAnnMsg("");
+      void queryClient.invalidateQueries({ queryKey: ["announcements"] });
+    },
+  });
+
+  const deleteAnnouncement = useMutation({
+    mutationFn: async (id: number) => {
+      const token = await getToken();
+      const res = await fetch(`/api/settings/announcements/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to delete announcement");
+    },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["announcements"] }),
+  });
+
+  const toggleAnnouncement = useMutation({
+    mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
+      const token = await getToken();
+      const res = await fetch(`/api/settings/announcements/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error("Failed to toggle announcement");
+    },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["announcements"] }),
+  });
 
   const createMutation = useCreateGiveaway();
 
@@ -200,6 +258,96 @@ export function Giveaways() {
 
       {/* Hero — the streamer's primary action lives here. */}
       <SpotlightCard giveaway={spotlight} canSeedTest={isAdmin || isStaff} />
+
+      {/* Scheduled Announcements */}
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-primary" />
+            <CardTitle className="text-base">Scheduled Announcements</CardTitle>
+            <Hint text="The bot posts these messages to your chat on a timer. Useful for reminding viewers about commands, socials, or giveaways." side="right" />
+          </div>
+          <CardDescription>Auto-posted to chat on a repeating timer while the bot is live.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            {announcementsLoading ? (
+              <>
+                <div className="h-14 rounded-lg bg-muted animate-pulse" />
+                <div className="h-14 rounded-lg bg-muted animate-pulse" />
+              </>
+            ) : (announcements ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground py-1">No announcements yet — add one below.</p>
+            ) : (
+              (announcements ?? []).map((ann) => (
+                <div key={ann.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/20 p-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{ann.message}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Every {ann.intervalMinutes} min
+                      {ann.lastPostedAt && ` · last posted ${new Date(ann.lastPostedAt).toLocaleTimeString()}`}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={ann.enabled}
+                    onCheckedChange={(v) => toggleAnnouncement.mutate({ id: ann.id, enabled: v })}
+                    disabled={toggleAnnouncement.isPending}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => deleteAnnouncement.mutate(ann.id)}
+                    disabled={deleteAnnouncement.isPending}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
+            <p className="text-sm font-medium text-foreground">Add Announcement</p>
+            <Textarea
+              placeholder="Message to post in chat…"
+              value={newAnnMsg}
+              onChange={(e) => setNewAnnMsg(e.target.value)}
+              className="resize-none text-sm"
+              rows={2}
+              maxLength={500}
+            />
+            <div className="flex items-center gap-3">
+              <Select value={newAnnInterval} onValueChange={setNewAnnInterval}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">Every 15 min</SelectItem>
+                  <SelectItem value="30">Every 30 min</SelectItem>
+                  <SelectItem value="60">Every hour</SelectItem>
+                  <SelectItem value="120">Every 2 hours</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() => {
+                  if (!newAnnMsg.trim()) return;
+                  createAnnouncement.mutate({
+                    message: newAnnMsg.trim(),
+                    intervalMinutes: Number(newAnnInterval),
+                  });
+                }}
+                disabled={!newAnnMsg.trim() || createAnnouncement.isPending}
+                size="sm"
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Create Form */}
