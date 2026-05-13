@@ -48,7 +48,9 @@ function verifyState(state: string): string | null {
 
 function buildTwitchAuthUrl(clerkUserId: string): string {
   const state = signState(clerkUserId);
-  const scopes = "chat:read chat:edit channel:manage:broadcast";
+  // moderator:read:followers — follow dates in the Community page
+  // channel:read:subscriptions — sub tier in the Community page
+  const scopes = "chat:read chat:edit channel:manage:broadcast moderator:read:followers channel:read:subscriptions";
   const url = new URL("https://id.twitch.tv/oauth2/authorize");
   url.searchParams.set("client_id", CLIENT_ID);
   url.searchParams.set("redirect_uri", REDIRECT_URI);

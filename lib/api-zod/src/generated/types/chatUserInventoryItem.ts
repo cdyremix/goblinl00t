@@ -13,4 +13,8 @@ export interface ChatUserInventoryItem {
   item: string;
   rarity: ChatUserInventoryItemRarity;
   kind: string;
+  buffEffect?: string | null;
+  coinValue: number;
+  chargesRemaining: number;
+  isActive: boolean;
 }

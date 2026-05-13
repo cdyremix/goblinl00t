@@ -6,10 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ChatUserInventoryItem } from "./chatUserInventoryItem";
+import type { ChatUserTwitchInfo } from "./chatUserTwitchInfo";
 
 export interface ChatUser {
   username: string;
   coins: number;
   inventoryCount: number;
   inventory: ChatUserInventoryItem[];
+  twitch: ChatUserTwitchInfo | null;
 }

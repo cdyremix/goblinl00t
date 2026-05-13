@@ -4,7 +4,7 @@ import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
-  Plug, X, MessageCircle, Crown,
+  Plug, X, MessageCircle, Crown, Users2,
 } from "lucide-react";
 import { useSubscriptionTier } from "@/hooks/use-tier";
 import { UserAvatar } from "@/components/user-avatar";
@@ -75,8 +75,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   // "The Scroll" (account page) used to sit in the main nav; it now lives
   // inside the expandable user menu as "Account Settings".
-  // Chat Users used to be its own sidebar entry; it now lives as a tab inside
-  // Operations (`/dashboard`). The `/users` route still works for deep links.
+  // Community (/users) is both a dedicated sidebar entry and a tab inside
+  // Operations (`/dashboard`).
   const { isAdmin } = useSubscriptionTier();
 
   const allLinks = [
@@ -85,6 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/stats", label: "Ledger", icon: BarChart3 },
     { href: "/settings", label: "Forge", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true, newWhen: isCS2 },
+    { href: "/users", label: "Community", icon: Users2 },
     // Admin Console — only rendered for super-users (`usersTable.isAdmin`).
     // Server still enforces 403 on `/api/admin/*` so even if a normal user
     // forces the route, the page lights up empty + every action 403s.

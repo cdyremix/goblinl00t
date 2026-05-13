@@ -102,7 +102,7 @@ export function Dashboard() {
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="chat-users" data-testid="tab-chat-users">Chat Users</TabsTrigger>
+          <TabsTrigger value="chat-users" data-testid="tab-chat-users">Community</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-8 mt-6">

@@ -1059,10 +1059,46 @@ export const ListChatUsersResponseItem = zod.object({
       item: zod.string(),
       rarity: zod.enum(["common", "uncommon", "rare", "epic", "legendary"]),
       kind: zod.string(),
+      buffEffect: zod.string().nullish(),
+      coinValue: zod.number(),
+      chargesRemaining: zod.number(),
+      isActive: zod.boolean(),
     }),
   ),
+  twitch: zod
+    .object({
+      followedAt: zod
+        .string()
+        .nullable()
+        .describe(
+          "ISO-8601 timestamp of when this user followed the channel, or null if not a follower \/ scope unavailable.",
+        ),
+      isSubscriber: zod.boolean().nullable(),
+      subTier: zod
+        .string()
+        .nullable()
+        .describe(
+          "Twitch subscription tier: '1000' = T1, '2000' = T2, '3000' = T3, or null.",
+        ),
+    })
+    .describe(
+      "Best-effort Twitch enrichment — absent (null on ChatUser) when the streamer's\nstored token predates the expanded OAuth scopes (moderator:read:followers,\nchannel:read:subscriptions). Re-linking Twitch from the Account page\nrefreshes the token with the required scopes.\n",
+    )
+    .nullable(),
 });
 export const ListChatUsersResponse = zod.array(ListChatUsersResponseItem);
+
+/**
+ * @summary Remove an inventory item from a viewer's pouch (streamer admin action — no coin refund)
+ */
+export const RemoveChatUserInventoryItemParams = zod.object({
+  username: zod.coerce.string(),
+  itemId: zod.coerce.number(),
+});
+
+export const RemoveChatUserInventoryItemResponse = zod.object({
+  ok: zod.boolean(),
+});
 
 /**
  * @summary Adjust a chat user's coin balance (positive or negative delta)

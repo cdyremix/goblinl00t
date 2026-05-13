@@ -919,6 +919,39 @@ paths:
         "401":
           description: Unauthorized
 
+  /chat-users/{username}/inventory/{itemId}:
+    delete:
+      operationId: removeChatUserInventoryItem
+      tags: [chat-users]
+      summary: Remove an inventory item from a viewer's pouch (streamer admin action — no coin refund)
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Item removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required:
+                  - ok
+        "404":
+          description: Item not found
+        "401":
+          description: Unauthorized
+
   /chat-users/{username}/coins:
     post:
       operationId: adjustChatUserCoins
@@ -1693,12 +1726,48 @@ components:
           enum: [common, uncommon, rare, epic, legendary]
         kind:
           type: string
+        buffEffect:
+          type: string
+          nullable: true
+        coinValue:
+          type: integer
+        chargesRemaining:
+          type: integer
+        isActive:
+          type: boolean
       required:
         - id
         - slot
         - item
         - rarity
         - kind
+        - coinValue
+        - chargesRemaining
+        - isActive
+
+    ChatUserTwitchInfo:
+      type: object
+      description: |
+        Best-effort Twitch enrichment — absent (null on ChatUser) when the streamer's
+        stored token predates the expanded OAuth scopes (moderator:read:followers,
+        channel:read:subscriptions). Re-linking Twitch from the Account page
+        refreshes the token with the required scopes.
+      properties:
+        followedAt:
+          type: string
+          nullable: true
+          description: ISO-8601 timestamp of when this user followed the channel, or null if not a follower / scope unavailable.
+        isSubscriber:
+          type: boolean
+          nullable: true
+        subTier:
+          type: string
+          nullable: true
+          description: "Twitch subscription tier: '1000' = T1, '2000' = T2, '3000' = T3, or null."
+      required:
+        - followedAt
+        - isSubscriber
+        - subTier
 
     ChatUser:
       type: object
@@ -1713,11 +1782,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ChatUserInventoryItem"
+        twitch:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ChatUserTwitchInfo"
       required:
         - username
         - coins
         - inventoryCount
         - inventory
+        - twitch
 
     EndGiveawayRequest:
       type: object

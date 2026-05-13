@@ -565,6 +565,25 @@ export interface ChatUserInventoryItem {
   item: string;
   rarity: ChatUserInventoryItemRarity;
   kind: string;
+  buffEffect?: string | null;
+  coinValue: number;
+  chargesRemaining: number;
+  isActive: boolean;
+}
+
+/**
+ * Best-effort Twitch enrichment — absent (null on ChatUser) when the streamer's
+stored token predates the expanded OAuth scopes (moderator:read:followers,
+channel:read:subscriptions). Re-linking Twitch from the Account page
+refreshes the token with the required scopes.
+
+ */
+export interface ChatUserTwitchInfo {
+  /** ISO-8601 timestamp of when this user followed the channel, or null if not a follower / scope unavailable. */
+  followedAt: string | null;
+  isSubscriber: boolean | null;
+  /** Twitch subscription tier: '1000' = T1, '2000' = T2, '3000' = T3, or null. */
+  subTier: string | null;
 }
 
 export interface ChatUser {
@@ -572,6 +591,7 @@ export interface ChatUser {
   coins: number;
   inventoryCount: number;
   inventory: ChatUserInventoryItem[];
+  twitch: ChatUserTwitchInfo | null;
 }
 
 /**
@@ -795,4 +815,8 @@ export type ConnectSteam200 = {
 
 export type DisconnectSteam200 = {
   success: boolean;
+};
+
+export type RemoveChatUserInventoryItem200 = {
+  ok: boolean;
 };

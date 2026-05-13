@@ -51,6 +51,7 @@ import type {
   PointsBalance,
   RedeemEntriesInput,
   RedemptionResult,
+  RemoveChatUserInventoryItem200,
   SellItemResult,
   StatsOverview,
   SteamInventory,
@@ -3771,6 +3772,97 @@ export function useListChatUsers<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Remove an inventory item from a viewer's pouch (streamer admin action — no coin refund)
+ */
+export const getRemoveChatUserInventoryItemUrl = (
+  username: string,
+  itemId: number,
+) => {
+  return `/api/chat-users/${username}/inventory/${itemId}`;
+};
+
+export const removeChatUserInventoryItem = async (
+  username: string,
+  itemId: number,
+  options?: RequestInit,
+): Promise<RemoveChatUserInventoryItem200> => {
+  return customFetch<RemoveChatUserInventoryItem200>(
+    getRemoveChatUserInventoryItemUrl(username, itemId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getRemoveChatUserInventoryItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeChatUserInventoryItem>>,
+    TError,
+    { username: string; itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeChatUserInventoryItem>>,
+  TError,
+  { username: string; itemId: number },
+  TContext
+> => {
+  const mutationKey = ["removeChatUserInventoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeChatUserInventoryItem>>,
+    { username: string; itemId: number }
+  > = (props) => {
+    const { username, itemId } = props ?? {};
+
+    return removeChatUserInventoryItem(username, itemId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveChatUserInventoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeChatUserInventoryItem>>
+>;
+
+export type RemoveChatUserInventoryItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Remove an inventory item from a viewer's pouch (streamer admin action — no coin refund)
+ */
+export const useRemoveChatUserInventoryItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeChatUserInventoryItem>>,
+    TError,
+    { username: string; itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeChatUserInventoryItem>>,
+  TError,
+  { username: string; itemId: number },
+  TContext
+> => {
+  return useMutation(getRemoveChatUserInventoryItemMutationOptions(options));
+};
 
 /**
  * @summary Adjust a chat user's coin balance (positive or negative delta)
