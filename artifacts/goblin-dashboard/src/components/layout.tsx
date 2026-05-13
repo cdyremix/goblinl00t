@@ -134,7 +134,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen w-full flex bg-background text-foreground selection:bg-primary/30 dark">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card/50 flex flex-col backdrop-blur-sm">
+      <aside className="w-64 shrink-0 border-r border-border bg-card/50 flex flex-col backdrop-blur-sm">
         {/* Brand */}
         <div className="h-16 flex items-center px-4 border-b border-border gap-3">
           <img src="/goblin-logo.png" alt="Goblin L00t" className="w-9 h-9 object-contain" />
