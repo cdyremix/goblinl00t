@@ -11,13 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi } from "lucide-react";
+import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi, Copy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ChatUsers } from "@/pages/chat-users";
 import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscriptionTier } from "@/hooks/use-tier";
 
 /**
  * Operations Center.
@@ -28,9 +30,19 @@ import { useToast } from "@/hooks/use-toast";
  * tracks whatever's been happening in chat without needing a manual
  * Start Stream toggle.
  */
+function formatUptime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
+
 export function Dashboard() {
   const { getToken } = useAuth();
   const { toast } = useToast();
+  const { tier } = useSubscriptionTier();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: botStatus, isLoading: botLoading, refetch: refetchBotStatus } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
   const { mutate: restartBot, isPending: restarting } = useRestartBot({
@@ -79,6 +91,19 @@ export function Dashboard() {
     .filter((g) => g.status === "ended" && !!g.winnerUsername)
     .sort((a, b) => new Date(b.endedAt ?? b.createdAt).getTime() - new Date(a.endedAt ?? a.createdAt).getTime())
     .slice(0, 5);
+
+  // Live uptime ticker — re-renders every second while bot is connected
+  const [, setSecTick] = useState(0);
+  useEffect(() => {
+    if (!botStatus?.connected) return;
+    const id = setInterval(() => setSecTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [botStatus?.connected]);
+  const botStartedAt = (botStatus as { startedAt?: string | null } | undefined)?.startedAt;
+  const obsChannel = (botStatus as { channel?: string } | undefined)?.channel;
+  const uptimeSecs = botStatus?.connected && botStartedAt
+    ? Math.floor((Date.now() - new Date(botStartedAt).getTime()) / 1000)
+    : undefined;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -150,6 +175,9 @@ export function Dashboard() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                 </span>
                 ONLINE
+                {uptimeSecs != null && (
+                  <span className="text-green-600/70 font-normal text-xs tabular-nums">{formatUptime(uptimeSecs)}</span>
+                )}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 text-red-500 font-bold text-sm tracking-wide" data-testid="status-disconnected">
@@ -167,7 +195,26 @@ export function Dashboard() {
           <span className="w-2 h-2 rounded-full bg-primary/60 animate-pulse" />
           Showing this stream's activity (last 12 hours)
         </span>
-        <span className="text-xs">Stats &amp; loot feed below are scoped to this window.</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs hidden sm:inline">Stats &amp; loot feed below are scoped to this window.</span>
+          {obsChannel && tier !== "free" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+              title="Copy OBS browser source URL for this channel's live loot overlay"
+              onClick={() => {
+                const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                const url = `${window.location.origin}${base}/overlay/${obsChannel}`;
+                void navigator.clipboard.writeText(url);
+                toast({ title: "OBS overlay URL copied!", description: url });
+              }}
+            >
+              <Copy className="w-3.5 h-3.5" />
+              OBS Overlay
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs defaultValue="overview" className="w-full">

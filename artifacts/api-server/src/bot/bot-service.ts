@@ -1,12 +1,12 @@
 import tmi from "tmi.js";
-import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable, customCommandsTable, usersTable } from "@workspace/db";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { db, giveawaysTable, giveawayEntriesTable, lootDropsTable, commandLogsTable, tradeFulfillmentsTable, customCommandsTable, usersTable, scheduledAnnouncementsTable } from "@workspace/db";
+import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { getRarityEmoji } from "./loot-tables";
 import { pickRandom, formatMessage } from "./goblin-phrases";
 import { type BotTheme } from "./bot-themes";
 import { getChannelTheme, getChannelThemePhrases } from "./channel-theme";
-import { getPointsBalance, REDEEM_COST_PER_ENTRY, redeemEntriesForUser } from "./points";
+import { getPointsBalance, clampCoinAward, REDEEM_COST_PER_ENTRY, redeemEntriesForUser } from "./points";
 import { getChannelSettings } from "./channel-settings";
 import { checkGating, type Gateable } from "./gating";
 import {
@@ -147,6 +147,14 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
     availableTokens: ["user"],
     defaultResponse: "✅ {user}: Trade URL saved! The streamer will send your skin soon 🎁",
   },
+  "!top": {
+    description: "Show the top 5 coin holders in this channel",
+    cooldownSeconds: 60, theme: "both",
+  },
+  "!gift": {
+    description: "Gift coins to another viewer — !gift <@username> <amount>",
+    cooldownSeconds: 15, theme: "both",
+  },
 };
 
 /** Build the !help reply: short, theme-aware command list. Channel-scoped
@@ -167,6 +175,8 @@ const HELP_DESCRIPTIONS: Record<string, string> = {
   "!feed":      "feed the goblin",
   "!case":      "open a case",
   "!tradeurl":  "submit trade URL",
+  "!top":       "top 5 coin holders",
+  "!gift":      "gift coins @user amount",
 };
 
 async function buildHelpCommandList(channel: string, activeTheme: BotTheme): Promise<string> {
@@ -778,6 +788,75 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         void client?.say(channel, phrases.giveawayNone);
       }
     }
+
+    if (command === "!top") {
+      const ch = channel.replace(/^#/, "").toLowerCase();
+      try {
+        const rows = await db.execute(sql`
+          SELECT u.username,
+            COALESCE((SELECT SUM(ld.points) FROM loot_drops ld WHERE ld.username = u.username AND ld.channel = ${ch}), 0)
+            - COALESCE((SELECT SUM(pr.points_spent) FROM point_redemptions pr WHERE pr.username = u.username AND pr.channel = ${ch}), 0)
+            AS balance
+          FROM (SELECT DISTINCT username FROM loot_drops WHERE channel = ${ch}) u
+          ORDER BY balance DESC
+          LIMIT 5
+        `);
+        if (!(rows.rows as unknown[]).length) {
+          void client?.say(channel, `🏆 No coin holders yet in #${ch}!`);
+          return;
+        }
+        const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+        const list = (rows.rows as Array<{ username: string; balance: string | number }>)
+          .map((r, i) => `${medals[i] ?? String(i + 1)} ${r.username}: ${Number(r.balance)}🪙`)
+          .join(" · ");
+        void client?.say(channel, `🏆 Top Coin Holders: ${list}`);
+      } catch (topErr) {
+        logger.error({ err: topErr }, "Error in !top command");
+      }
+    }
+
+    if (command === "!gift") {
+      const ch = channel.replace(/^#/, "").toLowerCase();
+      const rawTarget = (parts[1] ?? "").replace(/^@/, "").toLowerCase();
+      const amount = Math.floor(Number(parts[2] ?? "0"));
+
+      if (!rawTarget || !amount || amount <= 0 || !Number.isFinite(amount)) {
+        void client?.say(channel, `@${username}: Usage: !gift @username <amount>`);
+        return;
+      }
+      if (rawTarget === username) {
+        void client?.say(channel, `@${username}: You can't gift coins to yourself!`);
+        return;
+      }
+      try {
+        const { balance } = await getPointsBalance(username, ch);
+        if (balance < amount) {
+          void client?.say(channel, `@${username}: Not enough coins — you have ${balance}🪙 but need ${amount}🪙.`);
+          return;
+        }
+        await db.insert(lootDropsTable).values({
+          username,
+          channel: ch,
+          item: `Gift to @${rawTarget}`,
+          rarity: "common",
+          points: -amount,
+        });
+        const credited = await clampCoinAward(ch, rawTarget, amount);
+        if (credited > 0) {
+          await db.insert(lootDropsTable).values({
+            username: rawTarget,
+            channel: ch,
+            item: `Gift from @${username}`,
+            rarity: "common",
+            points: credited,
+          });
+        }
+        const capNote = credited < amount ? ` (capped — ${rawTarget} hit the coin limit)` : "";
+        void client?.say(channel, `🎁 @${username} gifted ${amount}🪙 to @${rawTarget}!${capNote}`);
+      } catch (giftErr) {
+        logger.error({ err: giftErr }, "Error in !gift command");
+      }
+    }
   } catch (err) {
     logger.error({ err, command, username }, "Error handling bot command");
   }
@@ -992,6 +1071,46 @@ export async function partChannel(name: string): Promise<void> {
   }
 }
 
+let announcementSchedulerInterval: ReturnType<typeof setInterval> | null = null;
+
+async function startAnnouncementScheduler(): Promise<void> {
+  if (announcementSchedulerInterval) {
+    clearInterval(announcementSchedulerInterval);
+    announcementSchedulerInterval = null;
+  }
+  announcementSchedulerInterval = setInterval(() => {
+    void (async () => {
+      if (!client || !botState.connected) return;
+      const now = new Date();
+      try {
+        const rows = await db
+          .select()
+          .from(scheduledAnnouncementsTable)
+          .where(eq(scheduledAnnouncementsTable.enabled, true));
+        for (const row of rows) {
+          const intervalMs = row.intervalMinutes * 60 * 1000;
+          const lastPosted = row.lastPostedAt ? new Date(row.lastPostedAt).getTime() : 0;
+          if (now.getTime() - lastPosted >= intervalMs) {
+            const ch = `#${row.channel}`;
+            try {
+              await client.say(ch, row.message);
+              await db
+                .update(scheduledAnnouncementsTable)
+                .set({ lastPostedAt: now })
+                .where(eq(scheduledAnnouncementsTable.id, row.id));
+            } catch (sayErr) {
+              logger.error({ err: sayErr, channel: row.channel, announcementId: row.id }, "Failed to post announcement");
+            }
+          }
+        }
+      } catch (err) {
+        logger.error({ err }, "Announcement scheduler error");
+      }
+    })();
+  }, 60_000);
+  logger.info("Announcement scheduler started");
+}
+
 export async function startBot(): Promise<void> {
   const oauthToken = process.env["TWITCH_OAUTH_TOKEN"];
   const username = process.env["TWITCH_BOT_USERNAME"] ?? "GoblinL00tBot";
@@ -1007,6 +1126,7 @@ export async function startBot(): Promise<void> {
     }
   });
   startGoblinEvents();
+  void startAnnouncementScheduler();
 
   // BOT_ENABLED must be explicitly set to "true" to connect to Twitch IRC.
   // This prevents the Replit dev server (which shares the same OAuth token

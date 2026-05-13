@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, scheduledAnnouncementsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { requireStreamerChannel } from "../lib/auth-helpers";
 import { type BotTheme } from "../bot/bot-themes";
 import { setActiveBotName } from "../bot/bot-service";
 import { invalidateChannelSettings } from "../bot/channel-settings";
@@ -262,6 +263,74 @@ router.post("/settings/test-webhook", async (req, res) => {
     const errMessage = err instanceof Error ? err.message : "Network error";
     res.status(502).json({ error: `Could not reach Discord: ${errMessage}` });
   }
+});
+
+// ─── Scheduled Announcements ────────────────────────────────────────────────
+
+router.get("/settings/announcements", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const rows = await db
+    .select()
+    .from(scheduledAnnouncementsTable)
+    .where(eq(scheduledAnnouncementsTable.channel, ctx.channel))
+    .orderBy(scheduledAnnouncementsTable.createdAt);
+  res.json(rows);
+});
+
+router.post("/settings/announcements", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const { message, intervalMinutes } = req.body as { message?: string; intervalMinutes?: number };
+  if (!message || typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "message required" }); return;
+  }
+  const interval = Number(intervalMinutes);
+  if (!interval || interval < 1 || interval > 720) {
+    res.status(400).json({ error: "intervalMinutes must be 1–720" }); return;
+  }
+  const [row] = await db.insert(scheduledAnnouncementsTable).values({
+    channel: ctx.channel,
+    message: message.trim(),
+    intervalMinutes: interval,
+    enabled: true,
+  }).returning();
+  res.status(201).json(row);
+});
+
+router.patch("/settings/announcements/:id", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!id) { res.status(400).json({ error: "invalid id" }); return; }
+  const { enabled, message, intervalMinutes } = req.body as {
+    enabled?: boolean; message?: string; intervalMinutes?: number;
+  };
+  const patch: Partial<typeof scheduledAnnouncementsTable.$inferInsert> = {};
+  if (enabled !== undefined) patch.enabled = Boolean(enabled);
+  if (message !== undefined) patch.message = String(message).trim();
+  if (intervalMinutes !== undefined) patch.intervalMinutes = Number(intervalMinutes);
+  if (Object.keys(patch).length === 0) { res.status(400).json({ error: "nothing to update" }); return; }
+  const [updated] = await db
+    .update(scheduledAnnouncementsTable)
+    .set(patch)
+    .where(and(eq(scheduledAnnouncementsTable.id, id), eq(scheduledAnnouncementsTable.channel, ctx.channel)))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "not found" }); return; }
+  res.json(updated);
+});
+
+router.delete("/settings/announcements/:id", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!id) { res.status(400).json({ error: "invalid id" }); return; }
+  const result = await db
+    .delete(scheduledAnnouncementsTable)
+    .where(and(eq(scheduledAnnouncementsTable.id, id), eq(scheduledAnnouncementsTable.channel, ctx.channel)))
+    .returning({ id: scheduledAnnouncementsTable.id });
+  if (result.length === 0) { res.status(404).json({ error: "not found" }); return; }
+  res.status(204).end();
 });
 
 export default router;

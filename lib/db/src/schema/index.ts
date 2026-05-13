@@ -12,3 +12,4 @@ export * from "./giveaway_presets";
 export * from "./waitlist_emails";
 export * from "./app_settings";
 export * from "./support_tickets";
+export * from "./scheduled_announcements";

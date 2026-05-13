@@ -17,13 +17,13 @@ import {
   getListGiveawaysQueryKey,
 } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Users, Hash, Calendar, Play, Square, RotateCcw, ArrowLeft, Crown, Plus, X } from "lucide-react";
+import { Trophy, Users, Hash, Calendar, Play, Square, RotateCcw, ArrowLeft, Crown, Plus, X, BarChart2 } from "lucide-react";
 import { Link } from "wouter";
 import { EliminationWheel } from "@/components/elimination-wheel";
 
@@ -49,6 +49,28 @@ export function GiveawayDetail() {
   });
   const { data: entries, isLoading: entriesLoading } = useGetGiveawayEntries(id, {
     query: { enabled: !!id, queryKey: getGetGiveawayEntriesQueryKey(id) },
+  });
+
+  const { getToken } = useAuth();
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ["giveaway-analytics", id],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch(`/api/giveaway/${id}/analytics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return res.json() as Promise<{
+        totalEntries: number;
+        totalTickets: number;
+        manualTickets: number;
+        redeemedTickets: number;
+        redemptionCount: number;
+        entryTimeline: Array<{ bucket: string; count: number }>;
+      }>;
+    },
+    enabled: !!id,
+    staleTime: 30_000,
   });
 
   const startMutation = useStartGiveaway();
@@ -393,6 +415,75 @@ export function GiveawayDetail() {
               <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p>No entries yet. Start the giveaway and let chat type the keyword.</p>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Entry Analytics */}
+      <Card className="overflow-hidden border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BarChart2 className="w-4 h-4 text-primary" />
+            Entry Analytics
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {analyticsLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : !analytics ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No entries recorded yet.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-muted/30 border border-border/50 p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">{analytics.totalEntries}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Participants</p>
+                </div>
+                <div className="rounded-lg bg-muted/30 border border-border/50 p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">{analytics.totalTickets}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Total Tickets</p>
+                </div>
+                <div className="rounded-lg bg-muted/30 border border-border/50 p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">{analytics.redemptionCount}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Coin Redemptions</p>
+                </div>
+              </div>
+              {analytics.totalTickets > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ticket Source</p>
+                  <div className="flex h-2.5 rounded-full overflow-hidden gap-px">
+                    <div
+                      className="bg-primary"
+                      style={{ width: `${Math.round((analytics.manualTickets / analytics.totalTickets) * 100)}%` }}
+                      title={`Manual: ${analytics.manualTickets}`}
+                    />
+                    <div className="bg-amber-500 flex-1" title={`Redeemed: ${analytics.redeemedTickets}`} />
+                  </div>
+                  <div className="flex gap-4 text-xs text-muted-foreground">
+                    <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-primary mr-1.5 align-middle" />Manual ({analytics.manualTickets})</span>
+                    <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-500 mr-1.5 align-middle" />Redeemed ({analytics.redeemedTickets})</span>
+                  </div>
+                </div>
+              )}
+              {analytics.entryTimeline.length > 1 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Entry Rate (5-min buckets)</p>
+                  <div className="flex items-end gap-0.5 h-16">
+                    {(() => {
+                      const max = Math.max(...analytics.entryTimeline.map((b) => b.count), 1);
+                      return analytics.entryTimeline.map((b, i) => (
+                        <div
+                          key={i}
+                          className="flex-1 bg-primary/50 hover:bg-primary/80 rounded-t-sm transition-colors"
+                          style={{ height: `${Math.max(8, (b.count / max) * 100)}%` }}
+                          title={`${new Date(b.bucket).toLocaleTimeString()}: ${b.count} entries`}
+                        />
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

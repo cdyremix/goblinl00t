@@ -497,4 +497,35 @@ router.get("/stats/export", async (req, res) => {
   res.send(body);
 });
 
+router.get("/stats/retention", async (req, res) => {
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
+
+  const channel = ctx.channel;
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  const [recentRows, prevRows] = await Promise.all([
+    db.selectDistinct({ username: lootDropsTable.username })
+      .from(lootDropsTable)
+      .where(and(eq(lootDropsTable.channel, channel), gte(lootDropsTable.droppedAt, sevenDaysAgo))),
+    db.selectDistinct({ username: lootDropsTable.username })
+      .from(lootDropsTable)
+      .where(and(
+        eq(lootDropsTable.channel, channel),
+        gte(lootDropsTable.droppedAt, fourteenDaysAgo),
+        sql`${lootDropsTable.droppedAt} < ${sevenDaysAgo}`,
+      )),
+  ]);
+
+  const recentSet = new Set(recentRows.map((r) => r.username));
+  const prevSet = new Set(prevRows.map((r) => r.username));
+  const totalActiveViewers = recentSet.size;
+  const returningViewers = [...recentSet].filter((u) => prevSet.has(u)).length;
+  const retentionRate = totalActiveViewers > 0 ? Math.round((returningViewers / totalActiveViewers) * 100) : 0;
+
+  res.json({ returningViewers, totalActiveViewers, retentionRate, period: "7 days" });
+});
+
 export default router;

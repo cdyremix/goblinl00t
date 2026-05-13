@@ -24,6 +24,7 @@ import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import Changelog from "@/pages/changelog";
 import SupportPage from "@/pages/support";
+import { OverlayPage } from "@/pages/overlay";
 import NotFound from "@/pages/not-found";
 import DevSignIn from "@/pages/dev-sign-in";
 import AdminBypassSignIn from "@/pages/admin-bypass-signin";
@@ -284,6 +285,8 @@ function AppRouter() {
       <Route path="/support">
         <Layout><SupportPage /></Layout>
       </Route>
+      {/* Public OBS browser-source overlay — no auth, no Layout wrapper */}
+      <Route path="/overlay/:channel" component={OverlayPage} />
       <Route component={NotFound} />
     </Switch>
   );

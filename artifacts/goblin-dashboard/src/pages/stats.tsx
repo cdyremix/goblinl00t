@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/react";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetStatsOverview,
@@ -105,6 +106,23 @@ export function Stats() {
     { query: { enabled: canAiReport && aiReportEnabled, staleTime: 10 * 60 * 1000, retry: false } as any }
   );
 
+  const { data: retention, isLoading: retentionLoading } = useQuery({
+    queryKey: ["stats-retention"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/stats/retention", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return res.json() as Promise<{
+        returningViewers: number;
+        totalActiveViewers: number;
+        retentionRate: number;
+      }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const maxCommandCount = commandStats ? Math.max(...commandStats.map((c) => c.usageCount), 1) : 1;
   const maxPoints = topLooters ? Math.max(...topLooters.map((u) => u.totalPoints), 1) : 1;
 
@@ -201,6 +219,26 @@ export function Stats() {
             ) : (
               <p className={`font-bold text-lg ${overview?.activeGiveaway ? "text-primary" : "text-muted-foreground"}`}>
                 {overview?.activeGiveaway ? "RUNNING" : "NONE"}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="bg-card border border-border/50 rounded-xl p-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5 text-green-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide font-mono mb-1">Returning (7d)</p>
+            {retentionLoading ? (
+              <Skeleton className="h-6 w-20" />
+            ) : (
+              <p className="font-bold text-lg text-foreground">
+                {retention ? `${retention.retentionRate}%` : "—"}
+              </p>
+            )}
+            {retention && (
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {retention.returningViewers} of {retention.totalActiveViewers} viewers returned
               </p>
             )}
           </div>

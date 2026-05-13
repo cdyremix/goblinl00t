@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { db, usersTable, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable } from "@workspace/db";
-import { eq, desc, count, and, sql } from "drizzle-orm";
+import { db, usersTable, giveawaysTable, giveawayEntriesTable, tradeFulfillmentsTable, lootDropsTable, pointRedemptionsTable } from "@workspace/db";
+import { eq, desc, count, and, sql, sum } from "drizzle-orm";
 import { addInventoryItem, rollLootDrop } from "../bot/inventory";
 import { clampCoinAward } from "../bot/points";
 import {
@@ -890,6 +890,54 @@ router.delete("/giveaway/:id/entries/:entryId", async (req, res) => {
     return;
   }
   res.status(204).end();
+});
+
+router.get("/giveaway/:id/analytics", async (req, res) => {
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!id) { res.status(400).json({ error: "invalid id" }); return; }
+
+  const [giveaway] = await db
+    .select()
+    .from(giveawaysTable)
+    .where(and(eq(giveawaysTable.id, id), eq(giveawaysTable.channel, ctx.channel)))
+    .limit(1);
+  if (!giveaway) { res.status(404).json({ error: "not found" }); return; }
+
+  const [entries, redemptionRows, timelineRows] = await Promise.all([
+    db.select({ tickets: giveawayEntriesTable.tickets })
+      .from(giveawayEntriesTable)
+      .where(eq(giveawayEntriesTable.giveawayId, id)),
+    db.select({ ticketsAdded: pointRedemptionsTable.ticketsAdded })
+      .from(pointRedemptionsTable)
+      .where(eq(pointRedemptionsTable.giveawayId, id)),
+    db.execute(sql`
+      SELECT
+        date_trunc('hour', entered_at) + interval '5 min' * floor(extract(minute from entered_at) / 5) AS bucket,
+        COUNT(*)::int AS count
+      FROM giveaway_entries
+      WHERE giveaway_id = ${id}
+      GROUP BY bucket
+      ORDER BY bucket
+    `),
+  ]);
+
+  const totalEntries = entries.length;
+  const totalTickets = entries.reduce((s, e) => s + e.tickets, 0);
+  const redeemedTickets = redemptionRows.reduce((s, r) => s + (r.ticketsAdded ?? 0), 0);
+
+  res.json({
+    totalEntries,
+    totalTickets,
+    manualTickets: totalTickets - redeemedTickets,
+    redeemedTickets,
+    redemptionCount: redemptionRows.length,
+    entryTimeline: (timelineRows.rows as Array<{ bucket: Date; count: number }>).map((r) => ({
+      bucket: r.bucket instanceof Date ? r.bucket.toISOString() : String(r.bucket),
+      count: Number(r.count),
+    })),
+  });
 });
 
 export default router;

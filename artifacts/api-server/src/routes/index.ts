@@ -20,6 +20,7 @@ import stripeRouter from "./stripe";
 import adminRouter from "./admin";
 import maintenanceRouter from "./maintenance";
 import supportRouter from "./support";
+import overlayRouter from "./overlay";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(stripeRouter);
 router.use(adminRouter);
 router.use(maintenanceRouter);
 router.use(supportRouter);
+router.use(overlayRouter);
 
 export default router;
