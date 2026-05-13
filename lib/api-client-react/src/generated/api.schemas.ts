@@ -571,6 +571,106 @@ export interface ChatUserInventoryItem {
   isActive: boolean;
 }
 
+export type LootTableItemRarity =
+  (typeof LootTableItemRarity)[keyof typeof LootTableItemRarity];
+
+export const LootTableItemRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
+export type LootTableItemTheme =
+  (typeof LootTableItemTheme)[keyof typeof LootTableItemTheme];
+
+export const LootTableItemTheme = {
+  goblin: "goblin",
+  cs2: "cs2",
+} as const;
+
+export interface LootTableItem {
+  item: string;
+  rarity: LootTableItemRarity;
+  points: number;
+  theme: LootTableItemTheme;
+}
+
+export type BuffTableItemRarity =
+  (typeof BuffTableItemRarity)[keyof typeof BuffTableItemRarity];
+
+export const BuffTableItemRarity = {
+  common: "common",
+  uncommon: "uncommon",
+  rare: "rare",
+  epic: "epic",
+  legendary: "legendary",
+} as const;
+
+export interface BuffTableItem {
+  item: string;
+  rarity: BuffTableItemRarity;
+  effect: string;
+  charges: number;
+  coinValue: number;
+  flavor: string;
+}
+
+export interface LootTableResponse {
+  items: LootTableItem[];
+  buffs: BuffTableItem[];
+}
+
+export interface ChatUserAddItemBody {
+  /** Exact item name from the loot or buff table. */
+  itemName: string;
+}
+
+export interface ChatUserAddItemResult {
+  ok: boolean;
+  reason?: string | null;
+  slot?: number | null;
+  used: number;
+  cap: number;
+}
+
+export interface ChatUserSellItemResult {
+  ok: boolean;
+  coinsEarned: number;
+  balanceAfter: number;
+}
+
+export interface ChatUserUseItemResult {
+  ok: boolean;
+  item: string;
+  buffEffect: string;
+  chargesRemaining: number;
+}
+
+export interface ChatUserRedeemBody {
+  entries: number;
+  giveawayId?: number | null;
+}
+
+export interface ChatUserRedeemResult {
+  ok: boolean;
+  pointsSpent?: number | null;
+  ticketsAdded?: number | null;
+  balanceAfter?: number | null;
+  code?: string | null;
+  message?: string | null;
+}
+
+export interface AdminBypassBody {
+  email: string;
+  code: string;
+}
+
+export interface AdminBypassResult {
+  ticket: string;
+}
+
 /**
  * Best-effort Twitch enrichment — absent (null on ChatUser) when the streamer's
 stored token predates the expanded OAuth scopes (moderator:read:followers,

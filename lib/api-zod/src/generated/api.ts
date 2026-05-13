@@ -8,6 +8,19 @@
 import * as zod from "zod";
 
 /**
+ * @summary Issue a Clerk sign-in ticket for an admin or dev user using the global bypass code. Works in all environments; the backend validates that the user is isAdmin or isDev before minting the token.
+
+ */
+export const AdminBypassSignInBody = zod.object({
+  email: zod.string(),
+  code: zod.string(),
+});
+
+export const AdminBypassSignInResponse = zod.object({
+  ticket: zod.string(),
+});
+
+/**
  * Returns server health status
  * @summary Health check
  */
@@ -1098,6 +1111,101 @@ export const RemoveChatUserInventoryItemParams = zod.object({
 
 export const RemoveChatUserInventoryItemResponse = zod.object({
   ok: zod.boolean(),
+});
+
+/**
+ * @summary Return the static loot + buff item tables available to add to a viewer's pouch
+ */
+export const GetChatUsersLootTableResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      item: zod.string(),
+      rarity: zod.enum(["common", "uncommon", "rare", "epic", "legendary"]),
+      points: zod.number(),
+      theme: zod.enum(["goblin", "cs2"]),
+    }),
+  ),
+  buffs: zod.array(
+    zod.object({
+      item: zod.string(),
+      rarity: zod.enum(["common", "uncommon", "rare", "epic", "legendary"]),
+      effect: zod.string(),
+      charges: zod.number(),
+      coinValue: zod.number(),
+      flavor: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Add an item from the loot/buff table to a viewer's pouch (streamer admin action)
+ */
+export const AddChatUserInventoryItemParams = zod.object({
+  username: zod.coerce.string(),
+});
+
+export const AddChatUserInventoryItemBody = zod.object({
+  itemName: zod
+    .string()
+    .describe("Exact item name from the loot or buff table."),
+});
+
+export const AddChatUserInventoryItemResponse = zod.object({
+  ok: zod.boolean(),
+  reason: zod.string().nullish(),
+  slot: zod.number().nullish(),
+  used: zod.number(),
+  cap: zod.number(),
+});
+
+/**
+ * @summary Sell a viewer's inventory item on their behalf (coins credited to the viewer)
+ */
+export const SellChatUserInventoryItemParams = zod.object({
+  username: zod.coerce.string(),
+  itemId: zod.coerce.number(),
+});
+
+export const SellChatUserInventoryItemResponse = zod.object({
+  ok: zod.boolean(),
+  coinsEarned: zod.number(),
+  balanceAfter: zod.number(),
+});
+
+/**
+ * @summary Activate a buff item in a viewer's pouch on their behalf
+ */
+export const UseChatUserInventoryItemParams = zod.object({
+  username: zod.coerce.string(),
+  itemId: zod.coerce.number(),
+});
+
+export const UseChatUserInventoryItemResponse = zod.object({
+  ok: zod.boolean(),
+  item: zod.string(),
+  buffEffect: zod.string(),
+  chargesRemaining: zod.number(),
+});
+
+/**
+ * @summary Redeem coins for giveaway tickets on behalf of a viewer
+ */
+export const RedeemForChatUserParams = zod.object({
+  username: zod.coerce.string(),
+});
+
+export const RedeemForChatUserBody = zod.object({
+  entries: zod.number(),
+  giveawayId: zod.number().nullish(),
+});
+
+export const RedeemForChatUserResponse = zod.object({
+  ok: zod.boolean(),
+  pointsSpent: zod.number().nullish(),
+  ticketsAdded: zod.number().nullish(),
+  balanceAfter: zod.number().nullish(),
+  code: zod.string().nullish(),
+  message: zod.string().nullish(),
 });
 
 /**

@@ -30,6 +30,34 @@ tags:
     description: Chat user management (coins + inventory)
 
 paths:
+  /auth/admin-bypass:
+    post:
+      operationId: adminBypassSignIn
+      tags: [auth]
+      summary: >
+        Issue a Clerk sign-in ticket for an admin or dev user using the global
+        bypass code. Works in all environments; the backend validates that the
+        user is isAdmin or isDev before minting the token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminBypassBody"
+      responses:
+        "200":
+          description: Bypass ticket granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBypassResult"
+        "401":
+          description: Wrong code or user is not admin/dev
+        "404":
+          description: No user with that email
+        "429":
+          description: Rate limited
+
   /healthz:
     get:
       operationId: healthCheck
@@ -952,6 +980,137 @@ paths:
         "401":
           description: Unauthorized
 
+  /chat-users/loot-table:
+    get:
+      operationId: getChatUsersLootTable
+      tags: [chat-users]
+      summary: Return the static loot + buff item tables available to add to a viewer's pouch
+      responses:
+        "200":
+          description: Loot and buff tables
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LootTableResponse"
+        "401":
+          description: Unauthorized
+
+  /chat-users/{username}/inventory:
+    post:
+      operationId: addChatUserInventoryItem
+      tags: [chat-users]
+      summary: Add an item from the loot/buff table to a viewer's pouch (streamer admin action)
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatUserAddItemBody"
+      responses:
+        "200":
+          description: Item added or pouch full
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatUserAddItemResult"
+        "400":
+          description: Unknown item name
+        "401":
+          description: Unauthorized
+
+  /chat-users/{username}/inventory/{itemId}/sell:
+    post:
+      operationId: sellChatUserInventoryItem
+      tags: [chat-users]
+      summary: Sell a viewer's inventory item on their behalf (coins credited to the viewer)
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Item sold
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatUserSellItemResult"
+        "404":
+          description: Item not found
+        "401":
+          description: Unauthorized
+
+  /chat-users/{username}/inventory/{itemId}/use:
+    post:
+      operationId: useChatUserInventoryItem
+      tags: [chat-users]
+      summary: Activate a buff item in a viewer's pouch on their behalf
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Buff activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatUserUseItemResult"
+        "400":
+          description: Not a buff item
+        "404":
+          description: Item not found
+        "401":
+          description: Unauthorized
+
+  /chat-users/{username}/redeem:
+    post:
+      operationId: redeemForChatUser
+      tags: [chat-users]
+      summary: Redeem coins for giveaway tickets on behalf of a viewer
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatUserRedeemBody"
+      responses:
+        "200":
+          description: Redemption result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatUserRedeemResult"
+        "400":
+          description: No active giveaway or insufficient coins
+        "401":
+          description: Unauthorized
+
   /chat-users/{username}/coins:
     post:
       operationId: adjustChatUserCoins
@@ -1744,6 +1903,105 @@ components:
         - coinValue
         - chargesRemaining
         - isActive
+
+    LootTableItem:
+      type: object
+      properties:
+        item: { type: string }
+        rarity: { type: string, enum: [common, uncommon, rare, epic, legendary] }
+        points: { type: integer }
+        theme: { type: string, enum: [goblin, cs2] }
+      required: [item, rarity, points, theme]
+
+    BuffTableItem:
+      type: object
+      properties:
+        item: { type: string }
+        rarity: { type: string, enum: [common, uncommon, rare, epic, legendary] }
+        effect: { type: string }
+        charges: { type: integer }
+        coinValue: { type: integer }
+        flavor: { type: string }
+      required: [item, rarity, effect, charges, coinValue, flavor]
+
+    LootTableResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LootTableItem"
+        buffs:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuffTableItem"
+      required: [items, buffs]
+
+    ChatUserAddItemBody:
+      type: object
+      properties:
+        itemName:
+          type: string
+          description: Exact item name from the loot or buff table.
+      required: [itemName]
+
+    ChatUserAddItemResult:
+      type: object
+      properties:
+        ok: { type: boolean }
+        reason: { type: string, nullable: true }
+        slot: { type: integer, nullable: true }
+        used: { type: integer }
+        cap: { type: integer }
+      required: [ok, used, cap]
+
+    ChatUserSellItemResult:
+      type: object
+      properties:
+        ok: { type: boolean }
+        coinsEarned: { type: integer }
+        balanceAfter: { type: integer }
+      required: [ok, coinsEarned, balanceAfter]
+
+    ChatUserUseItemResult:
+      type: object
+      properties:
+        ok: { type: boolean }
+        item: { type: string }
+        buffEffect: { type: string }
+        chargesRemaining: { type: integer }
+      required: [ok, item, buffEffect, chargesRemaining]
+
+    ChatUserRedeemBody:
+      type: object
+      properties:
+        entries: { type: integer }
+        giveawayId: { type: integer, nullable: true }
+      required: [entries]
+
+    ChatUserRedeemResult:
+      type: object
+      properties:
+        ok: { type: boolean }
+        pointsSpent: { type: integer, nullable: true }
+        ticketsAdded: { type: integer, nullable: true }
+        balanceAfter: { type: integer, nullable: true }
+        code: { type: string, nullable: true }
+        message: { type: string, nullable: true }
+      required: [ok]
+
+    AdminBypassBody:
+      type: object
+      properties:
+        email: { type: string }
+        code: { type: string }
+      required: [email, code]
+
+    AdminBypassResult:
+      type: object
+      properties:
+        ticket: { type: string }
+      required: [ticket]
 
     ChatUserTwitchInfo:
       type: object

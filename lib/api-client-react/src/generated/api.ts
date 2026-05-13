@@ -20,10 +20,18 @@ import type {
   AddGiveawayEntryInput,
   AdjustCoinsRequest,
   AdjustCoinsResponse,
+  AdminBypassBody,
+  AdminBypassResult,
   BotCommand,
   BotSettings,
   BotStatus,
   ChatUser,
+  ChatUserAddItemBody,
+  ChatUserAddItemResult,
+  ChatUserRedeemBody,
+  ChatUserRedeemResult,
+  ChatUserSellItemResult,
+  ChatUserUseItemResult,
   CommandStat,
   ConnectSteam200,
   CreateGiveawayPreset,
@@ -46,6 +54,7 @@ import type {
   LaunchGiveawayPreset201,
   ListGiveawaysParams,
   LootDrop,
+  LootTableResponse,
   ManualDropRequest,
   ManualDropResponse,
   PointsBalance,
@@ -73,6 +82,94 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+/**
+ * @summary Issue a Clerk sign-in ticket for an admin or dev user using the global bypass code. Works in all environments; the backend validates that the user is isAdmin or isDev before minting the token.
+
+ */
+export const getAdminBypassSignInUrl = () => {
+  return `/api/auth/admin-bypass`;
+};
+
+export const adminBypassSignIn = async (
+  adminBypassBody: AdminBypassBody,
+  options?: RequestInit,
+): Promise<AdminBypassResult> => {
+  return customFetch<AdminBypassResult>(getAdminBypassSignInUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminBypassBody),
+  });
+};
+
+export const getAdminBypassSignInMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminBypassSignIn>>,
+    TError,
+    { data: BodyType<AdminBypassBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminBypassSignIn>>,
+  TError,
+  { data: BodyType<AdminBypassBody> },
+  TContext
+> => {
+  const mutationKey = ["adminBypassSignIn"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminBypassSignIn>>,
+    { data: BodyType<AdminBypassBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return adminBypassSignIn(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminBypassSignInMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminBypassSignIn>>
+>;
+export type AdminBypassSignInMutationBody = BodyType<AdminBypassBody>;
+export type AdminBypassSignInMutationError = ErrorType<void>;
+
+/**
+ * @summary Issue a Clerk sign-in ticket for an admin or dev user using the global bypass code. Works in all environments; the backend validates that the user is isAdmin or isDev before minting the token.
+
+ */
+export const useAdminBypassSignIn = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminBypassSignIn>>,
+    TError,
+    { data: BodyType<AdminBypassBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminBypassSignIn>>,
+  TError,
+  { data: BodyType<AdminBypassBody> },
+  TContext
+> => {
+  return useMutation(getAdminBypassSignInMutationOptions(options));
+};
 
 /**
  * Returns server health status
@@ -3862,6 +3959,441 @@ export const useRemoveChatUserInventoryItem = <
   TContext
 > => {
   return useMutation(getRemoveChatUserInventoryItemMutationOptions(options));
+};
+
+/**
+ * @summary Return the static loot + buff item tables available to add to a viewer's pouch
+ */
+export const getGetChatUsersLootTableUrl = () => {
+  return `/api/chat-users/loot-table`;
+};
+
+export const getChatUsersLootTable = async (
+  options?: RequestInit,
+): Promise<LootTableResponse> => {
+  return customFetch<LootTableResponse>(getGetChatUsersLootTableUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetChatUsersLootTableQueryKey = () => {
+  return [`/api/chat-users/loot-table`] as const;
+};
+
+export const getGetChatUsersLootTableQueryOptions = <
+  TData = Awaited<ReturnType<typeof getChatUsersLootTable>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getChatUsersLootTable>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetChatUsersLootTableQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getChatUsersLootTable>>
+  > = ({ signal }) => getChatUsersLootTable({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getChatUsersLootTable>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetChatUsersLootTableQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getChatUsersLootTable>>
+>;
+export type GetChatUsersLootTableQueryError = ErrorType<void>;
+
+/**
+ * @summary Return the static loot + buff item tables available to add to a viewer's pouch
+ */
+
+export function useGetChatUsersLootTable<
+  TData = Awaited<ReturnType<typeof getChatUsersLootTable>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getChatUsersLootTable>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetChatUsersLootTableQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add an item from the loot/buff table to a viewer's pouch (streamer admin action)
+ */
+export const getAddChatUserInventoryItemUrl = (username: string) => {
+  return `/api/chat-users/${username}/inventory`;
+};
+
+export const addChatUserInventoryItem = async (
+  username: string,
+  chatUserAddItemBody: ChatUserAddItemBody,
+  options?: RequestInit,
+): Promise<ChatUserAddItemResult> => {
+  return customFetch<ChatUserAddItemResult>(
+    getAddChatUserInventoryItemUrl(username),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(chatUserAddItemBody),
+    },
+  );
+};
+
+export const getAddChatUserInventoryItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addChatUserInventoryItem>>,
+    TError,
+    { username: string; data: BodyType<ChatUserAddItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addChatUserInventoryItem>>,
+  TError,
+  { username: string; data: BodyType<ChatUserAddItemBody> },
+  TContext
+> => {
+  const mutationKey = ["addChatUserInventoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addChatUserInventoryItem>>,
+    { username: string; data: BodyType<ChatUserAddItemBody> }
+  > = (props) => {
+    const { username, data } = props ?? {};
+
+    return addChatUserInventoryItem(username, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddChatUserInventoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addChatUserInventoryItem>>
+>;
+export type AddChatUserInventoryItemMutationBody =
+  BodyType<ChatUserAddItemBody>;
+export type AddChatUserInventoryItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Add an item from the loot/buff table to a viewer's pouch (streamer admin action)
+ */
+export const useAddChatUserInventoryItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addChatUserInventoryItem>>,
+    TError,
+    { username: string; data: BodyType<ChatUserAddItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addChatUserInventoryItem>>,
+  TError,
+  { username: string; data: BodyType<ChatUserAddItemBody> },
+  TContext
+> => {
+  return useMutation(getAddChatUserInventoryItemMutationOptions(options));
+};
+
+/**
+ * @summary Sell a viewer's inventory item on their behalf (coins credited to the viewer)
+ */
+export const getSellChatUserInventoryItemUrl = (
+  username: string,
+  itemId: number,
+) => {
+  return `/api/chat-users/${username}/inventory/${itemId}/sell`;
+};
+
+export const sellChatUserInventoryItem = async (
+  username: string,
+  itemId: number,
+  options?: RequestInit,
+): Promise<ChatUserSellItemResult> => {
+  return customFetch<ChatUserSellItemResult>(
+    getSellChatUserInventoryItemUrl(username, itemId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getSellChatUserInventoryItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sellChatUserInventoryItem>>,
+    TError,
+    { username: string; itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sellChatUserInventoryItem>>,
+  TError,
+  { username: string; itemId: number },
+  TContext
+> => {
+  const mutationKey = ["sellChatUserInventoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sellChatUserInventoryItem>>,
+    { username: string; itemId: number }
+  > = (props) => {
+    const { username, itemId } = props ?? {};
+
+    return sellChatUserInventoryItem(username, itemId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SellChatUserInventoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sellChatUserInventoryItem>>
+>;
+
+export type SellChatUserInventoryItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Sell a viewer's inventory item on their behalf (coins credited to the viewer)
+ */
+export const useSellChatUserInventoryItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sellChatUserInventoryItem>>,
+    TError,
+    { username: string; itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sellChatUserInventoryItem>>,
+  TError,
+  { username: string; itemId: number },
+  TContext
+> => {
+  return useMutation(getSellChatUserInventoryItemMutationOptions(options));
+};
+
+/**
+ * @summary Activate a buff item in a viewer's pouch on their behalf
+ */
+export const getUseChatUserInventoryItemUrl = (
+  username: string,
+  itemId: number,
+) => {
+  return `/api/chat-users/${username}/inventory/${itemId}/use`;
+};
+
+export const useChatUserInventoryItem = async (
+  username: string,
+  itemId: number,
+  options?: RequestInit,
+): Promise<ChatUserUseItemResult> => {
+  return customFetch<ChatUserUseItemResult>(
+    getUseChatUserInventoryItemUrl(username, itemId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getUseChatUserInventoryItemMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof useChatUserInventoryItem>>,
+    TError,
+    { username: string; itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof useChatUserInventoryItem>>,
+  TError,
+  { username: string; itemId: number },
+  TContext
+> => {
+  const mutationKey = ["useChatUserInventoryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof useChatUserInventoryItem>>,
+    { username: string; itemId: number }
+  > = (props) => {
+    const { username, itemId } = props ?? {};
+
+    return useChatUserInventoryItem(username, itemId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UseChatUserInventoryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof useChatUserInventoryItem>>
+>;
+
+export type UseChatUserInventoryItemMutationError = ErrorType<void>;
+
+/**
+ * @summary Activate a buff item in a viewer's pouch on their behalf
+ */
+export const useUseChatUserInventoryItem = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof useChatUserInventoryItem>>,
+    TError,
+    { username: string; itemId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof useChatUserInventoryItem>>,
+  TError,
+  { username: string; itemId: number },
+  TContext
+> => {
+  return useMutation(getUseChatUserInventoryItemMutationOptions(options));
+};
+
+/**
+ * @summary Redeem coins for giveaway tickets on behalf of a viewer
+ */
+export const getRedeemForChatUserUrl = (username: string) => {
+  return `/api/chat-users/${username}/redeem`;
+};
+
+export const redeemForChatUser = async (
+  username: string,
+  chatUserRedeemBody: ChatUserRedeemBody,
+  options?: RequestInit,
+): Promise<ChatUserRedeemResult> => {
+  return customFetch<ChatUserRedeemResult>(getRedeemForChatUserUrl(username), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(chatUserRedeemBody),
+  });
+};
+
+export const getRedeemForChatUserMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof redeemForChatUser>>,
+    TError,
+    { username: string; data: BodyType<ChatUserRedeemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof redeemForChatUser>>,
+  TError,
+  { username: string; data: BodyType<ChatUserRedeemBody> },
+  TContext
+> => {
+  const mutationKey = ["redeemForChatUser"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof redeemForChatUser>>,
+    { username: string; data: BodyType<ChatUserRedeemBody> }
+  > = (props) => {
+    const { username, data } = props ?? {};
+
+    return redeemForChatUser(username, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RedeemForChatUserMutationResult = NonNullable<
+  Awaited<ReturnType<typeof redeemForChatUser>>
+>;
+export type RedeemForChatUserMutationBody = BodyType<ChatUserRedeemBody>;
+export type RedeemForChatUserMutationError = ErrorType<void>;
+
+/**
+ * @summary Redeem coins for giveaway tickets on behalf of a viewer
+ */
+export const useRedeemForChatUser = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof redeemForChatUser>>,
+    TError,
+    { username: string; data: BodyType<ChatUserRedeemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof redeemForChatUser>>,
+  TError,
+  { username: string; data: BodyType<ChatUserRedeemBody> },
+  TContext
+> => {
+  return useMutation(getRedeemForChatUserMutationOptions(options));
 };
 
 /**

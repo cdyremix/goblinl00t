@@ -24,6 +24,7 @@ import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import DevSignIn from "@/pages/dev-sign-in";
+import AdminBypassSignIn from "@/pages/admin-bypass-signin";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useSubscriptionTier } from "@/hooks/use-tier";
 import { MaintenanceGate } from "@/components/maintenance-gate";
@@ -179,13 +180,24 @@ function SignInPage() {
   const { isLoaded } = useAuth();
   if (!isLoaded) return <AuthLoader />;
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 dark">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 dark gap-4">
       <SignIn
         routing="path"
         path={`${basePath}/sign-in`}
         signUpUrl={`${basePath}/sign-up`}
         fallbackRedirectUrl={`${basePath}/dashboard`}
       />
+      {/* Admin / dev 2FA bypass link — visible to everyone but only works
+          for accounts flagged isAdmin or isDev in the DB. */}
+      <p className="text-xs text-muted-foreground/50">
+        Admin or dev?{" "}
+        <a
+          href={`${basePath}/admin-bypass`}
+          className="underline underline-offset-2 hover:text-muted-foreground transition-colors"
+        >
+          Use override code
+        </a>
+      </p>
     </div>
   );
 }
@@ -215,6 +227,9 @@ function AppRouter() {
           production, but we also gate the route so the bundle doesn't
           even ship the page in published builds. */}
       {import.meta.env.DEV && <Route path="/dev-sign-in" component={DevSignIn} />}
+      {/* Admin/dev 2FA bypass — NOT gated on import.meta.env.DEV because it must
+          work in production too. The server endpoint enforces isAdmin||isDev. */}
+      <Route path="/admin-bypass" component={AdminBypassSignIn} />
       <Route path="/dashboard">
         <ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>
       </Route>

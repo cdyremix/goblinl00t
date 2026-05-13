@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { db, usersTable, lootDropsTable, pointRedemptionsTable, userInventoryTable } from "@workspace/db";
+import { db, usersTable, lootDropsTable, pointRedemptionsTable, userInventoryTable, giveawaysTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { getPointsBalance, clampCoinAward } from "../bot/points";
+import { getPointsBalance, clampCoinAward, redeemEntriesForUser, REDEEM_COST_PER_ENTRY } from "../bot/points";
+import { addInventoryItem, sellInventoryItem, useInventoryItem, BUFF_TABLE } from "../bot/inventory";
+import { LOOT_TABLE } from "../bot/loot-tables";
 import { logger } from "../lib/logger";
 import { requireStreamerChannel } from "../lib/auth-helpers";
 
@@ -32,8 +34,6 @@ async function resolveChannel(req: Parameters<typeof getAuth>[0]): Promise<
 
 // ---------------------------------------------------------------------------
 // Best-effort Twitch enrichment
-// Returns a map of lowercased username → twitch data.
-// Fails gracefully — any error or missing scope returns nulls for that user.
 // ---------------------------------------------------------------------------
 interface TwitchUserInfo {
   followedAt: string | null;
@@ -54,30 +54,19 @@ async function fetchTwitchEnrichment(
   const token = broadcasterToken.replace(/^oauth:/, "");
   const headers = { "Client-Id": CLIENT_ID, Authorization: `Bearer ${token}` };
 
-  // Step 1 — resolve Twitch user IDs for all our usernames (100 per request)
-  const usernameToId = new Map<string, string>(); // lowercase username → Twitch user ID
+  const usernameToId = new Map<string, string>();
   try {
     for (let i = 0; i < usernames.length; i += 100) {
       const batch = usernames.slice(i, i + 100);
       const params = batch.map((u) => `login=${encodeURIComponent(u)}`).join("&");
-      const r = await fetch(`https://api.twitch.tv/helix/users?${params}`, {
-        headers,
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!r.ok) {
-        logger.warn({ status: r.status }, "Helix /users lookup failed — skipping Twitch enrichment");
-        return result;
-      }
+      const r = await fetch(`https://api.twitch.tv/helix/users?${params}`, { headers, signal: AbortSignal.timeout(6000) });
+      if (!r.ok) return result;
       const data = (await r.json()) as { data?: Array<{ id: string; login: string }> };
       for (const u of data.data ?? []) usernameToId.set(u.login.toLowerCase(), u.id);
     }
-  } catch (err) {
-    logger.warn({ errMsg: (err as Error).message }, "Helix /users fetch error — skipping enrichment");
-    return result;
-  }
+  } catch { return result; }
 
-  // Step 2 — fetch all subscribers (requires channel:read:subscriptions scope)
-  const subscriberMap = new Map<string, string>(); // Twitch user ID → sub tier
+  const subscriberMap = new Map<string, string>();
   try {
     let cursor: string | undefined;
     do {
@@ -86,20 +75,14 @@ async function fetchTwitchEnrichment(
       url.searchParams.set("first", "100");
       if (cursor) url.searchParams.set("after", cursor);
       const r = await fetch(url.toString(), { headers, signal: AbortSignal.timeout(6000) });
-      if (!r.ok) break; // scope not available — leave subscriberMap empty, no warning needed
-      const data = (await r.json()) as {
-        data?: Array<{ user_id: string; tier: string }>;
-        pagination?: { cursor?: string };
-      };
+      if (!r.ok) break;
+      const data = (await r.json()) as { data?: Array<{ user_id: string; tier: string }>; pagination?: { cursor?: string } };
       for (const sub of data.data ?? []) subscriberMap.set(sub.user_id, sub.tier);
       cursor = data.pagination?.cursor;
     } while (cursor);
-  } catch {
-    // Graceful — scope likely not granted yet
-  }
+  } catch { /* scope unavailable */ }
 
-  // Step 3 — check follower status per user in parallel (requires moderator:read:followers scope)
-  const followerMap = new Map<string, string>(); // Twitch user ID → followed_at ISO string
+  const followerMap = new Map<string, string>();
   try {
     await Promise.all(
       [...usernameToId.entries()].map(async ([, userId]) => {
@@ -108,20 +91,15 @@ async function fetchTwitchEnrichment(
             `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${broadcasterId}&user_id=${userId}&first=1`,
             { headers, signal: AbortSignal.timeout(5000) },
           );
-          if (!r.ok) return; // scope not available for this user
+          if (!r.ok) return;
           const data = (await r.json()) as { data?: Array<{ followed_at: string }> };
           const follow = data.data?.[0];
           if (follow) followerMap.set(userId, follow.followed_at);
-        } catch {
-          // individual fetch failed — silently skip
-        }
+        } catch { /* individual failure */ }
       }),
     );
-  } catch {
-    // Graceful
-  }
+  } catch { /* graceful */ }
 
-  // Build final enrichment map
   for (const [username] of result.entries()) {
     const userId = usernameToId.get(username);
     if (!userId) continue;
@@ -132,21 +110,29 @@ async function fetchTwitchEnrichment(
       subTier,
     });
   }
-
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// GET /chat-users/loot-table — static item catalogue (must be before /:username routes)
+// ---------------------------------------------------------------------------
+router.get("/chat-users/loot-table", async (req, res) => {
+  const ch = await resolveChannel(req);
+  if ("error" in ch) { res.status(ch.status).json({ error: ch.error }); return; }
+
+  res.json({
+    items: LOOT_TABLE.map((i) => ({ item: i.item, rarity: i.rarity, points: i.points, theme: i.theme })),
+    buffs: BUFF_TABLE.map((b) => ({ item: b.item, rarity: b.rarity, effect: b.effect, charges: b.charges, coinValue: b.coinValue, flavor: b.flavor })),
+  });
+});
 
 // ---------------------------------------------------------------------------
 // GET /chat-users
 // ---------------------------------------------------------------------------
 router.get("/chat-users", async (req, res) => {
   const ch = await resolveChannel(req);
-  if ("error" in ch) {
-    res.status(ch.status).json({ error: ch.error });
-    return;
-  }
+  if ("error" in ch) { res.status(ch.status).json({ error: ch.error }); return; }
 
-  // Collect every distinct username we've ever seen on this channel
   const [earners, spenders, holders] = await Promise.all([
     db.selectDistinct({ username: lootDropsTable.username }).from(lootDropsTable).where(eq(lootDropsTable.channel, ch.channel)),
     db.selectDistinct({ username: pointRedemptionsTable.username }).from(pointRedemptionsTable).where(eq(pointRedemptionsTable.channel, ch.channel)),
@@ -158,7 +144,6 @@ router.get("/chat-users", async (req, res) => {
   for (const r of spenders) usernames.add(r.username.toLowerCase());
   for (const r of holders) usernames.add(r.username.toLowerCase());
 
-  // Pull all inventory rows in one query, bucket by user
   const allInventory = await db.select().from(userInventoryTable).where(eq(userInventoryTable.channel, ch.channel));
   const invByUser = new Map<string, typeof allInventory>();
   for (const row of allInventory) {
@@ -170,7 +155,6 @@ router.get("/chat-users", async (req, res) => {
 
   const sortedUsernames = [...usernames].sort();
 
-  // Fetch coin balances + Twitch enrichment in parallel
   const [balances, twitchData] = await Promise.all([
     Promise.all(sortedUsernames.map((u) => getPointsBalance(u, ch.channel))),
     ch.twitchUserId && ch.twitchAccessToken
@@ -197,13 +181,7 @@ router.get("/chat-users", async (req, res) => {
         chargesRemaining: i.chargesRemaining,
         isActive: i.isActive,
       })),
-      twitch: tw
-        ? {
-            followedAt: tw.followedAt,
-            isSubscriber: tw.isSubscriber,
-            subTier: tw.subTier,
-          }
-        : null,
+      twitch: tw ? { followedAt: tw.followedAt, isSubscriber: tw.isSubscriber, subTier: tw.subTier } : null,
     };
   });
 
@@ -212,8 +190,62 @@ router.get("/chat-users", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /chat-users/:username/inventory/:itemId
-// Streamer removes an item from a viewer's pouch. No coin refund — admin action.
+// POST /chat-users/:username/inventory — add item from loot/buff table
+// ---------------------------------------------------------------------------
+router.post("/chat-users/:username/inventory", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+
+  const username = String(req.params["username"] ?? "").trim().toLowerCase();
+  if (!username || !/^[a-z0-9_]{1,30}$/.test(username)) {
+    res.status(400).json({ error: "Invalid username" }); return;
+  }
+
+  const body = req.body as { itemName?: string };
+  const itemName = String(body.itemName ?? "").trim();
+  if (!itemName) { res.status(400).json({ error: "itemName required" }); return; }
+
+  // Resolve item from LOOT_TABLE or BUFF_TABLE
+  const lootEntry = LOOT_TABLE.find((i) => i.item === itemName);
+  const buffEntry = BUFF_TABLE.find((b) => b.item === itemName);
+
+  if (!lootEntry && !buffEntry) {
+    res.status(400).json({ error: `Unknown item: ${itemName}` }); return;
+  }
+
+  let loot: Parameters<typeof addInventoryItem>[2];
+  if (buffEntry) {
+    loot = {
+      item: buffEntry.item,
+      rarity: buffEntry.rarity,
+      kind: "buff",
+      buffEffect: buffEntry.effect as import("../bot/inventory").BuffEffect,
+      coinValue: buffEntry.coinValue,
+      charges: buffEntry.charges,
+      flavor: buffEntry.flavor,
+    };
+  } else {
+    loot = {
+      item: lootEntry!.item,
+      rarity: lootEntry!.rarity,
+      kind: "item",
+      buffEffect: null,
+      coinValue: lootEntry!.points,
+      charges: 0,
+      flavor: "",
+    };
+  }
+
+  const result = await addInventoryItem(ctx.channel, username, loot);
+  if (!result.ok) {
+    res.json({ ok: false, reason: result.reason, used: result.used, cap: result.cap });
+    return;
+  }
+  res.json({ ok: true, slot: result.slot, used: result.used, cap: result.cap });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /chat-users/:username/inventory/:itemId — remove item (no refund)
 // ---------------------------------------------------------------------------
 router.delete("/chat-users/:username/inventory/:itemId", async (req, res) => {
   const ctx = await requireStreamerChannel(req, res);
@@ -221,44 +253,110 @@ router.delete("/chat-users/:username/inventory/:itemId", async (req, res) => {
 
   const username = String(req.params["username"] ?? "").trim().toLowerCase();
   if (!username || !/^[a-z0-9_]{1,30}$/.test(username)) {
-    res.status(400).json({ error: "Invalid username" });
-    return;
+    res.status(400).json({ error: "Invalid username" }); return;
   }
-
   const itemId = Number(req.params["itemId"]);
-  if (!Number.isFinite(itemId)) {
-    res.status(400).json({ error: "Invalid item id" });
-    return;
-  }
+  if (!Number.isFinite(itemId)) { res.status(400).json({ error: "Invalid item id" }); return; }
 
   const [existing] = await db
     .select({ id: userInventoryTable.id })
     .from(userInventoryTable)
-    .where(
-      and(
-        eq(userInventoryTable.id, itemId),
-        eq(userInventoryTable.channel, ctx.channel),
-        eq(userInventoryTable.username, username),
-      ),
-    )
+    .where(and(eq(userInventoryTable.id, itemId), eq(userInventoryTable.channel, ctx.channel), eq(userInventoryTable.username, username)))
     .limit(1);
 
-  if (!existing) {
-    res.status(404).json({ error: "Item not found" });
-    return;
+  if (!existing) { res.status(404).json({ error: "Item not found" }); return; }
+
+  await db.delete(userInventoryTable).where(and(eq(userInventoryTable.id, itemId), eq(userInventoryTable.channel, ctx.channel), eq(userInventoryTable.username, username)));
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// POST /chat-users/:username/inventory/:itemId/sell — sell item for viewer
+// ---------------------------------------------------------------------------
+router.post("/chat-users/:username/inventory/:itemId/sell", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+
+  const username = String(req.params["username"] ?? "").trim().toLowerCase();
+  if (!username || !/^[a-z0-9_]{1,30}$/.test(username)) {
+    res.status(400).json({ error: "Invalid username" }); return;
+  }
+  const itemId = Number(req.params["itemId"]);
+  if (!Number.isFinite(itemId)) { res.status(400).json({ error: "Invalid item id" }); return; }
+
+  const result = await sellInventoryItem({ channel: ctx.channel, username, itemId });
+  if (!result.ok) { res.status(404).json({ error: "Item not found" }); return; }
+
+  const { balance } = await getPointsBalance(username, ctx.channel);
+  res.json({ ok: true, coinsEarned: result.coinsEarned ?? 0, balanceAfter: balance });
+});
+
+// ---------------------------------------------------------------------------
+// POST /chat-users/:username/inventory/:itemId/use — activate buff for viewer
+// ---------------------------------------------------------------------------
+router.post("/chat-users/:username/inventory/:itemId/use", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+
+  const username = String(req.params["username"] ?? "").trim().toLowerCase();
+  if (!username || !/^[a-z0-9_]{1,30}$/.test(username)) {
+    res.status(400).json({ error: "Invalid username" }); return;
+  }
+  const itemId = Number(req.params["itemId"]);
+  if (!Number.isFinite(itemId)) { res.status(400).json({ error: "Invalid item id" }); return; }
+
+  const result = await useInventoryItem({ channel: ctx.channel, username, itemId });
+  if (!result.ok) {
+    if (result.reason === "not_buff") { res.status(400).json({ error: "Not a buff item" }); return; }
+    res.status(404).json({ error: "Item not found" }); return;
+  }
+  res.json({
+    ok: true,
+    item: result.item!.item,
+    buffEffect: result.item!.buffEffect ?? "",
+    chargesRemaining: result.item!.chargesRemaining,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /chat-users/:username/redeem — redeem coins for tickets on behalf of viewer
+// ---------------------------------------------------------------------------
+router.post("/chat-users/:username/redeem", async (req, res) => {
+  const ctx = await requireStreamerChannel(req, res);
+  if (!ctx) return;
+
+  const username = String(req.params["username"] ?? "").trim().toLowerCase();
+  if (!username || !/^[a-z0-9_]{1,30}$/.test(username)) {
+    res.status(400).json({ error: "Invalid username" }); return;
   }
 
-  await db
-    .delete(userInventoryTable)
-    .where(
-      and(
-        eq(userInventoryTable.id, itemId),
-        eq(userInventoryTable.channel, ctx.channel),
-        eq(userInventoryTable.username, username),
-      ),
-    );
+  const body = req.body as { entries?: number; giveawayId?: number };
+  const entries = Math.trunc(Number(body.entries ?? 1));
+  if (!Number.isFinite(entries) || entries < 1) {
+    res.status(400).json({ error: "entries must be a positive integer" }); return;
+  }
 
-  res.json({ ok: true });
+  let giveawayId = body.giveawayId ? Number(body.giveawayId) : null;
+
+  // If no giveawayId provided, find the active giveaway for this channel
+  if (!giveawayId) {
+    const [active] = await db
+      .select({ id: giveawaysTable.id })
+      .from(giveawaysTable)
+      .where(and(eq(giveawaysTable.channel, ctx.channel), eq(giveawaysTable.status, "active")))
+      .limit(1);
+    if (!active) {
+      res.status(400).json({ error: "No active giveaway found for your channel" }); return;
+    }
+    giveawayId = active.id;
+  }
+
+  const result = await redeemEntriesForUser({ giveawayId, username, entries });
+  if (!result.ok) {
+    res.status(400).json({ ok: false, code: result.code, message: result.message, balance: result.balance ?? null });
+    return;
+  }
+  res.json({ ok: true, pointsSpent: result.pointsSpent, ticketsAdded: result.ticketsAdded, balanceAfter: result.balanceAfter });
 });
 
 // ---------------------------------------------------------------------------
@@ -266,22 +364,17 @@ router.delete("/chat-users/:username/inventory/:itemId", async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post("/chat-users/:username/coins", async (req, res) => {
   const ch = await resolveChannel(req);
-  if ("error" in ch) {
-    res.status(ch.status).json({ error: ch.error });
-    return;
-  }
+  if ("error" in ch) { res.status(ch.status).json({ error: ch.error }); return; }
 
   const username = String(req.params["username"] ?? "").trim().toLowerCase();
   if (!username || !/^[a-z0-9_]{1,30}$/.test(username)) {
-    res.status(400).json({ error: "Invalid username" });
-    return;
+    res.status(400).json({ error: "Invalid username" }); return;
   }
 
   const body = req.body as { delta?: number; reason?: string };
   const delta = Math.trunc(Number(body.delta ?? 0));
   if (!Number.isFinite(delta) || delta === 0) {
-    res.status(400).json({ error: "delta must be a non-zero integer" });
-    return;
+    res.status(400).json({ error: "delta must be a non-zero integer" }); return;
   }
   const reason = String(body.reason ?? "").trim().slice(0, 80);
 
@@ -289,20 +382,15 @@ router.post("/chat-users/:username/coins", async (req, res) => {
     const credited = await clampCoinAward(ch.channel, username, delta);
     if (credited > 0) {
       await db.insert(lootDropsTable).values({
-        channel: ch.channel,
-        username,
+        channel: ch.channel, username,
         item: reason ? `Streamer Adjustment: ${reason}` : "Streamer Adjustment",
-        rarity: "epic",
-        points: credited,
+        rarity: "epic", points: credited,
       });
     }
   } else {
     await db.insert(pointRedemptionsTable).values({
-      channel: ch.channel,
-      username,
-      kind: "streamer_adjustment",
-      points: Math.abs(delta),
-      ticketsAdded: 0,
+      channel: ch.channel, username, kind: "streamer_adjustment",
+      points: Math.abs(delta), ticketsAdded: 0,
     });
   }
 
@@ -310,4 +398,5 @@ router.post("/chat-users/:username/coins", async (req, res) => {
   res.json({ ok: true, username, balance: balance.balance });
 });
 
+export { REDEEM_COST_PER_ENTRY };
 export default router;

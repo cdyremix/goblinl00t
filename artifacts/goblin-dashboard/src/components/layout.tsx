@@ -85,7 +85,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/stats", label: "Ledger", icon: BarChart3 },
     { href: "/settings", label: "Forge", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true, newWhen: isCS2 },
-    { href: "/users", label: "Community", icon: Users2 },
     // Admin Console — only rendered for super-users (`usersTable.isAdmin`).
     // Server still enforces 403 on `/api/admin/*` so even if a normal user
     // forces the route, the page lights up empty + every action 403s.

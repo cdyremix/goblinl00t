@@ -171,6 +171,63 @@ router.get("/auth/twitch/callback", async (req, res) => {
 });
 
 /**
+ * POST /auth/admin-bypass — Issues a Clerk sign-in ticket for any user
+ * who (a) presents the global override code and (b) is flagged isAdmin or
+ * isDev in the DB. Works in ALL environments — the admin/dev gate is the
+ * security boundary; NODE_ENV is irrelevant here. Rate-limited per-IP.
+ */
+const AdminBypassBody = z.object({
+  email: z.string().trim().min(1).max(254),
+  code: z.string().trim().min(1).max(32),
+});
+
+const ADMIN_BYPASS_CODE = "424242";
+
+router.post("/auth/admin-bypass", async (req, res) => {
+  if (!rateLimit(`admin-bypass:${req.ip ?? "unknown"}`, { max: 10, windowMs: 60_000 })) {
+    res.status(429).json({ error: "Too many attempts" });
+    return;
+  }
+  const parsed = AdminBypassBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body" });
+    return;
+  }
+  if (parsed.data.code !== ADMIN_BYPASS_CODE) {
+    res.status(401).json({ error: "Invalid override code" });
+    return;
+  }
+  const email = parsed.data.email.toLowerCase();
+  try {
+    const list = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
+    const clerkUser = list.data[0];
+    if (!clerkUser) {
+      res.status(404).json({ error: "No user with that email." });
+      return;
+    }
+    // Must be admin or dev in our DB to qualify for the bypass.
+    const [dbUser] = await db
+      .select({ isAdmin: usersTable.isAdmin, isDev: usersTable.isDev })
+      .from(usersTable)
+      .where(eq(usersTable.clerkUserId, clerkUser.id))
+      .limit(1);
+    if (!dbUser || (!dbUser.isAdmin && !dbUser.isDev)) {
+      res.status(401).json({ error: "Account is not authorised for bypass." });
+      return;
+    }
+    const token = await clerkClient.signInTokens.createSignInToken({
+      userId: clerkUser.id,
+      expiresInSeconds: 300,
+    });
+    res.json({ ticket: token.token });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : "Unknown error";
+    req.log.warn({ errMessage }, "admin-bypass: failed to mint ticket");
+    res.status(500).json({ error: "Failed to mint bypass ticket" });
+  }
+});
+
+/**
  * POST /auth/dev-sign-in — DEV-ONLY shortcut that issues a Clerk
  * sign-in ticket for the requested email so QA can hop into the
  * dashboard without going through Clerk's email-OTP / new-device
