@@ -23,7 +23,7 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
  * provisioned. Everything else is blocked until either maintenance mode
  * is off OR the caller's server-resolved `isAdmin` flag is true.
  */
-const ALLOWED_PATH_PREFIXES = ["/sign-in", "/admin-bypass", "/terms", "/privacy"];
+const ALLOWED_PATH_PREFIXES = ["/sign-in", "/admin-bypass", "/terms", "/privacy", "/changelog"];
 
 function pathIsAllowed(path: string): boolean {
   return ALLOWED_PATH_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
@@ -84,16 +84,16 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
       ? "You're bypassing it as an admin."
       : "You're bypassing it as a staff account.";
     return (
-      <>
+      <div className="h-screen flex flex-col overflow-hidden">
         <div
-          className="sticky top-0 z-[60] w-full bg-amber-500/95 text-black text-xs font-semibold px-4 py-1.5 flex items-center justify-center gap-2 shadow"
+          className="shrink-0 z-[60] w-full bg-amber-500/95 text-black text-xs font-semibold px-4 py-1.5 flex items-center justify-center gap-2 shadow"
           data-testid="banner-maintenance-admin"
         >
           <ShieldCheck className="w-3.5 h-3.5" />
           Maintenance mode is ON — public visitors see the launch wall. {label}
         </div>
-        {children}
-      </>
+        <div className="flex-1 overflow-hidden min-h-0">{children}</div>
+      </div>
     );
   }
 

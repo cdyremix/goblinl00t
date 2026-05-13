@@ -132,7 +132,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const accountActive = location.startsWith("/account");
 
   return (
-    <div className="h-screen w-full flex overflow-hidden bg-background text-foreground selection:bg-primary/30 dark">
+    <div className="h-full w-full flex overflow-hidden bg-background text-foreground selection:bg-primary/30 dark">
       {/* Sidebar */}
       <aside className="w-64 shrink-0 border-r border-border bg-card/50 flex flex-col backdrop-blur-sm">
         {/* Brand */}
@@ -259,6 +259,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Link href="/terms" className="hover:text-foreground" data-testid="link-terms">Terms</Link>
             <span>·</span>
             <Link href="/privacy" className="hover:text-foreground" data-testid="link-privacy">Privacy</Link>
+            <span>·</span>
+            <Link href="/changelog" className="hover:text-foreground" data-testid="link-changelog">Changelog</Link>
           </div>
         </div>
       </aside>
