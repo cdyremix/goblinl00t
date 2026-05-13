@@ -227,9 +227,8 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
+        <TabsList className="grid w-full grid-cols-2 max-w-xs">
           <TabsTrigger value="general" data-testid="tab-settings-general">General</TabsTrigger>
-          <TabsTrigger value="giveaway" data-testid="tab-settings-giveaway">Giveaway</TabsTrigger>
           <TabsTrigger value="theme" data-testid="tab-settings-theme">Theme</TabsTrigger>
         </TabsList>
 
@@ -292,7 +291,7 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* Random Goblin Events lives in General — it's a chat-behavior toggle. */}
+      {/* Random Goblin Events — chat-behavior toggle. */}
       <section className="space-y-3 max-w-2xl">
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
           <div className="flex items-start justify-between gap-4">
@@ -317,14 +316,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      </TabsContent>
-
-      {/* ============================================================ */}
-      {/* GIVEAWAY TAB                                                 */}
-      {/* ============================================================ */}
-      <TabsContent value="giveaway" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
-
-      {/* Economy & Loot — Giveaway tab */}
+      {/* Economy & Loot */}
       <section className="space-y-4 max-w-2xl">
         <div className="flex items-center gap-2">
           <span className="text-lg">💰</span>
@@ -402,14 +394,6 @@ export default function SettingsPage() {
           />
         </FeatureLock>
       </section>
-
-      {/*
-        Elimination Wheel settings used to live here. They've moved to a
-        ⚙️ gear-icon popover inside the wheel modal itself (see
-        components/elimination-wheel.tsx) so the streamer can tweak Spin
-        Mode / Spin Speed / RPG Flavor Text right where they spin — no
-        more bouncing back to the Forge mid-giveaway.
-      */}
 
       </TabsContent>
 
