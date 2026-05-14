@@ -7,7 +7,7 @@ import {
   GOBLIN_GREETINGS,
 } from "./goblin-phrases";
 
-export type BotTheme = "goblin" | "cs2";
+export type BotTheme = "goblin" | "cs2" | "hearthstone";
 
 export interface ThemeMeta {
   id: BotTheme;
@@ -61,6 +61,17 @@ export const THEME_META: Record<BotTheme, ThemeMeta> = {
       "🟣 xXSniper opened a case: [CLASSIFIED] Butterfly Knife | Fade! (+800 pts) INSANE DROP! chat going crazy rn",
       "🎁 SKIN GIVEAWAY! We're dropping: AK-47 | Asiimov FN — type !enter to be in the draw!",
       "📦 xXSniper's inventory: 8 skins | 1,240 pts. Nice haul, still no knife tho PepeHands",
+    ],
+  },
+  hearthstone: {
+    id: "hearthstone",
+    name: "Hearthstone Tavern",
+    tagline: "Tavern Brawl mode — crack packs, roll legendaries, and let RNGsus decide your fate.",
+    emoji: "🍺",
+    previewLines: [
+      "🌟 LEGENDARY!! xXSniper cracked a pack: Ragnaros the Firelord! (+500 pts) THE TAVERN IS IN UPROAR!!",
+      "📣 TAVERN BRAWL! Prize: Epic Card Pack Bundle — type !enter to compete! RNGsus decides all!",
+      "📦 xXSniper's collection: 8 cards | 1,240 pts worth of dust. Keep opening packs, you'll get there.",
     ],
   },
 };
@@ -174,9 +185,86 @@ const CS2_THEME: ThemePhrases = {
   stealNoTarget: "Who are you trying to scam? Use !steal @username to attempt a trade offer.",
 };
 
+const HS_THEME: ThemePhrases = {
+  lootMiss: [
+    "💨 {user} mulliganed their whole hand and got nothing back. Classic.",
+    "🎴 {user} reached into the pack... and pulled out 40 dust. The Innkeeper weeps.",
+    "RNGsus has forsaken {user}. No loot today, mortal.",
+    "❌ {user} opened a pack: 5 commons, 3 duplicates. Disenchanted immediately.",
+    "The Innkeeper checks the hoard... nothing for {user}. Maybe next tavern brawl. 🍺",
+  ],
+  lootResponses: {
+    common: [
+      "just a basic card. The Innkeeper has seen better.",
+      "a duplicate common. Worth exactly 5 dust. Exciting.",
+      "a common you already have 4 of. The collection grows... sideways.",
+    ],
+    uncommon: [
+      "🟢 a Rare card! Now THAT'S worth inspecting. Well played!",
+      "Nice Rare pull! The Innkeeper nods approvingly. 🍺",
+      "A Rare! One Rare a day keeps the concede away.",
+    ],
+    rare: [
+      "🔵 an EPIC card! Chat's getting noisy in the Tavern!",
+      "EPIC PULL! The Innkeeper slams down a celebratory mug! 🍺",
+      "Did someone say Epic?! Because that's exactly what just happened!",
+    ],
+    epic: [
+      "🟣 A LEGENDARY!! THE TAVERN IS IN AN UPROAR!! 🎉",
+      "LEGENDARY CARD!! Call it — it's a LEGENDARY!! The crowd goes wild!!",
+      "⚡ THAT'S AMAZING! A Legendary drop in the Tavern! 🌟",
+    ],
+    legendary: [
+      "✨ GOLDEN LEGENDARY!! The Innkeeper has NEVER seen anything like this!! chat is LOSING IT!!",
+      "🌟 SIGNATURE LEGENDARY!! The pack opening gods have smiled upon this blessed soul!!",
+      "GOLDEN FOIL SHIMMER!! This is the rarest of the rare!! The whole Tavern stopped!! 🔥",
+    ],
+  },
+  enterResponses: [
+    "{user} registers their name at the Innkeeper's desk! May RNGsus bless your draw!",
+    "✅ {user} enters the Tavern Brawl! One entry per adventurer.",
+    "{user} is in the pool! The Innkeeper will draw when the time is right. 🎴",
+    "Added {user} to the guestbook! Well played for entering.",
+  ],
+  giveawayStart: [
+    "📣 TAVERN BRAWL! This week's prize: {prize} — type {keyword} to enter! The Innkeeper opens the doors!",
+    "🍺 FREE PACK OPENING! Prize: {prize} | Use {keyword} to enter! RNGsus decides all!",
+    "HEAR YE! The Innkeeper announces a special giveaway: {prize}! Type {keyword} to compete in the Brawl!",
+  ],
+  giveawayEnd: [
+    "🏆 The Innkeeper draws from the hat... {winner} wins {prize} from {count} entries! Well played!",
+    "🎉 {winner} takes home {prize}! Congratulations from the Tavern! The crowd cheers! 🍺",
+    "The dice have been rolled — {winner} is our champion! {prize} is theirs! WELL PLAYED!",
+  ],
+  stealResponses: [
+    "{target} had the Innkeeper watching their hoard. Theft attempt failed.",
+    "Your rogue action against {target} was countered. RNGsus was not on your side.",
+    "{target} used Polymorph. You are now a sheep. No coins were stolen. 🐑",
+  ],
+  goblinResponses: [
+    "🍺 Welcome to the Tavern! The Innkeeper at your service. Have you tried the brew?",
+    "Ah, a challenger approaches! The Innkeeper has seen many adventurers fall... most of them in Arena.",
+    "Well played! Now sit down, order a drink, and wait for the next Brawl. 🎴",
+    "The Innkeeper sees all. The Innkeeper knows all. The Innkeeper also definitely hasn't been rigging packs.",
+  ],
+  feedResponses: [
+    "🍖 The Innkeeper accepts this offering! Strength grows.",
+    "🍺 Mmmm, a cold brew. The Innkeeper is pleased.",
+    "🎴 Fed the Innkeeper a golden card. Delicious. Truly a 5-star meal.",
+  ],
+  giveawayNone: "No Brawl active right now! The Innkeeper is polishing mugs — ask your streamer to start one! 🍺",
+  enterAlreadyIn: (u) => `${u} you're already at the table! No duplicate entries, the Innkeeper is watching.`,
+  enterNoGiveaway: (u) => `${u} the Tavern Brawl hasn't started yet! Wait for the Innkeeper to ring the bell. 🔔`,
+  hoardEmpty: (u) => `${u} has nothing in the collection — zero cards, zero dust. Hit !loot and start your journey, adventurer!`,
+  hoardFull: (u, count, pts) =>
+    `📦 ${u}'s collection: ${count} card${count !== 1 ? "s" : ""} | ${pts} pts worth of dust. ${pts > 500 ? "That's a solid haul! 🃏" : "Keep opening packs, you'll get there."}`,
+  stealNoTarget: "Who are you trying to scam? Specify your target: !steal @username",
+};
+
 export const THEMES: Record<BotTheme, ThemePhrases> = {
   goblin: GOBLIN_THEME,
   cs2: CS2_THEME,
+  hearthstone: HS_THEME,
 };
 
 let _activeTheme: BotTheme = "goblin";

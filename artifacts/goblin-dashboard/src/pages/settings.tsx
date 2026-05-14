@@ -23,7 +23,7 @@ import { defaultBotNameFor } from "@/lib/cs2-agents";
 import { FeatureLock, useSubscriptionTier, LockedHint } from "@/hooks/use-tier";
 import { hasFeature } from "@/lib/plans";
 
-type BotTheme = "goblin" | "cs2";
+type BotTheme = "goblin" | "cs2" | "hearthstone";
 
 type RarityWeights = {
   common: number;
@@ -72,6 +72,12 @@ const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: s
     name: "CS2 Arms Deal",
     emoji: "🔫",
     description: "Counter-Strike 2 mode — drop skins, run skin giveaways, and collect Steam trade links.",
+  },
+  {
+    id: "hearthstone",
+    name: "Hearthstone Tavern",
+    emoji: "🍺",
+    description: "Tavern Brawl mode — crack packs, roll legendaries, and let RNGsus decide your fate.",
   },
 ];
 
@@ -410,17 +416,17 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2">
           <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
           <Hint
-            text="Controls the bot's language and personality in chat. Switch to CS2 mode for Counter-Strike flavored messages and skin giveaway support. Only commands relevant to the active theme will be available below."
+            text="Controls the bot's language and personality in chat. CS2 and Hearthstone themes unlock themed loot items, custom bot phrases, and matching giveaway messages. Only commands relevant to the active theme will be available below."
             side="right"
           />
         </div>
         <Select
           value={activeTheme}
           onValueChange={(v) => {
-            // CS2 theme is gated behind "all-themes" — silently ignore the
-            // selection rather than mutate so a downgraded user can't sneak
-            // it on. The locked hint next to the label tells them why.
-            if (v === "cs2" && !canAllThemes) return;
+            // Non-goblin themes are gated behind "all-themes" — silently
+            // ignore the selection rather than mutate so a downgraded user
+            // can't sneak it on. The locked hint next to the label tells them why.
+            if (v !== "goblin" && !canAllThemes) return;
             handleThemeSelect(v as BotTheme);
           }}
         >
@@ -429,7 +435,7 @@ export default function SettingsPage() {
           </SelectTrigger>
           <SelectContent>
             {THEME_OPTIONS.map((theme) => {
-              const locked = theme.id === "cs2" && !canAllThemes;
+              const locked = theme.id !== "goblin" && !canAllThemes;
               return (
                 <SelectItem
                   key={theme.id}
@@ -1314,7 +1320,9 @@ function NewCustomCommandForm({
   const [name, setName] = useState("");
   const [responseText, setResponseText] = useState("");
   const [cooldown, setCooldown] = useState(10);
-  const [theme, setTheme] = useState<CommandTheme>(defaultTheme);
+  const [theme, setTheme] = useState<CommandTheme>(
+    defaultTheme === "goblin" || defaultTheme === "cs2" ? defaultTheme : "both",
+  );
 
   const trimmedName = name.trim().toLowerCase();
   const nameOk = /^!?[a-z0-9_]{2,32}$/.test(trimmedName);

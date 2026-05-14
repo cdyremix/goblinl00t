@@ -46,7 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { getToken, isSignedIn } = useAuth();
   const [accountOpen, setAccountOpen] = useState(false);
 
-  const settingsQuery = useQuery<{ botTheme: "goblin" | "cs2" }>({
+  const settingsQuery = useQuery<{ botTheme: "goblin" | "cs2" | "hearthstone" }>({
     queryKey: ["bot-settings"],
     enabled: !!isSignedIn,
     queryFn: async () => {

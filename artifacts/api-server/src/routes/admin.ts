@@ -463,7 +463,7 @@ const PatchUserBody = z.object({
   isStaff: z.boolean().optional(),
   tierSelected: z.boolean().optional(),
   // Bot config.
-  botTheme: z.enum(["goblin", "cs2"]).optional(),
+  botTheme: z.enum(["goblin", "cs2", "hearthstone"]).optional(),
   botName: z.string().min(1).max(60).optional(),
   goblinEventsEnabled: z.boolean().optional(),
   lootDropsEnabled: z.boolean().optional(),

@@ -1064,7 +1064,7 @@ export const ManualLootDropResponse = zod.object({
  * @summary Get current user bot settings
  */
 export const GetBotSettingsResponse = zod.object({
-  botTheme: zod.enum(["goblin", "cs2"]),
+  botTheme: zod.enum(["goblin", "cs2", "hearthstone"]),
   botName: zod.string(),
   steamTradeUrl: zod.string().nullable(),
   steamId64: zod.string().nullable(),
@@ -1082,7 +1082,7 @@ export const GetBotSettingsResponse = zod.object({
  * @summary Update bot settings
  */
 export const UpdateBotSettingsBody = zod.object({
-  botTheme: zod.enum(["goblin", "cs2"]).optional(),
+  botTheme: zod.enum(["goblin", "cs2", "hearthstone"]).optional(),
   botName: zod.string().optional(),
   steamTradeUrl: zod.string().nullish(),
   steamId64: zod.string().nullish(),
@@ -1097,7 +1097,7 @@ export const UpdateBotSettingsBody = zod.object({
 });
 
 export const UpdateBotSettingsResponse = zod.object({
-  botTheme: zod.enum(["goblin", "cs2"]),
+  botTheme: zod.enum(["goblin", "cs2", "hearthstone"]),
   botName: zod.string(),
   steamTradeUrl: zod.string().nullable(),
   steamId64: zod.string().nullable(),

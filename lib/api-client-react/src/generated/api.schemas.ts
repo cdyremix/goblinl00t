@@ -271,6 +271,7 @@ export type BotSettingsBotTheme =
 export const BotSettingsBotTheme = {
   goblin: "goblin",
   cs2: "cs2",
+  hearthstone: "hearthstone",
 } as const;
 
 export type BotSettingsWheelMode =
@@ -315,6 +316,7 @@ export type UpdateBotSettingsBotTheme =
 export const UpdateBotSettingsBotTheme = {
   goblin: "goblin",
   cs2: "cs2",
+  hearthstone: "hearthstone",
 } as const;
 
 export type UpdateBotSettingsWheelMode =

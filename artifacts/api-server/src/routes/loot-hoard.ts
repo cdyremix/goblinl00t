@@ -83,7 +83,7 @@ router.post("/loot-hoard/drop", async (req, res) => {
   }
 
   // kind === "item": roll a random plain item (no buffs) honoring an optional rarity hint.
-  const theme: LootTheme = (user.botTheme === "cs2" ? "cs2" : "goblin");
+  const theme: LootTheme = (user.botTheme === "cs2" ? "cs2" : user.botTheme === "hearthstone" ? "hearthstone" : "goblin");
   const rarityHint =
     body.rarity && VALID_RARITIES.includes(body.rarity as Rarity)
       ? (body.rarity as Rarity)

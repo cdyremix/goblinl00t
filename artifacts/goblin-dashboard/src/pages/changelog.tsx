@@ -36,6 +36,11 @@ export default function Changelog() {
         <p className="text-sm text-muted-foreground mt-1">What's new in Goblin L00t</p>
       </div>
 
+      <Entry version="v1.1" date="May 2026">
+        <Item type="new">Hearthstone Tavern theme — Innkeeper bot personality, card-pack loot table (Murloc Raider → Golden Ragnaros), and Tavern Brawl giveaway phrases. Gated behind Horde Master alongside CS2.</Item>
+        <Item type="change">Alternative themes (CS2, Hearthstone) now share the same Horde Master gate — previously only CS2 was gated.</Item>
+      </Entry>
+
       <Entry version="v1.0" date="May 2026">
         <Item type="new">Scheduled Announcements — add timed bot messages that auto-post to chat on a repeating interval. Managed from the Loot Horde page.</Item>
         <Item type="new">OBS browser-source overlay — live loot ticker at <code>/overlay/:channel</code>. Copy the link from the dashboard stream banner (Horde Master).</Item>

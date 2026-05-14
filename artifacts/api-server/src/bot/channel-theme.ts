@@ -34,7 +34,8 @@ async function loadFromDb(channel: string): Promise<BotTheme> {
     .where(eq(usersTable.twitchUsername, ch))
     .limit(1);
   const t = user?.botTheme;
-  return t === "cs2" ? "cs2" : DEFAULT_THEME;
+  const VALID_THEMES: BotTheme[] = ["goblin", "cs2", "hearthstone"];
+  return (t && VALID_THEMES.includes(t as BotTheme)) ? (t as BotTheme) : DEFAULT_THEME;
 }
 
 export async function getChannelTheme(channel: string): Promise<BotTheme> {

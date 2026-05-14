@@ -1,5 +1,5 @@
 export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
-export type LootTheme = "goblin" | "cs2";
+export type LootTheme = "goblin" | "cs2" | "hearthstone";
 
 interface LootItem {
   item: string;
@@ -48,6 +48,46 @@ export const LOOT_TABLE: LootItem[] = [
   { item: "ULTIMATE SHINYYY!!!!", rarity: "legendary", points: 5000, theme: "goblin" },
   { item: "Goblin's Sacred Hoard Key", rarity: "legendary", points: 3000, theme: "goblin" },
   { item: "Chaos Gem of Doom", rarity: "legendary", points: 4000, theme: "goblin" },
+
+  // ============== HEARTHSTONE TAVERN THEME ==============
+  // Common — Basic cards / tokens / dust
+  { item: "Coin Token", rarity: "common", points: 2, theme: "hearthstone" },
+  { item: "Wisp", rarity: "common", points: 2, theme: "hearthstone" },
+  { item: "Murloc Raider", rarity: "common", points: 3, theme: "hearthstone" },
+  { item: "Stonetusk Boar", rarity: "common", points: 3, theme: "hearthstone" },
+  { item: "Arcane Dust (40)", rarity: "common", points: 4, theme: "hearthstone" },
+  { item: "Goldshire Footman", rarity: "common", points: 4, theme: "hearthstone" },
+  { item: "Basic Card Pack", rarity: "common", points: 5, theme: "hearthstone" },
+  { item: "Innkeeper's Brew", rarity: "common", points: 5, theme: "hearthstone" },
+  { item: "Whelp Token", rarity: "common", points: 6, theme: "hearthstone" },
+  { item: "Silverhand Recruit", rarity: "common", points: 7, theme: "hearthstone" },
+
+  // Uncommon — Rare cards / small packs
+  { item: "Fireball", rarity: "uncommon", points: 25, theme: "hearthstone" },
+  { item: "Polymorph", rarity: "uncommon", points: 30, theme: "hearthstone" },
+  { item: "Arcane Intellect", rarity: "uncommon", points: 30, theme: "hearthstone" },
+  { item: "Wild Pyromancer", rarity: "uncommon", points: 35, theme: "hearthstone" },
+  { item: "Rare Card Pack", rarity: "uncommon", points: 40, theme: "hearthstone" },
+  { item: "Arcane Dust (100)", rarity: "uncommon", points: 45, theme: "hearthstone" },
+  { item: "Knife Juggler", rarity: "uncommon", points: 50, theme: "hearthstone" },
+
+  // Rare — Epic cards / larger packs
+  { item: "Doomsayer", rarity: "rare", points: 100, theme: "hearthstone" },
+  { item: "Patches the Pirate", rarity: "rare", points: 100, theme: "hearthstone" },
+  { item: "Brawl", rarity: "rare", points: 120, theme: "hearthstone" },
+  { item: "Epic Card Pack", rarity: "rare", points: 150, theme: "hearthstone" },
+  { item: "Arcane Dust (400)", rarity: "rare", points: 175, theme: "hearthstone" },
+
+  // Epic — Legendary cards
+  { item: "Ragnaros the Firelord", rarity: "epic", points: 500, theme: "hearthstone" },
+  { item: "Sylvanas Windrunner", rarity: "epic", points: 600, theme: "hearthstone" },
+  { item: "Deathwing", rarity: "epic", points: 750, theme: "hearthstone" },
+  { item: "Ysera the Dreamer", rarity: "epic", points: 800, theme: "hearthstone" },
+
+  // Legendary — Golden / Signature cards
+  { item: "✨ Golden Ragnaros the Firelord", rarity: "legendary", points: 5000, theme: "hearthstone" },
+  { item: "🌟 Signature Brann Bronzebeard", rarity: "legendary", points: 4000, theme: "hearthstone" },
+  { item: "✨ Golden Ysera the Dreamer", rarity: "legendary", points: 3500, theme: "hearthstone" },
 
   // ============== CS2 ARMS DEAL THEME ==============
   // Common — Consumer / Industrial Grade

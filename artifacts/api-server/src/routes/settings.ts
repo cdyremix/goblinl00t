@@ -11,7 +11,7 @@ import { userHasFeature } from "../lib/tier-helpers";
 
 const router = Router();
 
-const VALID_THEMES: BotTheme[] = ["goblin", "cs2"];
+const VALID_THEMES: BotTheme[] = ["goblin", "cs2", "hearthstone"];
 const VALID_WHEEL_MODES = ["auto", "manual"] as const;
 const VALID_WHEEL_SPEEDS = ["slow", "medium", "fast"] as const;
 
@@ -92,14 +92,14 @@ router.put("/settings", async (req, res) => {
 
   if (body.botTheme !== undefined) {
     if (!VALID_THEMES.includes(body.botTheme as BotTheme)) {
-      res.status(400).json({ error: "Invalid theme. Must be: goblin or cs2" });
+      res.status(400).json({ error: "Invalid theme. Must be: goblin, cs2, or hearthstone" });
       return;
     }
-    // CS2 theme is gated behind "all-themes" (Horde Master+). Free-tier
-    // users can only run the default Goblin theme.
-    if (body.botTheme === "cs2" && !userHasFeature(before, "all-themes")) {
+    // Non-default themes are gated behind "all-themes" (Horde Master+).
+    // Free-tier users can only run the default Goblin theme.
+    if (body.botTheme !== "goblin" && !userHasFeature(before, "all-themes")) {
       res.status(403).json({
-        error: "The CS2 theme is a Horde Master perk. Upgrade to unlock all themes.",
+        error: "Alternative themes are a Horde Master perk. Upgrade to unlock CS2 and Hearthstone modes.",
         feature: "all-themes",
       });
       return;

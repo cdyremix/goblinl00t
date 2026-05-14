@@ -12,4 +12,5 @@ export type UpdateBotSettingsBotTheme =
 export const UpdateBotSettingsBotTheme = {
   goblin: "goblin",
   cs2: "cs2",
+  hearthstone: "hearthstone",
 } as const;

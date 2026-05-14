@@ -32,7 +32,7 @@ interface SteamInventory {
 }
 
 interface BotSettings {
-  botTheme: "goblin" | "cs2";
+  botTheme: "goblin" | "cs2" | "hearthstone";
   botName: string;
   steamTradeUrl: string | null;
   steamId64: string | null;

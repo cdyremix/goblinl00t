@@ -1594,7 +1594,7 @@ components:
       properties:
         botTheme:
           type: string
-          enum: [goblin, cs2]
+          enum: [goblin, cs2, hearthstone]
         botName:
           type: string
         steamTradeUrl:
@@ -1638,7 +1638,7 @@ components:
       properties:
         botTheme:
           type: string
-          enum: [goblin, cs2]
+          enum: [goblin, cs2, hearthstone]
         botName:
           type: string
         steamTradeUrl:
