@@ -9,7 +9,7 @@
  */
 import { useParams } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 // ── Rarity colours (shared with overlay) ───────────────────────────────────
@@ -70,6 +70,15 @@ interface MeData {
   balance: { balance: number; cap: number | null };
   inventory: InventoryItem[];
   rank: number | null;
+}
+
+interface ChatMessage {
+  username: string;
+  display: string;
+  message: string;
+  color: string | null;
+  isBot: boolean;
+  timestamp: string;
 }
 
 interface LootResult {
@@ -163,6 +172,23 @@ function InventorySlot({ item, onSell, selling }: {
   );
 }
 
+function ChatBubble({ msg, viewerName }: { msg: ChatMessage; viewerName: string | null }) {
+  const isMe = msg.username === viewerName;
+  return (
+    <div className={`flex gap-1.5 items-baseline text-sm leading-snug ${msg.isBot ? "rounded-lg px-2 py-0.5 bg-purple-950/30 -mx-1" : ""}`}>
+      <span
+        className="font-bold shrink-0 text-xs whitespace-nowrap"
+        style={{ color: msg.color ?? (msg.isBot ? "#9147ff" : "#71717a") }}
+      >
+        {msg.isBot ? "🧌 " : ""}{msg.display}:
+      </span>
+      <span className={`break-words min-w-0 flex-1 ${isMe ? "text-white font-medium" : "text-zinc-300"}`}>
+        {msg.message}
+      </span>
+    </div>
+  );
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────
 
 export function ViewerPortal() {
@@ -203,6 +229,24 @@ export function ViewerPortal() {
     void refetchStatus();
     if (isLoggedIn) void refetchMe();
   }, [refetchStatus, refetchMe, isLoggedIn]);
+
+  // ── Live chat ──
+  const { data: chatData } = useQuery<{ messages: ChatMessage[] }>({
+    queryKey: ["viewer-chat", channel],
+    queryFn: () => apiFetch(`/api/viewer/${channel}/chat`),
+    refetchInterval: 3000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+  });
+  const chatMessages = chatData?.messages ?? [];
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) return;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+    if (isNearBottom) chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages.length]);
 
   // ── Loot cooldown ──
   const lootCooldown = useCooldown(30);
@@ -321,6 +365,11 @@ export function ViewerPortal() {
     await qc.invalidateQueries({ queryKey: ["viewer-me", channel] });
   }
 
+  async function handleSwitchAccount() {
+    await fetch("/api/viewer/auth/logout", { method: "POST", credentials: "include" });
+    window.location.href = `/api/viewer/auth/init?channel=${encodeURIComponent(channel)}`;
+  }
+
   const balance = me?.balance.balance ?? 0;
   const cap = me?.balance.cap;
   const inventory = me?.inventory ?? [];
@@ -350,13 +399,20 @@ export function ViewerPortal() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {authLoading ? (
-              <div className="h-8 w-24 rounded-full bg-zinc-800 animate-pulse" />
+              <div className="h-8 w-28 rounded-full bg-zinc-800 animate-pulse" />
             ) : isLoggedIn ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-zinc-300 font-medium hidden sm:inline">@{viewerName}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-zinc-300 font-medium hidden sm:inline max-w-[120px] truncate">@{viewerName}</span>
+                <button
+                  onClick={handleSwitchAccount}
+                  className="text-xs px-2.5 py-1.5 rounded-full bg-purple-900/40 hover:bg-purple-800/50 text-purple-300 hover:text-purple-100 border border-purple-700/40 transition-colors"
+                  title="Log out and sign in with a different Twitch account"
+                >
+                  Switch Account
+                </button>
                 <button
                   onClick={handleLogout}
-                  className="text-xs px-3 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                  className="text-xs px-2.5 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
                   Log out
                 </button>
@@ -441,7 +497,7 @@ export function ViewerPortal() {
               <button
                 onClick={() => lootMutation.mutate()}
                 disabled={lootCooldown.onCooldown || lootMutation.isPending}
-                className="flex flex-col items-center gap-1.5 px-3 py-4 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary hover:border-primary/60 active:scale-95"
+                className="flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-primary/10 hover:bg-primary/20 border-primary/30 text-primary hover:border-primary/60 active:scale-95"
               >
                 <span className="text-2xl">{lootMutation.isPending ? "⏳" : "🎲"}</span>
                 {lootCooldown.onCooldown
@@ -449,13 +505,14 @@ export function ViewerPortal() {
                   : lootMutation.isPending
                     ? "Rolling…"
                     : "Roll Loot"}
+                <span className="text-[10px] text-zinc-600 font-normal">posts to chat</span>
               </button>
 
               {/* Enter Giveaway */}
               <button
                 onClick={() => enterMutation.mutate()}
                 disabled={!giveaway || !entriesOpen || enterMutation.isPending || hasEntered}
-                className="flex flex-col items-center gap-1.5 px-3 py-4 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400 hover:border-amber-500/60 active:scale-95"
+                className="flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400 hover:border-amber-500/60 active:scale-95"
               >
                 <span className="text-2xl">{hasEntered ? "✅" : !giveaway ? "🏆" : !entriesOpen ? "🔒" : "🏆"}</span>
                 {!giveaway
@@ -467,22 +524,24 @@ export function ViewerPortal() {
                       : enterMutation.isPending
                         ? "Entering…"
                         : "Enter Giveaway"}
+                <span className="text-[10px] text-zinc-600 font-normal">posts to chat</span>
               </button>
 
               {/* Redeem coins */}
               <button
                 onClick={() => redeemMutation.mutate()}
                 disabled={maxRedeemEntries < 1 || redeemMutation.isPending}
-                className="flex flex-col items-center gap-1.5 px-3 py-4 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30 text-blue-400 hover:border-blue-500/60 active:scale-95"
+                className="flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30 text-blue-400 hover:border-blue-500/60 active:scale-95"
               >
                 <span className="text-2xl">
                   {redeemAction === "loot" ? "🎲" : redeemAction === "luck" ? "🍀" : "🎟️"}
                 </span>
                 {redeemMutation.isPending ? "Redeeming…" : `Redeem ${REDEEM_COST}🪙`}
+                <span className="text-[10px] text-zinc-600 font-normal">posts to chat</span>
               </button>
 
               {/* Sell all / sell item (shows slot count) */}
-              <div className="flex flex-col items-center gap-1.5 px-3 py-4 rounded-xl text-sm border border-zinc-700/40 bg-zinc-800/30 text-zinc-400">
+              <div className="flex flex-col items-center gap-1 px-3 py-3.5 rounded-xl text-sm border border-zinc-700/40 bg-zinc-800/30 text-zinc-400">
                 <span className="text-2xl">🎒</span>
                 <span className="font-semibold">{inventory.length}/5 items</span>
                 <span className="text-xs text-zinc-500">Sell below ↓</span>
@@ -541,6 +600,38 @@ export function ViewerPortal() {
             </div>
           </section>
         )}
+
+        {/* ── Live Chat ── */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+              </span>
+              Live Chat
+            </h3>
+            <span className="text-xs text-zinc-600">synced with Twitch</span>
+          </div>
+          <div
+            ref={chatContainerRef}
+            className="h-64 overflow-y-auto rounded-2xl border border-zinc-800/50 bg-zinc-900/40 px-3 py-2.5 space-y-1.5 scroll-smooth"
+          >
+            {chatMessages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-zinc-600 text-sm text-center">
+                  No chat activity yet.<br />
+                  <span className="text-zinc-700 text-xs">Messages appear here as viewers interact.</span>
+                </p>
+              </div>
+            ) : (
+              chatMessages.map((msg, i) => (
+                <ChatBubble key={i} msg={msg} viewerName={viewerName} />
+              ))
+            )}
+            <div ref={chatEndRef} />
+          </div>
+        </section>
 
         {/* ── Active Giveaway ── */}
         <section>

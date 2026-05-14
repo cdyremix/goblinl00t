@@ -292,6 +292,32 @@ export interface BotState {
   lastMessageAt: Date | null;
 }
 
+// ── Live-chat ring buffer ────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  username: string;
+  display: string;
+  message: string;
+  color: string | null;
+  isBot: boolean;
+  timestamp: string;
+}
+
+const CHAT_RING = new Map<string, ChatMessage[]>();
+const RING_MAX = 75;
+
+export function pushChatMessage(channel: string, msg: ChatMessage): void {
+  const arr = CHAT_RING.get(channel) ?? [];
+  arr.push(msg);
+  if (arr.length > RING_MAX) arr.splice(0, arr.length - RING_MAX);
+  CHAT_RING.set(channel, arr);
+}
+
+export function getRecentChatMessages(channel: string, limit = 50): ChatMessage[] {
+  const arr = CHAT_RING.get(channel) ?? [];
+  return arr.slice(-limit);
+}
+
 const COMMAND_COOLDOWNS = new Map<string, Map<string, number>>();
 
 /**
@@ -1180,6 +1206,14 @@ export async function startBot(): Promise<void> {
       // Bail out if a newer client has since been created — this handler
       // belongs to a stale connection that survived a failed disconnect().
       if (clientGeneration !== gen) return;
+      pushChatMessage(ch.replace(/^#/, "").toLowerCase(), {
+        username: (tags.username ?? tags["display-name"] ?? "?").toLowerCase(),
+        display: tags["display-name"] ?? tags.username ?? "?",
+        message,
+        color: tags.color ?? null,
+        isBot: false,
+        timestamp: new Date().toISOString(),
+      });
       void handleMessage(ch, tags, message);
     });
 
@@ -1230,4 +1264,27 @@ export async function restartBot(): Promise<BotState> {
   }
   await startBot();
   return getBotState();
+}
+
+/**
+ * Post a message to a Twitch channel from the bot and record it in the local
+ * chat ring buffer so the viewer portal can display it immediately without
+ * waiting for the Twitch round-trip echo.
+ */
+export async function sayInChannel(channel: string, message: string): Promise<void> {
+  if (!client || !botState.connected) return;
+  const tmiChannel = channel.startsWith("#") ? channel : `#${channel}`;
+  try {
+    await client.say(tmiChannel, message);
+    pushChatMessage(channel.replace(/^#/, "").toLowerCase(), {
+      username: (botState.username ?? "goblinl00t").toLowerCase(),
+      display: botState.username ?? "GoblinL00t",
+      message,
+      color: "#9147ff",
+      isBot: true,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.error({ err: (err as Error).message, channel }, "sayInChannel failed");
+  }
 }

@@ -36,6 +36,7 @@ import {
   clampCoinAward,
   redeemEntriesForUser,
 } from "../bot/points";
+import { sayInChannel, getRecentChatMessages } from "../bot/bot-service";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -375,6 +376,13 @@ router.get("/viewer/:channel/me", async (req, res) => {
   }
 });
 
+// GET /viewer/:channel/chat — live chat ring buffer polled by viewer portal (public)
+router.get("/viewer/:channel/chat", (req, res) => {
+  const channel = req.params["channel"]!.toLowerCase();
+  const limit = Math.min(75, Math.max(10, Number(req.query["limit"] ?? 50)));
+  res.json({ messages: getRecentChatMessages(channel, limit) });
+});
+
 // ============================================================
 // Authed: actions
 // ============================================================
@@ -422,6 +430,7 @@ router.post("/viewer/:channel/loot", async (req, res) => {
           points: awarded,
         });
       }
+      void sayInChannel(channel, `🎲 @${session.username} rolled loot from the viewer portal — pouch full, converted ${loot.item} to ${awarded}🪙!`);
       res.json({ type: "coins", item: loot.item, rarity: loot.rarity, coins: awarded, flavor: loot.flavor });
       return;
     }
@@ -433,6 +442,7 @@ router.post("/viewer/:channel/loot", async (req, res) => {
       rarity: loot.rarity,
       points: 0,
     });
+    void sayInChannel(channel, `🎲 @${session.username} rolled loot from the viewer portal — ${loot.rarity} ${loot.item}! ${loot.flavor}`);
     res.json({ type: "item", item: loot.item, rarity: loot.rarity, slot: result.slot, flavor: loot.flavor });
   } catch (err) {
     logger.error({ err: (err as Error).message }, "viewer loot failed");
@@ -470,6 +480,7 @@ router.post("/viewer/:channel/enter", async (req, res) => {
       .values({ giveawayId: giveaway.id, username: session.username, tickets: 1 })
       .onConflictDoNothing();
 
+    void sayInChannel(channel, `🏆 @${session.username} entered the giveaway via viewer portal!`);
     res.json({ ok: true, giveawayTitle: giveaway.title });
   } catch (err) {
     logger.error({ err: (err as Error).message }, "viewer enter failed");
@@ -495,6 +506,7 @@ router.post("/viewer/:channel/sell", async (req, res) => {
       itemId,
     });
     if (!result.ok) { res.status(404).json({ error: "Item not found" }); return; }
+    void sayInChannel(channel, `💰 @${session.username} sold ${String(result.item?.item ?? "an item")} for ${result.coinsEarned}🪙 via viewer portal!`);
     res.json({ ok: true, item: result.item, coinsEarned: result.coinsEarned });
   } catch (err) {
     logger.error({ err: (err as Error).message }, "viewer sell failed");
@@ -543,6 +555,7 @@ router.post("/viewer/:channel/redeem", async (req, res) => {
       }
       const result = await redeemEntriesForUser({ giveawayId: giveaway.id, username: session.username, entries });
       if (!result.ok) { res.status(400).json({ error: result.message }); return; }
+      void sayInChannel(channel, `🎟️ @${session.username} redeemed ${result.ticketsAdded ?? entries} ticket${(result.ticketsAdded ?? entries) !== 1 ? "s" : ""} via viewer portal!`);
       res.json(result);
       return;
     }
@@ -567,10 +580,12 @@ router.post("/viewer/:channel/redeem", async (req, res) => {
         if (awarded > 0) {
           await db.insert(lootDropsTable).values({ username: session.username, channel, item: loot.item, rarity: loot.rarity, points: awarded });
         }
+        void sayInChannel(channel, `🎲 @${session.username} spent 200🪙 on portal loot — pouch full, converted ${loot.item} to ${awarded}🪙!`);
         res.json({ ok: true, action: "loot", type: "coins", item: loot.item, rarity: loot.rarity, coins: awarded, flavor: loot.flavor });
         return;
       }
       await db.insert(lootDropsTable).values({ username: session.username, channel, item: loot.item, rarity: loot.rarity, points: 0 });
+      void sayInChannel(channel, `🎲 @${session.username} spent 200🪙 and rolled ${loot.rarity} ${loot.item} from the portal!`);
       res.json({ ok: true, action: "loot", type: "item", item: loot.item, rarity: loot.rarity, slot: result.slot, flavor: loot.flavor });
       return;
     }
@@ -602,6 +617,7 @@ router.post("/viewer/:channel/redeem", async (req, res) => {
         res.status(400).json({ error: "Inventory full — sell an item first" });
         return;
       }
+      void sayInChannel(channel, `🍀 @${session.username} spent 300🪙 for a Lucky Charm buff via viewer portal!`);
       res.json({ ok: true, action: "luck", slot: result.slot });
       return;
     }
