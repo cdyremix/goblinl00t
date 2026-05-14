@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Settings2, Crosshair, Sword, Save, CheckCircle2,
   AlertCircle, User2, ShieldCheck, Unlink, Terminal, Plus, Trash2, Clock, ChevronDown,
-  Send, Loader2,
+  Send, Loader2, Flame,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -54,11 +54,8 @@ interface BotSettings {
   wheelMode: "auto" | "manual";
   wheelSpeed: "slow" | "medium" | "fast";
   eliminationFlavorEnabled: boolean;
-  /** Optional Discord webhook URL — see below for validation rules. */
   discordWebhookUrl: string | null;
-  /** Custom rarity weights for !loot rolls. null = server defaults. */
   lootRarityWeights: RarityWeights | null;
-  /** What !redeem does. */
   redeemAction: "entries" | "loot" | "luck";
 }
 
@@ -120,9 +117,6 @@ function useSteamConnection() {
   const { getToken } = useAuth();
   const qc = useQueryClient();
 
-  // Real Steam OpenID 2.0 sign-in. The server returns the URL we should send
-  // the user to; Steam authenticates them and posts back to our callback,
-  // which sets a cookie and redirects to /settings?connected=steam.
   const connect = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -135,8 +129,6 @@ function useSteamConnection() {
         throw new Error(err.error ?? "Failed to start Steam sign-in");
       }
       const { url } = (await res.json()) as { url: string };
-      // Break out of the Replit preview iframe — Steam's OpenID page
-      // refuses to be framed, so an in-frame redirect would silently fail.
       window.location.href = url;
       return { url };
     },
@@ -163,8 +155,7 @@ function useSteamConnection() {
 
 // ---------------------------------------------------------------------------
 // ThemeChatPreview — live-cycling fake chat window showing what each bot theme
-// looks like in practice. Renders inside the Theme tab between the selector and
-// any theme-specific settings panel.
+// looks like in practice.
 // ---------------------------------------------------------------------------
 
 type ChatLine = { who: string; whoColor: string; text: string; tint?: string };
@@ -280,25 +271,18 @@ export default function SettingsPage() {
   const isHearthstone = activeTheme === "hearthstone";
   const themeDefaultName = defaultBotNameFor(activeTheme);
 
-  // Bot name in the input. When the user hasn't typed (draft null), show the saved name.
   const savedName = settings?.botName ?? "";
   const inputValue = botNameDraft ?? savedName;
   const trimmed = inputValue.trim();
   const nameValid = trimmed.length === 0 || trimmed.length <= 32;
-
-  // Empty input means "use the active theme's default"
   const effectiveName = trimmed === "" ? themeDefaultName : trimmed;
   const nameChanged = effectiveName !== savedName;
-
   const themeChanged = pendingTheme !== null && pendingTheme !== savedTheme;
-
   const hasChanges = nameChanged || themeChanged;
   const allValid = nameValid;
 
   function handleThemeSelect(newTheme: BotTheme) {
     setPendingTheme(newTheme);
-    // If the bot name in the input is the previous theme's default, swap to the
-    // new theme's default so the user sees the change immediately.
     const currentlyDisplayed = botNameDraft ?? savedName;
     if (currentlyDisplayed === defaultBotNameFor(activeTheme)) {
       setBotNameDraft(defaultBotNameFor(newTheme));
@@ -348,6 +332,20 @@ export default function SettingsPage() {
       {/* GENERAL TAB                                                  */}
       {/* ============================================================ */}
       <TabsContent value="general" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
+
+      {/* Discord Webhook — at the top since it's a key integration */}
+      <section className="space-y-3 max-w-2xl">
+        <FeatureLock
+          feature="discord-webhooks"
+          description="Auto-post a winner embed to your Discord server every time a giveaway ends."
+        >
+          <DiscordWebhookSection
+            value={settings?.discordWebhookUrl ?? null}
+            saving={mutation.isPending}
+            onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
+          />
+        </FeatureLock>
+      </section>
 
       {/* Bot Name */}
       <section className="space-y-2 max-w-sm">
@@ -437,6 +435,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Special-Item Loot Drops */}
         <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-5 space-y-1">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
@@ -459,6 +458,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Coin Redemption */}
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 space-y-1">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
@@ -511,9 +511,9 @@ export default function SettingsPage() {
                     name="redeemAction"
                     value={opt.id}
                     checked={(settings?.redeemAction ?? "entries") === opt.id}
-                    onChange={() => !mutation.isPending && mutation.mutate({ redeemAction: opt.id })}
-                    className="mt-0.5 accent-blue-500"
+                    onChange={() => mutation.mutate({ redeemAction: opt.id })}
                     disabled={mutation.isPending}
+                    className="mt-0.5 accent-blue-500"
                   />
                   <div>
                     <div className="text-sm font-medium text-foreground">{opt.label}</div>
@@ -539,25 +539,6 @@ export default function SettingsPage() {
 
       </section>
 
-      {/* Discord Webhook */}
-      <section className="space-y-3 max-w-2xl">
-        <FeatureLock
-          feature="discord-webhooks"
-          description="Auto-post a winner embed to your Discord server every time a giveaway ends."
-        >
-          <DiscordWebhookSection
-            value={settings?.discordWebhookUrl ?? null}
-            saving={mutation.isPending}
-            onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
-          />
-        </FeatureLock>
-      </section>
-
-      {/* Scheduled Announcements */}
-      <section className="space-y-3 max-w-2xl">
-        <AnnouncementsSection />
-      </section>
-
       </TabsContent>
 
       {/* ============================================================ */}
@@ -577,9 +558,6 @@ export default function SettingsPage() {
         <Select
           value={activeTheme}
           onValueChange={(v) => {
-            // Non-goblin themes are gated behind "all-themes" — silently
-            // ignore the selection rather than mutate so a downgraded user
-            // can't sneak it on. The locked hint next to the label tells them why.
             if (v !== "goblin" && !canAllThemes) return;
             handleThemeSelect(v as BotTheme);
           }}
@@ -626,11 +604,10 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Animated chat preview — updates per theme so streamers can see what
-          their chat will look like before committing to a theme change. */}
+      {/* Animated chat preview */}
       <ThemeChatPreview theme={activeTheme} />
 
-      {/* CS2-specific settings (rendered above Chat Commands when CS2 is active) */}
+      {/* CS2-specific settings */}
       {isCS2 && (
         <section className="space-y-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
           <div className="flex items-center gap-2">
@@ -702,7 +679,7 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* How winner skin delivery works */}
+          {/* Skin delivery info */}
           <div className="rounded-lg border border-border bg-card/60 p-4 space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <Sword className="w-4 h-4 text-blue-400" />
@@ -723,21 +700,110 @@ export default function SettingsPage() {
               in the sidebar.
             </p>
           </div>
+
+          {/* CS2-specific commands preview */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-sm font-semibold text-foreground">CS2 Commands</span>
+              <Hint text="These commands are exclusive to CS2 mode. Toggle and customize them in the Chat Commands section below." side="right" />
+            </div>
+            <div className="rounded-lg border border-border bg-card/60 divide-y divide-border/60">
+              {[
+                { cmd: "!skin",     alias: "!goblin",  desc: "Show your current skin (Innkeeper-style flavor for CS2)" },
+                { cmd: "!feedgoblin", alias: "!feed",  desc: "Offer the arms dealer a weapon — themed response" },
+                { cmd: "!scam",     alias: "!steal",   desc: "Attempt a trade scam on another viewer to steal coins" },
+                { cmd: "!tradeurl", alias: null,        desc: "Save your Steam trade URL so the streamer can send you a skin" },
+              ].map(({ cmd, alias, desc }) => (
+                <div key={cmd} className="flex items-start gap-3 px-4 py-2.5">
+                  <div className="flex items-center gap-1.5 w-36 shrink-0">
+                    <code className="font-mono font-bold text-sm text-foreground">{cmd}</code>
+                    {alias && (
+                      <span className="text-[10px] text-muted-foreground font-mono">≡ {alias}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       )}
 
-      {/* Hearthstone-specific info panel */}
+      {/* Hearthstone-specific settings */}
       {isHearthstone && (
         <section className="space-y-5 rounded-xl border border-orange-500/20 bg-orange-500/5 p-5">
           <div className="flex items-center gap-2">
-            <span className="text-lg">🍺</span>
+            <Flame className="w-4 h-4 text-orange-400" />
             <h2 className="text-base font-semibold text-foreground">Hearthstone Tavern Settings</h2>
           </div>
 
-          {/* Loot table preview */}
+          {/* Tavern mode info */}
+          <div className="rounded-lg border border-border bg-card/60 p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <span>🍺</span>
+              How Tavern mode works
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              The Innkeeper takes over — all loot rolls become card pack openings, giveaways become Tavern Brawls,
+              and the bot speaks in Hearthstone flavor. Coins are "Arcane Dust", the leaderboard becomes the "Hall of Fame",
+              and every rarity lands a different Innkeeper quip. Your standard commands still work, plus two Tavern exclusives below.
+            </p>
+          </div>
+
+          {/* Tavern-specific commands */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Label className="text-sm font-semibold">Prize Table</Label>
+              <Terminal className="w-3.5 h-3.5 text-orange-400" />
+              <span className="text-sm font-semibold text-foreground">Tavern Commands</span>
+              <Hint text="Commands exclusive to Hearthstone Tavern mode. Toggle and customize responses in the Chat Commands section below." side="right" />
+            </div>
+            <div className="rounded-lg border border-border bg-card/60 divide-y divide-border/60">
+              {[
+                {
+                  cmd: "!innkeeper",
+                  alias: "!goblin",
+                  badge: "bg-orange-500/20 text-orange-400",
+                  desc: "Summon the Innkeeper for a Tavern greeting — each response is a different flavor line.",
+                  example: "Welcome to the Tavern, {user}! The Innkeeper at your service. 🍺",
+                },
+                {
+                  cmd: "!brew",
+                  alias: "!feed",
+                  badge: "bg-amber-500/20 text-amber-400",
+                  desc: "Offer the Innkeeper a round of drinks — a little generosity goes a long way in the Tavern.",
+                  example: "{user} bought the Innkeeper a round. The tavern erupts in applause! 🍖",
+                },
+                {
+                  cmd: "!case",
+                  alias: "!feedgoblin",
+                  badge: "bg-yellow-500/20 text-yellow-400",
+                  desc: "Slide a card pack across the bar — a Hearthstone-flavored version of the feed command.",
+                  example: "{user} slid a card pack across the bar. RNGsus smiles upon them.",
+                },
+              ].map(({ cmd, alias, badge, desc, example }) => (
+                <div key={cmd} className="px-4 py-3 space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <code className="font-mono font-bold text-sm text-foreground">{cmd}</code>
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${badge}`}>Hearthstone</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">alias of {alias}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+                  <p className="text-[11px] text-muted-foreground/60 font-mono italic leading-relaxed">
+                    e.g. "{example}"
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground pl-1">
+              Toggle and customize responses for these commands in the Chat Commands section below.
+            </p>
+          </div>
+
+          {/* Prize / card pack table */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-semibold">Card Pack Table</Label>
               <Hint
                 text="When viewers type !loot the bot rolls against this table. Rarity odds are the same as every theme — only the prizes change."
                 side="right"
@@ -745,14 +811,14 @@ export default function SettingsPage() {
             </div>
             <div className="rounded-lg border border-border bg-card/60 divide-y divide-border/60 text-xs">
               {[
-                { rarity: "Common", badge: "bg-border/60 text-muted-foreground", prizes: "Coin Token · Wisp · Murloc Raider · Arcane Dust (40) · Basic Card Pack", chance: "50%" },
-                { rarity: "Uncommon", badge: "bg-green-500/20 text-green-400", prizes: "Fireball · Polymorph · Arcane Intellect · Rare Card Pack · Arcane Dust (100)", chance: "30%" },
-                { rarity: "Rare", badge: "bg-blue-500/20 text-blue-400", prizes: "Doomsayer · Patches the Pirate · Brawl · Epic Card Pack · Arcane Dust (400)", chance: "15%" },
-                { rarity: "Epic", badge: "bg-purple-500/20 text-purple-400", prizes: "Ragnaros the Firelord · Sylvanas Windrunner · Deathwing · Ysera the Dreamer", chance: "4%" },
-                { rarity: "Legendary", badge: "bg-amber-500/20 text-amber-400", prizes: "✨ Golden Ragnaros · 🌟 Signature Brann Bronzebeard · ✨ Golden Ysera", chance: "1%" },
+                { rarity: "Common",    badge: "bg-border/60 text-muted-foreground",   prizes: "Coin Token · Wisp · Murloc Raider · Arcane Dust (40) · Basic Card Pack",                            chance: "50%" },
+                { rarity: "Uncommon",  badge: "bg-green-500/20 text-green-400",       prizes: "Fireball · Polymorph · Arcane Intellect · Rare Card Pack · Arcane Dust (100)",                   chance: "30%" },
+                { rarity: "Rare",      badge: "bg-blue-500/20 text-blue-400",         prizes: "Doomsayer · Patches the Pirate · Brawl · Epic Card Pack · Arcane Dust (400)",                    chance: "15%" },
+                { rarity: "Epic",      badge: "bg-purple-500/20 text-purple-400",     prizes: "Ragnaros the Firelord · Sylvanas Windrunner · Deathwing · Ysera the Dreamer",                    chance: "4%"  },
+                { rarity: "Legendary", badge: "bg-amber-500/20 text-amber-400",       prizes: "✨ Golden Ragnaros · 🌟 Signature Brann Bronzebeard · ✨ Golden Ysera",                           chance: "1%"  },
               ].map(({ rarity, badge, prizes, chance }) => (
                 <div key={rarity} className="flex items-start gap-3 px-4 py-2.5">
-                  <div className="flex items-center gap-2 w-28 shrink-0">
+                  <div className="flex items-center gap-2 w-32 shrink-0">
                     <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${badge}`}>{rarity}</span>
                     <span className="text-[10px] text-muted-foreground font-mono">{chance}</span>
                   </div>
@@ -760,22 +826,6 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Theme-specific commands */}
-          <div className="rounded-lg border border-border bg-card/60 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <Terminal className="w-4 h-4 text-orange-400" />
-              Tavern Brawl commands
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Hearthstone mode adds two Innkeeper-flavored commands on top of all the standard ones.{" "}
-              <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!innkeeper</span>{" "}
-              summons the Innkeeper for a Tavern taunt (alias of <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!goblin</span>).{" "}
-              <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!brew</span>{" "}
-              offers a refreshment (alias of <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!feed</span>).
-              Toggle and customize both in the Chat Commands section below.
-            </p>
           </div>
         </section>
       )}
@@ -790,7 +840,7 @@ export default function SettingsPage() {
 }
 
 // =====================================================================
-// Coin cap subsection — local draft so the user can type freely before saving
+// Coin cap subsection
 // =====================================================================
 
 const RARITY_CONFIG: {
@@ -973,212 +1023,8 @@ function CoinCapSection({
   );
 }
 
-// =====================================================================
-// AnnouncementsSection
-// =====================================================================
-
-interface Announcement {
-  id: number;
-  message: string;
-  intervalMinutes: number;
-  enabled: boolean;
-  lastPostedAt: string | null;
-}
-
-function useAnnouncements() {
-  const { getToken } = useAuth();
-  const qc = useQueryClient();
-
-  const query = useQuery<Announcement[]>({
-    queryKey: ["announcements"],
-    queryFn: async () => {
-      const token = await getToken();
-      const res = await fetch("/api/announcements", { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error("Failed to load announcements");
-      return res.json();
-    },
-  });
-
-  const create = useMutation<Announcement, Error, { message: string; intervalMinutes: number }>({
-    mutationFn: async (body) => {
-      const token = await getToken();
-      const res = await fetch("/api/announcements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed to create"); }
-      return res.json();
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
-  });
-
-  const patch = useMutation<Announcement, Error, { id: number; patch: Partial<Announcement> }>({
-    mutationFn: async ({ id, patch: body }) => {
-      const token = await getToken();
-      const res = await fetch(`/api/announcements/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed to update"); }
-      return res.json();
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
-  });
-
-  const remove = useMutation<void, Error, number>({
-    mutationFn: async (id) => {
-      const token = await getToken();
-      const res = await fetch(`/api/announcements/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to delete");
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
-  });
-
-  return { query, create, patch, remove };
-}
-
-const INTERVAL_OPTIONS = [
-  { value: 10,  label: "10 min" },
-  { value: 15,  label: "15 min" },
-  { value: 20,  label: "20 min" },
-  { value: 30,  label: "30 min" },
-  { value: 45,  label: "45 min" },
-  { value: 60,  label: "1 hour" },
-  { value: 90,  label: "1.5 hours" },
-  { value: 120, label: "2 hours" },
-];
-
-function AnnouncementsSection() {
-  const { query, create, patch, remove } = useAnnouncements();
-  const [showForm, setShowForm] = useState(false);
-  const [msgDraft, setMsgDraft] = useState("");
-  const [intervalDraft, setIntervalDraft] = useState(30);
-
-  const rows = query.data ?? [];
-  const msgValid = msgDraft.trim().length > 0 && msgDraft.trim().length <= 500;
-
-  async function handleCreate() {
-    if (!msgValid) return;
-    await create.mutateAsync({ message: msgDraft.trim(), intervalMinutes: intervalDraft });
-    setMsgDraft("");
-    setIntervalDraft(30);
-    setShowForm(false);
-  }
-
-  return (
-    <div className="space-y-3">
-      {query.isLoading ? (
-        <div className="rounded-xl border border-border bg-card/40 p-6 text-sm text-muted-foreground animate-pulse">
-          Loading announcements…
-        </div>
-      ) : rows.length === 0 && !showForm ? (
-        <div className="rounded-xl border border-dashed border-border bg-card/30 px-5 py-8 text-center space-y-2">
-          <p className="text-sm text-muted-foreground">No scheduled announcements yet.</p>
-          <p className="text-xs text-muted-foreground/70">Add one and the bot will post it to your Twitch chat on a loop.</p>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
-          {rows.map((row) => (
-            <div key={row.id} className={`flex items-start gap-3 px-4 py-3 ${row.enabled ? "" : "opacity-60"}`}>
-              <Switch
-                checked={row.enabled}
-                onCheckedChange={(v) => patch.mutate({ id: row.id, patch: { enabled: v } })}
-                disabled={patch.isPending}
-                aria-label="Toggle announcement"
-                className="mt-0.5 shrink-0"
-              />
-              <div className="flex-1 min-w-0 space-y-0.5">
-                <p className="text-xs text-foreground leading-relaxed break-words">{row.message}</p>
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  <span>Every {INTERVAL_OPTIONS.find(o => o.value === row.intervalMinutes)?.label ?? `${row.intervalMinutes} min`}</span>
-                  {row.lastPostedAt && (
-                    <>
-                      <span className="opacity-40">·</span>
-                      <span>Last posted {new Date(row.lastPostedAt).toLocaleTimeString()}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={() => remove.mutate(row.id)}
-                disabled={remove.isPending}
-                aria-label="Delete announcement"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showForm ? (
-        <div className="rounded-xl border border-border bg-card/40 p-4 space-y-3">
-          <Textarea
-            value={msgDraft}
-            onChange={(e) => setMsgDraft(e.target.value)}
-            placeholder="e.g. Type !loot in chat to roll for a random item! 🎲"
-            rows={2}
-            maxLength={500}
-            className="text-sm resize-none"
-            autoFocus
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            <Select value={String(intervalDraft)} onValueChange={(v) => setIntervalDraft(Number(v))}>
-              <SelectTrigger className="w-32 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INTERVAL_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={String(o.value)} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground">repeat interval</span>
-            <div className="flex gap-2 ml-auto">
-              <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setMsgDraft(""); }}>
-                Cancel
-              </Button>
-              <Button size="sm" disabled={!msgValid || create.isPending} onClick={() => void handleCreate()}>
-                {create.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Plus className="w-3.5 h-3.5 mr-1.5" />
-                )}
-                Add
-              </Button>
-            </div>
-          </div>
-          {create.isError && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {create.error?.message}
-            </p>
-          )}
-        </div>
-      ) : (
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowForm(true)}>
-          <Plus className="w-3.5 h-3.5" /> New announcement
-        </Button>
-      )}
-    </div>
-  );
-}
-
 /**
- * Discord webhook URL — fires an end-of-giveaway embed if set. We validate
- * the shape client-side (the server applies the same regex) so the streamer
- * gets immediate feedback if they paste a non-webhook URL. Empty string
- * clears the value on the server.
+ * Discord webhook URL — fires an end-of-giveaway embed if set.
  */
 function DiscordWebhookSection({
   value,
@@ -1237,7 +1083,7 @@ function DiscordWebhookSection({
         />
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">
-        When a giveaway ends, the goblin posts a winner announcement to this Discord channel. Server Settings → Integrations → Webhooks → New Webhook → Copy URL.
+        When a giveaway ends, the bot posts a winner announcement to this Discord channel. Server Settings → Integrations → Webhooks → New Webhook → Copy URL.
       </p>
       <div className="flex flex-wrap gap-2 items-start">
         <Input
@@ -1582,10 +1428,6 @@ function BuiltInCommandRow({
   const [draft, setDraft] = useState(cmd.customResponse ?? "");
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // Custom command-response editor is a Premium feature. Free users see
-  // the row + the toggle, but the "Customize reply" button swaps to a
-  // LockedHint linking to the Rank tab. Server enforces the same gate
-  // in `routes/commands.ts`, so curl-only bypass is also blocked.
   const { hasFeature: hasFeat } = useSubscriptionTier();
   const canCustomResponses = hasFeat("custom-responses");
 
