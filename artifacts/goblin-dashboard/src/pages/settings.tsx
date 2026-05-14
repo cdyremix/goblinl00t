@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -159,6 +159,108 @@ function useSteamConnection() {
   return { connect, disconnect };
 }
 
+// ---------------------------------------------------------------------------
+// ThemeChatPreview — live-cycling fake chat window showing what each bot theme
+// looks like in practice. Renders inside the Theme tab between the selector and
+// any theme-specific settings panel.
+// ---------------------------------------------------------------------------
+
+type ChatLine = { who: string; whoColor: string; text: string; tint?: string };
+
+const THEME_REELS: Record<BotTheme, ChatLine[]> = {
+  goblin: [
+    { who: "loot_pirate",  whoColor: "text-blue-400",   text: "!loot" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🟣 EPIC!! @loot_pirate found a Dragon Scale! (+175 pts) SCREEEEE!!", tint: "text-purple-400" },
+    { who: "neon_cat",     whoColor: "text-pink-400",   text: "!enter" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "✅ @neon_cat is in the pool! 23 entries so far." },
+    { who: "vapor_witch",  whoColor: "text-purple-400", text: "!steal neon_cat" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🦝 vapor_witch mugged neon_cat for 60 coins. Chaos prevails." },
+    { who: "speedrun_sam", whoColor: "text-green-400",  text: "!goblin" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "HEHEHE! The goblin sees speedrun_sam watching... better grab more loot! 🪙" },
+    { who: "pixel_knight", whoColor: "text-orange-400", text: "!inventory" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🎒 @pixel_knight: [1] Dragon Scale [2] Lucky Charm [3] empty" },
+    { who: "chaos_reaper", whoColor: "text-red-400",    text: "!loot" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "✨ GOLDEN LEGENDARY!! @chaos_reaper cracked open a Cursed Idol! (+2500 pts) 🪙", tint: "text-yellow-300" },
+  ],
+  cs2: [
+    { who: "loot_pirate",  whoColor: "text-blue-400",   text: "!loot" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🟣 CLASSIFIED!! @loot_pirate unboxed AWP | Hyper Beast (FT) (+800 pts) chat is NOT okay", tint: "text-purple-400" },
+    { who: "neon_cat",     whoColor: "text-pink-400",   text: "!enter" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "neon_cat threw their name in the pool. Float factory will decide fate." },
+    { who: "vapor_witch",  whoColor: "text-purple-400", text: "!scam loot_pirate" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "vapor_witch attempted a trade scam on loot_pirate and lost 20 coins. Bruh." },
+    { who: "speedrun_sam", whoColor: "text-green-400",  text: "!skin" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🔫 speedrun_sam inspected the case... it's a StatTrak M4A4 | Howl. Insane." },
+    { who: "pixel_knight", whoColor: "text-orange-400", text: "!tradeurl https://steamcommunity.com/tradeoffer/..." },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "✅ @pixel_knight: Trade URL saved! The streamer will send your skin soon 🎁" },
+    { who: "chaos_reaper", whoColor: "text-red-400",    text: "!loot" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "⭐ COVERT UNBOX! @chaos_reaper pulled Karambit | Fade (FN) (+5000 pts) KNIFEEEEE 🔪", tint: "text-yellow-300" },
+  ],
+  hearthstone: [
+    { who: "loot_pirate",  whoColor: "text-blue-400",   text: "!loot" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🟣 EPIC!! @loot_pirate cracked a pack: Sylvanas Windrunner! (+600 pts) RNGsus is pleased!", tint: "text-purple-400" },
+    { who: "neon_cat",     whoColor: "text-pink-400",   text: "!enter" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "✅ @neon_cat entered the Tavern Brawl! 18 challengers so far." },
+    { who: "vapor_witch",  whoColor: "text-purple-400", text: "!innkeeper" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🍺 Welcome to the Tavern, vapor_witch! Pull up a chair — your pack is on the house." },
+    { who: "speedrun_sam", whoColor: "text-green-400",  text: "!brew" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "🍖 speedrun_sam bought the Innkeeper a round. The tavern erupts in applause!" },
+    { who: "pixel_knight", whoColor: "text-orange-400", text: "!loot" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "👀 @pixel_knight searched but found nothing. The Innkeeper shrugs." },
+    { who: "chaos_reaper", whoColor: "text-red-400",    text: "!loot" },
+    { who: "Goblin L00t",  whoColor: "text-primary",    text: "✨ GOLDEN LEGENDARY!! @chaos_reaper pulled Golden Ragnaros the Firelord! (+5000 pts) THE TAVERN IS IN UPROAR!! 🔥", tint: "text-yellow-300" },
+  ],
+};
+
+function ThemeChatPreview({ theme }: { theme: BotTheme }) {
+  const reel = THEME_REELS[theme];
+  const [head, setHead] = useState(0);
+  useEffect(() => {
+    setHead(0);
+  }, [theme]);
+  useEffect(() => {
+    const id = setInterval(() => setHead((i) => (i + 1) % reel.length), 1700);
+    return () => clearInterval(id);
+  }, [reel]);
+
+  const lines = Array.from({ length: 5 }, (_, k) => {
+    const idx = (head + k) % reel.length;
+    return { ...reel[idx], _key: `${theme}-${head}-${k}` };
+  });
+
+  const themeAccent =
+    theme === "cs2" ? "border-blue-500/30 bg-blue-500/5" :
+    theme === "hearthstone" ? "border-orange-500/30 bg-orange-500/5" :
+    "border-primary/20 bg-primary/5";
+
+  const themeBar =
+    theme === "cs2" ? "bg-blue-500" :
+    theme === "hearthstone" ? "bg-orange-500" :
+    "bg-primary";
+
+  const themeLabel =
+    theme === "cs2" ? "CS2 Arms Deal" :
+    theme === "hearthstone" ? "Hearthstone Tavern" :
+    "Goblin Horde";
+
+  return (
+    <div className={`rounded-xl border ${themeAccent} overflow-hidden`}>
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-card/60">
+        <div className={`w-2 h-2 rounded-full ${themeBar} animate-pulse`} />
+        <span className="text-xs font-mono text-muted-foreground">twitch.tv/yourchannel · #{themeLabel.toLowerCase().replace(/ /g, "-")}</span>
+      </div>
+      <div className="px-4 py-3 space-y-1 font-mono text-xs min-h-[120px]">
+        {lines.map((line) => (
+          <div key={line._key} className="flex gap-2 leading-relaxed">
+            <span className={`shrink-0 font-semibold ${line.whoColor}`}>{line.who}:</span>
+            <span className={line.tint ?? "text-foreground/80"}>{line.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { query, mutation } = useSettings();
   const { connect, disconnect } = useSteamConnection();
@@ -173,6 +275,7 @@ export default function SettingsPage() {
   const savedTheme: BotTheme = settings?.botTheme ?? "goblin";
   const activeTheme: BotTheme = pendingTheme ?? savedTheme;
   const isCS2 = activeTheme === "cs2";
+  const isHearthstone = activeTheme === "hearthstone";
   const themeDefaultName = defaultBotNameFor(activeTheme);
 
   // Bot name in the input. When the user hasn't typed (draft null), show the saved name.
@@ -404,6 +507,19 @@ export default function SettingsPage() {
 
       </section>
 
+      {/* Scheduled Announcements */}
+      <section className="space-y-4 max-w-2xl">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">📢</span>
+          <h2 className="text-lg font-semibold text-foreground">Scheduled Announcements</h2>
+          <Hint
+            text="The bot automatically posts these messages to your Twitch chat at the interval you set. Useful for reminding viewers about !loot, !enter, or your social links."
+            side="right"
+          />
+        </div>
+        <AnnouncementsSection />
+      </section>
+
       </TabsContent>
 
       {/* ============================================================ */}
@@ -471,6 +587,10 @@ export default function SettingsPage() {
           </Button>
         </div>
       </section>
+
+      {/* Animated chat preview — updates per theme so streamers can see what
+          their chat will look like before committing to a theme change. */}
+      <ThemeChatPreview theme={activeTheme} />
 
       {/* CS2-specific settings (rendered above Chat Commands when CS2 is active) */}
       {isCS2 && (
@@ -568,7 +688,61 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* Commands (collapsible, rendered after CS2 settings) */}
+      {/* Hearthstone-specific info panel */}
+      {isHearthstone && (
+        <section className="space-y-5 rounded-xl border border-orange-500/20 bg-orange-500/5 p-5">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🍺</span>
+            <h2 className="text-base font-semibold text-foreground">Hearthstone Tavern Settings</h2>
+          </div>
+
+          {/* Loot table preview */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-semibold">Prize Table</Label>
+              <Hint
+                text="When viewers type !loot the bot rolls against this table. Rarity odds are the same as every theme — only the prizes change."
+                side="right"
+              />
+            </div>
+            <div className="rounded-lg border border-border bg-card/60 divide-y divide-border/60 text-xs">
+              {[
+                { rarity: "Common", badge: "bg-border/60 text-muted-foreground", prizes: "Coin Token · Wisp · Murloc Raider · Arcane Dust (40) · Basic Card Pack", chance: "50%" },
+                { rarity: "Uncommon", badge: "bg-green-500/20 text-green-400", prizes: "Fireball · Polymorph · Arcane Intellect · Rare Card Pack · Arcane Dust (100)", chance: "30%" },
+                { rarity: "Rare", badge: "bg-blue-500/20 text-blue-400", prizes: "Doomsayer · Patches the Pirate · Brawl · Epic Card Pack · Arcane Dust (400)", chance: "15%" },
+                { rarity: "Epic", badge: "bg-purple-500/20 text-purple-400", prizes: "Ragnaros the Firelord · Sylvanas Windrunner · Deathwing · Ysera the Dreamer", chance: "4%" },
+                { rarity: "Legendary", badge: "bg-amber-500/20 text-amber-400", prizes: "✨ Golden Ragnaros · 🌟 Signature Brann Bronzebeard · ✨ Golden Ysera", chance: "1%" },
+              ].map(({ rarity, badge, prizes, chance }) => (
+                <div key={rarity} className="flex items-start gap-3 px-4 py-2.5">
+                  <div className="flex items-center gap-2 w-28 shrink-0">
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${badge}`}>{rarity}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">{chance}</span>
+                  </div>
+                  <p className="text-muted-foreground leading-relaxed">{prizes}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Theme-specific commands */}
+          <div className="rounded-lg border border-border bg-card/60 p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Terminal className="w-4 h-4 text-orange-400" />
+              Tavern Brawl commands
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Hearthstone mode adds two Innkeeper-flavored commands on top of all the standard ones.{" "}
+              <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!innkeeper</span>{" "}
+              summons the Innkeeper for a Tavern taunt (alias of <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!goblin</span>).{" "}
+              <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!brew</span>{" "}
+              offers a refreshment (alias of <span className="font-mono text-foreground/70 bg-muted px-1 rounded">!feed</span>).
+              Toggle and customize both in the Chat Commands section below.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* Commands (collapsible, rendered after theme settings) */}
       <CommandsSection activeTheme={activeTheme} />
 
       </TabsContent>
@@ -761,6 +935,207 @@ function CoinCapSection({
   );
 }
 
+// =====================================================================
+// AnnouncementsSection
+// =====================================================================
+
+interface Announcement {
+  id: number;
+  message: string;
+  intervalMinutes: number;
+  enabled: boolean;
+  lastPostedAt: string | null;
+}
+
+function useAnnouncements() {
+  const { getToken } = useAuth();
+  const qc = useQueryClient();
+
+  const query = useQuery<Announcement[]>({
+    queryKey: ["announcements"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/announcements", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Failed to load announcements");
+      return res.json();
+    },
+  });
+
+  const create = useMutation<Announcement, Error, { message: string; intervalMinutes: number }>({
+    mutationFn: async (body) => {
+      const token = await getToken();
+      const res = await fetch("/api/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed to create"); }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+  });
+
+  const patch = useMutation<Announcement, Error, { id: number; patch: Partial<Announcement> }>({
+    mutationFn: async ({ id, patch: body }) => {
+      const token = await getToken();
+      const res = await fetch(`/api/announcements/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed to update"); }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+  });
+
+  const remove = useMutation<void, Error, number>({
+    mutationFn: async (id) => {
+      const token = await getToken();
+      const res = await fetch(`/api/announcements/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+  });
+
+  return { query, create, patch, remove };
+}
+
+const INTERVAL_OPTIONS = [
+  { value: 10,  label: "10 min" },
+  { value: 15,  label: "15 min" },
+  { value: 20,  label: "20 min" },
+  { value: 30,  label: "30 min" },
+  { value: 45,  label: "45 min" },
+  { value: 60,  label: "1 hour" },
+  { value: 90,  label: "1.5 hours" },
+  { value: 120, label: "2 hours" },
+];
+
+function AnnouncementsSection() {
+  const { query, create, patch, remove } = useAnnouncements();
+  const [showForm, setShowForm] = useState(false);
+  const [msgDraft, setMsgDraft] = useState("");
+  const [intervalDraft, setIntervalDraft] = useState(30);
+
+  const rows = query.data ?? [];
+  const msgValid = msgDraft.trim().length > 0 && msgDraft.trim().length <= 500;
+
+  async function handleCreate() {
+    if (!msgValid) return;
+    await create.mutateAsync({ message: msgDraft.trim(), intervalMinutes: intervalDraft });
+    setMsgDraft("");
+    setIntervalDraft(30);
+    setShowForm(false);
+  }
+
+  return (
+    <div className="space-y-3">
+      {query.isLoading ? (
+        <div className="rounded-xl border border-border bg-card/40 p-6 text-sm text-muted-foreground animate-pulse">
+          Loading announcements…
+        </div>
+      ) : rows.length === 0 && !showForm ? (
+        <div className="rounded-xl border border-dashed border-border bg-card/30 px-5 py-8 text-center space-y-2">
+          <p className="text-sm text-muted-foreground">No scheduled announcements yet.</p>
+          <p className="text-xs text-muted-foreground/70">Add one and the bot will post it to your Twitch chat on a loop.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
+          {rows.map((row) => (
+            <div key={row.id} className={`flex items-start gap-3 px-4 py-3 ${row.enabled ? "" : "opacity-60"}`}>
+              <Switch
+                checked={row.enabled}
+                onCheckedChange={(v) => patch.mutate({ id: row.id, patch: { enabled: v } })}
+                disabled={patch.isPending}
+                aria-label="Toggle announcement"
+                className="mt-0.5 shrink-0"
+              />
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <p className="text-xs text-foreground leading-relaxed break-words">{row.message}</p>
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  <span>Every {INTERVAL_OPTIONS.find(o => o.value === row.intervalMinutes)?.label ?? `${row.intervalMinutes} min`}</span>
+                  {row.lastPostedAt && (
+                    <>
+                      <span className="opacity-40">·</span>
+                      <span>Last posted {new Date(row.lastPostedAt).toLocaleTimeString()}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => remove.mutate(row.id)}
+                disabled={remove.isPending}
+                aria-label="Delete announcement"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm ? (
+        <div className="rounded-xl border border-border bg-card/40 p-4 space-y-3">
+          <Textarea
+            value={msgDraft}
+            onChange={(e) => setMsgDraft(e.target.value)}
+            placeholder="e.g. Type !loot in chat to roll for a random item! 🎲"
+            rows={2}
+            maxLength={500}
+            className="text-sm resize-none"
+            autoFocus
+          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <Select value={String(intervalDraft)} onValueChange={(v) => setIntervalDraft(Number(v))}>
+              <SelectTrigger className="w-32 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INTERVAL_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={String(o.value)} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">repeat interval</span>
+            <div className="flex gap-2 ml-auto">
+              <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setMsgDraft(""); }}>
+                Cancel
+              </Button>
+              <Button size="sm" disabled={!msgValid || create.isPending} onClick={() => void handleCreate()}>
+                {create.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Add
+              </Button>
+            </div>
+          </div>
+          {create.isError && (
+            <p className="text-xs text-destructive flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {create.error?.message}
+            </p>
+          )}
+        </div>
+      ) : (
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowForm(true)}>
+          <Plus className="w-3.5 h-3.5" /> New announcement
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /**
  * Discord webhook URL — fires an end-of-giveaway embed if set. We validate
  * the shape client-side (the server applies the same regex) so the streamer
@@ -869,7 +1244,7 @@ function DiscordWebhookSection({
 // Commands section (built-in toggles + custom command CRUD)
 // =====================================================================
 
-type CommandTheme = "goblin" | "cs2" | "both";
+type CommandTheme = "goblin" | "cs2" | "hearthstone" | "both";
 
 interface BotCommand {
   id?: number;
@@ -981,7 +1356,10 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
   const customs = visible.filter((c) => c.isCustom);
   const totalCount = visible.length;
   const enabledCount = visible.filter((c) => c.enabled).length;
-  const themeLabel = activeTheme === "cs2" ? "CS2 Arms Deal" : "Goblin Horde";
+  const themeLabel =
+    activeTheme === "cs2" ? "CS2 Arms Deal" :
+    activeTheme === "hearthstone" ? "Hearthstone Tavern" :
+    "Goblin Horde";
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} asChild>
@@ -1012,7 +1390,7 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
 
         <CollapsibleContent className="space-y-3 data-[state=closed]:hidden">
       <p className="text-xs text-muted-foreground">
-        Showing commands available in <span className="text-foreground font-medium">{themeLabel}</span> mode. General commands work in every theme.
+        Showing commands for <span className="text-foreground font-medium">{themeLabel}</span> mode. General commands work in every theme.
       </p>
 
       {query.isLoading ? (
@@ -1049,7 +1427,9 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
           <div className="space-y-2 pt-2">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-foreground">{themeLabel} Commands</h3>
-              <span className="text-[10px] uppercase tracking-wide text-primary/70 font-semibold">{activeTheme === "cs2" ? "CS2" : "Goblin"}</span>
+              <span className="text-[10px] uppercase tracking-wide text-primary/70 font-semibold">
+                {activeTheme === "cs2" ? "CS2" : activeTheme === "hearthstone" ? "Hearthstone" : "Goblin"}
+              </span>
               <Hint text={`Theme-specific flavor commands. These only appear and respond while the ${themeLabel} theme is active.`} side="right" />
             </div>
             <div className="rounded-xl border border-border bg-card/40 divide-y divide-border/60">
@@ -1112,7 +1492,7 @@ function CommandsSection({ activeTheme }: { activeTheme: BotTheme }) {
                     </span>
                     {cmd.theme !== "both" && (
                       <span className="text-[10px] uppercase tracking-wide text-primary/70 font-semibold">
-                        {cmd.theme === "cs2" ? "CS2" : "Goblin"}
+                        {cmd.theme === "cs2" ? "CS2" : cmd.theme === "hearthstone" ? "Hearthstone" : "Goblin"}
                       </span>
                     )}
                   </div>

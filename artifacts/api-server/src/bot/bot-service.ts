@@ -25,7 +25,7 @@ import { startGoblinEvents, setGoblinEventSink, trackChatter } from "./goblin-ev
 import { getCustomResponseFor, renderTemplate } from "./command-responses";
 import { getToggleFor, getAllToggles } from "./command-toggles";
 
-export type CommandTheme = "goblin" | "cs2" | "both";
+export type CommandTheme = "goblin" | "cs2" | "hearthstone" | "both";
 
 interface BuiltInCommand {
   description: string;
@@ -137,9 +137,12 @@ const BUILT_IN_COMMANDS: Record<string, BuiltInCommand> = {
     defaultResponse: "🍖 {user} fed the goblin! YUM!",
   },
   // CS2 flavor aliases — share toggle/cooldown with their goblin canonical.
-  "!skin":      { description: "Alias of !goblin (CS2 theme)", cooldownSeconds: 10, theme: "cs2", aliasOf: "!goblin" },
-  "!scam":      { description: "Alias of !steal (CS2 theme)",  cooldownSeconds: 20, theme: "cs2", aliasOf: "!steal"  },
-  "!case":      { description: "Alias of !feed (CS2 theme)",   cooldownSeconds: 10, theme: "cs2", aliasOf: "!feed"   },
+  "!skin":        { description: "Alias of !goblin (CS2 theme)",         cooldownSeconds: 10, theme: "cs2",         aliasOf: "!goblin" },
+  "!scam":        { description: "Alias of !steal (CS2 theme)",          cooldownSeconds: 20, theme: "cs2",         aliasOf: "!steal"  },
+  "!case":        { description: "Alias of !feed (CS2 theme)",           cooldownSeconds: 10, theme: "cs2",         aliasOf: "!feed"   },
+  // Hearthstone flavor aliases — same pattern, point back to goblin canonicals.
+  "!innkeeper":   { description: "Summon the Innkeeper (Hearthstone)",   cooldownSeconds: 10, theme: "hearthstone", aliasOf: "!goblin" },
+  "!brew":        { description: "Offer the Innkeeper a brew (Hearthstone)", cooldownSeconds: 10, theme: "hearthstone", aliasOf: "!feed" },
   "!tradeurl":  {
     description: "Submit your Steam trade URL after winning a skin",
     cooldownSeconds: 10, theme: "cs2",
@@ -172,6 +175,8 @@ const HELP_DESCRIPTIONS: Record<string, string> = {
   "!steal":     "steal coins @user",
   "!goblin":    "summon the goblin",
   "!skin":      "summon the bot",
+  "!innkeeper": "summon the Innkeeper",
+  "!brew":      "offer a brew",
   "!feed":      "feed the goblin",
   "!case":      "open a case",
   "!tradeurl":  "submit trade URL",

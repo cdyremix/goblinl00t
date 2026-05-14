@@ -10,7 +10,7 @@ import { PLANS, DISPLAYED_FEATURES, hasFeature } from "@/lib/plans";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type CmdGroup = "general" | "goblin" | "cs2";
+type CmdGroup = "general" | "goblin" | "cs2" | "hearthstone";
 
 const COMMANDS: { cmd: string; desc: string; rarity: string; group: CmdGroup }[] = [
   { cmd: "!loot", desc: "Roll for a random inventory drop — common to legendary rarity", rarity: "legendary", group: "general" },
@@ -22,17 +22,21 @@ const COMMANDS: { cmd: string; desc: string; rarity: string; group: CmdGroup }[]
   { cmd: "!redeem", desc: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", rarity: "rare", group: "general" },
   { cmd: "!coins", desc: "Check your coin balance (alias for !points)", rarity: "common", group: "general" },
   { cmd: "!help", desc: "Show the bot's currently-enabled commands", rarity: "common", group: "general" },
-  { cmd: "!hoard", desc: "Check your goblin coin balance", rarity: "uncommon", group: "goblin" },
   { cmd: "!goblin", desc: "Summon the goblin for a chaotic response", rarity: "uncommon", group: "goblin" },
   { cmd: "!steal", desc: "Attempt a theft from another viewer — the goblin decides the outcome", rarity: "rare", group: "goblin" },
-  { cmd: "!feedgoblin", desc: "Offer a snack to keep the goblin happy and running smoothly", rarity: "common", group: "goblin" },
+  { cmd: "!feed", desc: "Offer a snack to keep the goblin happy and running smoothly", rarity: "common", group: "goblin" },
   { cmd: "!tradeurl", desc: "Submit your Steam trade URL after winning a CS2 skin giveaway", rarity: "common", group: "cs2" },
+  { cmd: "!skin", desc: "Summon the bot (CS2 alias of !goblin)", rarity: "uncommon", group: "cs2" },
+  { cmd: "!scam", desc: "Attempt a trade scam — CS2 alias of !steal", rarity: "rare", group: "cs2" },
+  { cmd: "!innkeeper", desc: "Summon the Innkeeper for a Tavern Brawl response", rarity: "uncommon", group: "hearthstone" },
+  { cmd: "!brew", desc: "Offer the Innkeeper a brew — Hearthstone alias of !feed", rarity: "common", group: "hearthstone" },
 ];
 
 const GROUP_META: Record<CmdGroup, { label: string; tag: string; tagClass: string }> = {
-  general: { label: "General Commands", tag: "always available", tagClass: "text-muted-foreground" },
-  goblin:  { label: "Goblin Horde Commands", tag: "Goblin theme", tagClass: "text-amber-400" },
-  cs2:     { label: "CS2 Arms Deal Commands", tag: "CS2 theme", tagClass: "text-blue-400" },
+  general:     { label: "General Commands",          tag: "always available", tagClass: "text-muted-foreground" },
+  goblin:      { label: "Goblin Horde Commands",     tag: "Goblin theme",     tagClass: "text-amber-400" },
+  cs2:         { label: "CS2 Arms Deal Commands",    tag: "CS2 theme",        tagClass: "text-blue-400" },
+  hearthstone: { label: "Hearthstone Tavern Commands", tag: "Hearthstone theme", tagClass: "text-orange-400" },
 };
 
 const RARITY_STYLES: Record<string, string> = {
@@ -210,7 +214,7 @@ export function Home() {
         <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <ProofStat value="2 min" label="Average setup time" />
           <ProofStat value="14" label="Built-in chat commands" />
-          <ProofStat value="2" label="Themes" />
+          <ProofStat value="3" label="Themes" />
           <ProofStat value="5" label="Loot rarity tiers" />
         </div>
       </section>

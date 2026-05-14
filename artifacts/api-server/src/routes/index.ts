@@ -21,6 +21,7 @@ import adminRouter from "./admin";
 import maintenanceRouter from "./maintenance";
 import supportRouter from "./support";
 import overlayRouter from "./overlay";
+import announcementsRouter from "./announcements";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(adminRouter);
 router.use(maintenanceRouter);
 router.use(supportRouter);
 router.use(overlayRouter);
+router.use(announcementsRouter);
 
 export default router;

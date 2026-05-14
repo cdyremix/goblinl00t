@@ -16,7 +16,7 @@ import { userHasFeature } from "../lib/tier-helpers";
 
 const router: IRouter = Router();
 
-const VALID_THEMES: CommandTheme[] = ["goblin", "cs2", "both"];
+const VALID_THEMES: CommandTheme[] = ["goblin", "cs2", "hearthstone", "both"];
 
 const NameSchema = z
   .string()
@@ -30,14 +30,14 @@ const CustomCommandInput = z.object({
   responseText: z.string().min(1).max(400),
   cooldownSeconds: z.number().int().min(0).max(3600).default(10),
   enabled: z.boolean().default(true),
-  theme: z.enum(["goblin", "cs2", "both"]).default("both"),
+  theme: z.enum(["goblin", "cs2", "hearthstone", "both"]).default("both"),
 });
 
 const CustomCommandPatch = z.object({
   responseText: z.string().min(1).max(400).optional(),
   cooldownSeconds: z.number().int().min(0).max(3600).optional(),
   enabled: z.boolean().optional(),
-  theme: z.enum(["goblin", "cs2", "both"]).optional(),
+  theme: z.enum(["goblin", "cs2", "hearthstone", "both"]).optional(),
 });
 
 function normalizeName(raw: string): string {
