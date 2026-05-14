@@ -83,6 +83,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
     { href: "/giveaway", label: "Loot Horde", icon: Gift },
     { href: "/stats", label: "Ledger", icon: BarChart3 },
+    { href: "/users", label: "Community", icon: Users2 },
     { href: "/settings", label: "Forge", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true, newWhen: isCS2 },
     // Admin Console — only rendered for super-users (`usersTable.isAdmin`).
@@ -134,22 +135,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen w-full flex overflow-hidden bg-background text-foreground selection:bg-primary/30 dark">
       {/* Sidebar */}
-      <aside className="w-64 shrink-0 border-r border-border bg-card/50 flex flex-col backdrop-blur-sm h-full overflow-hidden">
+      <aside className="w-64 shrink-0 border-r border-border bg-card/60 flex flex-col backdrop-blur-sm h-full overflow-hidden">
         {/* Brand */}
-        <div className="h-16 flex items-center px-4 border-b border-border gap-3">
-          <img src="/goblin-logo.png" alt="Goblin L00t" className="w-9 h-9 object-contain" />
-          <span className="font-medieval font-bold text-xl tracking-tight text-primary leading-none">Goblin L00t</span>
+        <div className="h-16 flex items-center px-5 border-b border-border gap-3 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+            <img src="/goblin-logo.png" alt="Goblin L00t" className="w-6 h-6 object-contain" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="font-medieval font-bold text-lg tracking-tight text-primary leading-none block">Goblin L00t</span>
+            <span className="text-[10px] text-muted-foreground/50 tracking-widest uppercase font-medium">Dashboard</span>
+          </div>
         </div>
 
-        {/* User identity + account menu (directly under logo) */}
+        {/* User identity + account menu */}
         {user && (
-          <div className="px-3 pt-3 pb-2 border-b border-border space-y-1">
+          <div className="px-3 pt-3 pb-2 border-b border-border/60 space-y-1 shrink-0">
             <Collapsible open={accountOpen} onOpenChange={setAccountOpen}>
               <CollapsibleTrigger
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors text-left group ${
+                className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg transition-colors text-left group ${
                   accountActive
                     ? "bg-primary/10 text-primary"
-                    : "hover:bg-muted/50 text-foreground"
+                    : "hover:bg-muted/40 text-foreground"
                 }`}
                 data-testid="button-account-menu"
               >
@@ -162,7 +168,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 />
                 <span className="text-sm font-medium truncate flex-1">{displayName}</span>
                 <ChevronDown
-                  className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${accountOpen ? "rotate-180" : ""}`}
+                  className={`w-3.5 h-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200 ${accountOpen ? "rotate-180" : ""}`}
                 />
               </CollapsibleTrigger>
               <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
@@ -170,22 +176,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link
                     href="/account"
                     onClick={() => markSeen("/account")}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                       accountActive
                         ? "bg-primary/10 text-primary border border-primary/20"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
                     }`}
                     data-testid="link-account-settings"
                   >
-                    <User className="w-4 h-4 shrink-0" />
+                    <User className="w-3.5 h-3.5 shrink-0" />
                     Account Settings
                   </Link>
                   <button
                     onClick={() => signOut({ redirectUrl: "/" })}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-transparent"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-transparent"
                     data-testid="button-sign-out"
                   >
-                    <LogOut className="w-4 h-4 shrink-0" />
+                    <LogOut className="w-3.5 h-3.5 shrink-0" />
                     Sign Out
                   </button>
                 </div>
@@ -195,7 +201,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Nav */}
-        <nav className="flex-1 min-h-0 py-4 px-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 min-h-0 py-3 px-3 space-y-0.5 overflow-y-auto">
+          <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest select-none">
+            Navigation
+          </p>
           {links.map((link) => {
             const isActive = location.startsWith(link.href);
             const Icon = link.icon;
@@ -206,19 +215,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 key={link.href}
                 href={link.href}
                 onClick={() => markSeen(link.href)}
-                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 ${
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 ${
                   isActive
-                    ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(46,204,113,0.1)]"
+                    ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_12px_rgba(46,204,113,0.08)]"
                     : isNew
-                    ? "bg-primary/5 text-foreground border border-primary/40 shadow-[0_0_20px_rgba(46,204,113,0.15)]"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent"
+                    ? "bg-primary/5 text-foreground border border-primary/35 shadow-[0_0_18px_rgba(46,204,113,0.12)]"
+                    : "text-muted-foreground hover:bg-muted/40 hover:text-foreground border border-transparent"
                 }`}
                 data-testid={`nav-${link.label.toLowerCase().replace(" ", "-")}`}
               >
-                <Icon className="w-5 h-5 shrink-0" />
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : ""}`} />
                 <span className="font-medium text-sm flex-1">{link.label}</span>
                 {isNew && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary text-primary-foreground">
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">
                     <Sparkles className="w-2.5 h-2.5" />
                     New
                   </span>
@@ -228,14 +237,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Help / pricing / community links pinned at the bottom of the sidebar.
-            "Join Discord" intentionally targets a placeholder URL until the
-            project has its own server — the goal is to surface the channel
-            so streamers know support exists, not to fake an active community. */}
-        <div className="shrink-0 border-t border-border px-4 py-3 space-y-1">
+        {/* Footer — Help, Support, legal meta */}
+        <div className="shrink-0 border-t border-border/60 px-3 py-3 space-y-0.5">
           <Link
             href="/help"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
               location.startsWith("/help")
                 ? "bg-primary/10 text-primary border border-primary/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
@@ -247,7 +253,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/support"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
               location.startsWith("/support")
                 ? "bg-primary/10 text-primary border border-primary/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
@@ -257,12 +263,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <MessageCircle className="w-4 h-4 shrink-0" />
             <span className="font-medium">Contact Support</span>
           </Link>
-          <div className="px-3 pt-1 flex items-center gap-3 text-[10px] text-muted-foreground/60 uppercase tracking-wider">
-            <Link href="/terms" className="hover:text-foreground" data-testid="link-terms">Terms</Link>
+          <div className="px-3 pt-1.5 flex items-center gap-2.5 text-[10px] text-muted-foreground/40 uppercase tracking-widest">
+            <Link href="/terms" className="hover:text-muted-foreground transition-colors" data-testid="link-terms">Terms</Link>
             <span>·</span>
-            <Link href="/privacy" className="hover:text-foreground" data-testid="link-privacy">Privacy</Link>
+            <Link href="/privacy" className="hover:text-muted-foreground transition-colors" data-testid="link-privacy">Privacy</Link>
             <span>·</span>
-            <Link href="/changelog" className="hover:text-foreground" data-testid="link-changelog">Changelog</Link>
+            <Link href="/changelog" className="hover:text-muted-foreground transition-colors" data-testid="link-changelog">Changelog</Link>
           </div>
         </div>
       </aside>

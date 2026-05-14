@@ -8,10 +8,12 @@ import {
   useBotJoinChannel,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi, Copy, Radio, Tv } from "lucide-react";
+import {
+  Crown, Gem, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi,
+  Copy, Radio, Tv, Clock, Gift, Package, LayoutDashboard,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ChatUsers } from "@/pages/chat-users";
@@ -22,14 +24,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useSubscriptionTier } from "@/hooks/use-tier";
 
 /**
- * Operations Center.
+ * Operations Center (/dashboard)
  *
- * Two tabs: Overview (stats + active giveaway + live loot) and Chat Users.
- * The Overview is scoped passively to "the current stream" — server-side
- * `range=stream` / `since=stream` resolve to the last 12 hours, so the panel
- * tracks whatever's been happening in chat without needing a manual
- * Start Stream toggle.
+ * Redesigned with a unified StreamHero that replaces the old bot-controls pill
+ * and thin stream banner. The hero shows live Twitch data (viewer count, game
+ * art, stream thumbnail background, duration) alongside bot health and controls
+ * all in one place so streamers get the full picture at a glance.
  */
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function formatUptime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -39,12 +43,442 @@ function formatUptime(seconds: number): string {
   return `${s}s`;
 }
 
+interface StreamInfo {
+  isLive: boolean;
+  viewerCount: number | null;
+  title: string | null;
+  gameName: string | null;
+  startedAt: string | null;
+  gameId: string | null;
+  thumbnailUrl: string | null;
+  tags?: string[];
+}
+
+function getRarityConfig(rarity: string) {
+  switch (rarity.toLowerCase()) {
+    case "legendary": return { border: "border-amber-500/40", bg: "bg-amber-500/8", dot: "bg-amber-400", label: "text-amber-400" };
+    case "epic":      return { border: "border-purple-500/40", bg: "bg-purple-500/8", dot: "bg-purple-400", label: "text-purple-400" };
+    case "rare":      return { border: "border-blue-500/40", bg: "bg-blue-500/8", dot: "bg-blue-400", label: "text-blue-400" };
+    case "uncommon":  return { border: "border-green-500/40", bg: "bg-green-500/8", dot: "bg-green-400", label: "text-green-400" };
+    default:          return { border: "border-border/50", bg: "bg-muted/30", dot: "bg-zinc-500", label: "text-zinc-400" };
+  }
+}
+
+// ── StreamHero ────────────────────────────────────────────────────────────────
+// Unified stream status + bot health + controls panel. Shows the stream
+// thumbnail as an atmospheric background when live, game box art when
+// available, and all key stats at a glance.
+
+function StreamHero({
+  streamInfo,
+  botStatus,
+  botLoading,
+  uptimeSecs,
+  restarting,
+  parting,
+  joining,
+  myChannel,
+  botIsInMyChannel,
+  onRestart,
+  onPart,
+  onJoin,
+}: {
+  streamInfo: StreamInfo | undefined;
+  botStatus: { connected: boolean; channels?: string[] } | undefined;
+  botLoading: boolean;
+  uptimeSecs: number | undefined;
+  restarting: boolean;
+  parting: boolean;
+  joining: boolean;
+  myChannel: string | null;
+  botIsInMyChannel: boolean | null;
+  onRestart: () => void;
+  onPart: () => void;
+  onJoin: () => void;
+}) {
+  const isLive = streamInfo?.isLive === true;
+
+  // Stream duration live ticker
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!isLive || !streamInfo?.startedAt) return;
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [isLive, streamInfo?.startedAt]);
+
+  const streamDurationSecs =
+    isLive && streamInfo?.startedAt
+      ? Math.floor((Date.now() - new Date(streamInfo.startedAt).getTime()) / 1000)
+      : null;
+
+  const gameBoxArtUrl = streamInfo?.gameId
+    ? `https://static-cdn.jtvnw.net/ttv-boxart/${streamInfo.gameId}-144x192.jpg`
+    : null;
+
+  const thumbUrl = streamInfo?.thumbnailUrl
+    ? streamInfo.thumbnailUrl.replace("{width}", "1280").replace("{height}", "720")
+    : null;
+
+  const botOnline = !botLoading && !!botStatus?.connected;
+  const botOffline = !botLoading && !botStatus?.connected;
+
+  return (
+    <div
+      className={`relative rounded-2xl overflow-hidden border transition-all duration-500 ${
+        isLive
+          ? "border-red-500/25 shadow-[0_0_50px_rgba(239,68,68,0.07)]"
+          : "border-border/60"
+      } bg-card`}
+    >
+      {/* Atmospheric stream thumbnail background — only when live */}
+      {isLive && thumbUrl && (
+        <div className="absolute inset-0 pointer-events-none">
+          <img
+            src={thumbUrl}
+            alt=""
+            className="w-full h-full object-cover opacity-[0.14] scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-card/98 via-card/88 to-card/70" />
+          <div className="absolute inset-0 bg-gradient-to-t from-card/50 to-transparent" />
+        </div>
+      )}
+
+      <div className="relative p-5 sm:p-6">
+        <div className="flex items-start gap-5 flex-wrap">
+
+          {/* Game box art — small thumbnail, only while live with a game */}
+          {gameBoxArtUrl && isLive && (
+            <img
+              src={gameBoxArtUrl}
+              alt={streamInfo?.gameName ?? ""}
+              className="w-12 h-auto rounded-lg border border-white/10 shadow-xl shrink-0 hidden sm:block"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
+
+          {/* Stream info */}
+          <div className="flex-1 min-w-0 space-y-2.5">
+            {/* Status row */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {isLive ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                  </span>
+                  <span className="text-sm font-bold text-red-400 tracking-[0.12em]">LIVE</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+                  <Radio className="w-4 h-4" />
+                  Offline
+                </span>
+              )}
+
+              {streamInfo?.gameName && (
+                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Tv className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-medium text-foreground/80">{streamInfo.gameName}</span>
+                </span>
+              )}
+
+              {streamInfo?.viewerCount != null && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xl font-bold tabular-nums leading-none">
+                    {streamInfo.viewerCount.toLocaleString()}
+                  </span>
+                  <span className="text-sm text-muted-foreground">viewers</span>
+                </span>
+              )}
+
+              {streamDurationSecs != null && (
+                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  <span className="tabular-nums font-medium text-foreground/70">
+                    {formatUptime(streamDurationSecs)}
+                  </span>
+                </span>
+              )}
+            </div>
+
+            {/* Stream title or offline hint */}
+            {streamInfo?.title ? (
+              <p className="text-sm text-muted-foreground/75 truncate max-w-xl">
+                "{streamInfo.title}"
+              </p>
+            ) : !isLive ? (
+              <p className="text-sm text-muted-foreground/70">
+                Showing the last 12 hours of activity — stats update automatically when you go live.
+              </p>
+            ) : null}
+          </div>
+
+          {/* ── Bot status + controls ── */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Status pill */}
+            <div
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${
+                botLoading
+                  ? "border-border bg-background text-muted-foreground"
+                  : botOnline
+                    ? "bg-green-950/40 border-green-500/30 text-green-400"
+                    : "bg-red-950/30 border-red-500/20 text-red-400"
+              }`}
+            >
+              {botLoading ? (
+                <span className="w-2 h-2 rounded-full bg-muted animate-pulse" />
+              ) : botOnline ? (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                  </span>
+                  <span data-testid="status-connected">BOT ONLINE</span>
+                  {uptimeSecs != null && (
+                    <span className="text-green-600/70 font-normal tabular-nums">
+                      {formatUptime(uptimeSecs)}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  <span data-testid="status-disconnected">BOT OFFLINE</span>
+                </>
+              )}
+            </div>
+
+            {/* Restart bot */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRestart}
+              disabled={restarting}
+              className="gap-1.5 h-8 px-3 text-xs rounded-full"
+              data-testid="btn-restart-bot"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
+              {restarting ? "Restarting…" : "Restart Bot"}
+            </Button>
+
+            {/* Connect / disconnect */}
+            {myChannel && (
+              botIsInMyChannel ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onPart}
+                  disabled={parting}
+                  className="gap-1.5 h-8 px-3 text-xs rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  data-testid="btn-disconnect-bot"
+                  title="Remove the bot from your channel (Twitch link stays intact)"
+                >
+                  <WifiOff className="w-3.5 h-3.5" />
+                  {parting ? "Disconnecting…" : "Disconnect Bot"}
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onJoin}
+                  disabled={joining}
+                  className="gap-1.5 h-8 px-3 text-xs rounded-full text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                  data-testid="btn-reconnect-bot"
+                  title="Re-add the bot to your channel"
+                >
+                  <Wifi className="w-3.5 h-3.5" />
+                  {joining ? "Reconnecting…" : "Reconnect Bot"}
+                </Button>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Live tags strip at bottom */}
+      {isLive && streamInfo?.tags && streamInfo.tags.length > 0 && (
+        <div className="relative border-t border-white/5 px-5 sm:px-6 py-2 flex items-center gap-2 flex-wrap">
+          {streamInfo.tags.slice(0, 6).map((tag) => (
+            <span
+              key={tag}
+              className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 text-muted-foreground/60 border border-white/5"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ActiveGiveawayBanner ──────────────────────────────────────────────────────
+// Shown at the top of the overview when a giveaway is running or pending, so
+// the streamer always has a one-click path to manage the active event.
+
+function ActiveGiveawayBanner({
+  giveaway,
+}: {
+  giveaway: { id: number; title: string; prize: string; status: string };
+}) {
+  const isPending = giveaway.status === "pending";
+  return (
+    <div
+      className={`flex items-center gap-4 px-5 py-4 rounded-2xl border ${
+        isPending
+          ? "border-primary/30 bg-primary/5 shadow-[0_0_30px_rgba(46,204,113,0.06)]"
+          : "border-amber-500/30 bg-amber-950/20 shadow-[0_0_30px_rgba(245,158,11,0.06)]"
+      }`}
+    >
+      <div
+        className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+          isPending ? "bg-primary/20 border border-primary/25" : "bg-amber-500/20 border border-amber-500/25"
+        }`}
+      >
+        {isPending
+          ? <Gift className="w-5 h-5 text-primary" />
+          : <Trophy className="w-5 h-5 text-amber-400" />
+        }
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-sm text-foreground truncate">{giveaway.title}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {isPending
+            ? `🎟️ Open for entries · ${giveaway.prize}`
+            : "🎡 Wheel is spinning — waiting for a winner"}
+        </p>
+      </div>
+
+      <Link
+        href={`/giveaway/${giveaway.id}`}
+        className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg bg-background border border-border hover:border-primary/50 hover:text-primary transition-all"
+      >
+        Open →
+      </Link>
+    </div>
+  );
+}
+
+// ── StatCard ──────────────────────────────────────────────────────────────────
+
+function StatCard({
+  title,
+  value,
+  icon,
+  loading,
+  accent = "default",
+}: {
+  title: string;
+  value?: number;
+  icon: React.ReactNode;
+  loading: boolean;
+  accent?: "default" | "green" | "amber" | "blue" | "purple";
+}) {
+  const accentLine: Record<string, string> = {
+    default: "bg-border",
+    green:   "bg-green-500",
+    amber:   "bg-amber-500",
+    blue:    "bg-blue-500",
+    purple:  "bg-purple-500",
+  };
+  return (
+    <Card className="border-border/50 bg-card/60 overflow-hidden relative">
+      <div className={`absolute bottom-0 left-0 right-0 h-0.5 ${accentLine[accent]} opacity-50`} />
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between mb-3">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider leading-snug">
+            {title}
+          </span>
+          <div className="p-1.5 rounded-md bg-muted/50 text-muted-foreground shrink-0">
+            {icon}
+          </div>
+        </div>
+        {loading ? (
+          <Skeleton className="h-9 w-20" />
+        ) : (
+          <div className="text-3xl font-bold font-mono tracking-tight">
+            {(value ?? 0).toLocaleString()}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── GiftIcon ──────────────────────────────────────────────────────────────────
+
+function GiftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="8" width="18" height="4" rx="1" />
+      <path d="M12 8v13" />
+      <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+      <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" />
+    </svg>
+  );
+}
+
+// ── CreatorToolLink ───────────────────────────────────────────────────────────
+
+function CreatorToolLink({
+  label,
+  description,
+  locked,
+  onClick,
+}: {
+  label: string;
+  description: string;
+  locked: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={locked ? undefined : onClick}
+      disabled={locked}
+      className={`w-full text-left rounded-xl border p-3 space-y-1 transition-all ${
+        locked
+          ? "border-border/25 bg-muted/15 opacity-55 cursor-not-allowed"
+          : "border-border/50 bg-background/40 hover:border-primary/40 hover:bg-primary/5 cursor-pointer"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <Copy className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-semibold text-foreground flex-1">{label}</span>
+        {locked && (
+          <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-bold">
+            PRO
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground pl-5 leading-relaxed">{description}</p>
+    </button>
+  );
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
 export function Dashboard() {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const { tier } = useSubscriptionTier();
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: botStatus, isLoading: botLoading, refetch: refetchBotStatus } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
+
   const { mutate: restartBot, isPending: restarting } = useRestartBot({
     mutation: {
       onSuccess: () => { void refetchBotStatus(); },
@@ -75,244 +509,168 @@ export function Dashboard() {
     queryFn: async () => {
       const token = await getToken();
       const res = await fetch("/api/users/me", { headers: { Authorization: `Bearer ${token}` } });
-      return res.json();
+      return res.json() as Promise<{ user: { twitchUsername: string | null } }>;
     },
   });
   const myChannel = profileData?.user.twitchUsername?.toLowerCase() ?? null;
   const botIsInMyChannel = myChannel ? (botStatus?.channels ?? []).includes(myChannel) : null;
 
   const { data: stats, isLoading: statsLoading } = useGetStatsOverview({ range: "stream" });
-  const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 10, since: "stream" });
+  const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 15, since: "stream" });
 
-  // Live Twitch stream data — viewer count, game, stream duration
-  const { data: streamInfo } = useQuery<{
-    isLive: boolean;
-    viewerCount: number | null;
-    title: string | null;
-    gameName: string | null;
-    startedAt: string | null;
-  }>({
+  // Live Twitch stream data with game art and thumbnail
+  const { data: streamInfo } = useQuery<StreamInfo>({
     queryKey: ["stream-info"],
     queryFn: async () => {
       const token = await getToken();
       const res = await fetch("/api/stats/stream-info", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) return { isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null };
-      return res.json();
+      if (!res.ok) return { isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null, gameId: null, thumbnailUrl: null, tags: [] };
+      return res.json() as Promise<StreamInfo>;
     },
-    refetchInterval: 60000,
-    staleTime: 30000,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
-  // Pull every giveaway and slice client-side to "the last 5 with a winner."
-  // The list is small enough (one streamer's history) that paginating
-  // server-side isn't worth a new endpoint.
+
   const { data: allGiveaways, isLoading: giveawaysLoading } = useListGiveaways();
+
   const recentWinners = (allGiveaways ?? [])
     .filter((g) => g.status === "ended" && !!g.winnerUsername)
     .sort((a, b) => new Date(b.endedAt ?? b.createdAt).getTime() - new Date(a.endedAt ?? a.createdAt).getTime())
     .slice(0, 5);
 
-  // Live uptime ticker — re-renders every second while bot is connected
+  const activeGiveaway = (allGiveaways ?? []).find(
+    (g) => g.status === "active" || g.status === "pending"
+  ) ?? null;
+
+  // Bot uptime live ticker
   const [, setSecTick] = useState(0);
   useEffect(() => {
     if (!botStatus?.connected) return;
     const id = setInterval(() => setSecTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [botStatus?.connected]);
+
   const botStartedAt = (botStatus as { startedAt?: string | null } | undefined)?.startedAt;
   const obsChannel = (botStatus as { channel?: string } | undefined)?.channel;
-  const uptimeSecs = botStatus?.connected && botStartedAt
-    ? Math.floor((Date.now() - new Date(botStartedAt).getTime()) / 1000)
-    : undefined;
+  const uptimeSecs =
+    botStatus?.connected && botStartedAt
+      ? Math.floor((Date.now() - new Date(botStartedAt).getTime()) / 1000)
+      : undefined;
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+      {/* ── Page header ── */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+          <LayoutDashboard className="w-5 h-5 text-primary" />
+        </div>
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-primary">Operations Center</h1>
-          <p className="text-muted-foreground mt-2 text-lg">The heart of the goblin cave.</p>
-        </div>
-
-        <div className="flex items-center gap-2 bg-card border border-border rounded-full px-1 py-1 flex-wrap">
-          {/* Restart Bot */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => restartBot()}
-            disabled={restarting}
-            className="gap-2 rounded-full h-8 px-3 text-muted-foreground hover:text-foreground"
-            data-testid="btn-restart-bot"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
-            {restarting ? "Restarting…" : "Restart Bot"}
-          </Button>
-
-          {/* Disconnect / Reconnect — only show when we know the user's channel */}
-          {myChannel && (
-            <>
-              <div className="w-px h-5 bg-border" />
-              {botIsInMyChannel ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => partChannel()}
-                  disabled={parting}
-                  className="gap-2 rounded-full h-8 px-3 text-muted-foreground hover:text-destructive"
-                  data-testid="btn-disconnect-bot"
-                  title="Remove the bot from your channel (Twitch link stays intact)"
-                >
-                  <WifiOff className="w-3.5 h-3.5" />
-                  {parting ? "Disconnecting…" : "Disconnect Bot"}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => joinChannel()}
-                  disabled={joining}
-                  className="gap-2 rounded-full h-8 px-3 text-green-500 hover:text-green-400 hover:bg-green-500/10"
-                  data-testid="btn-reconnect-bot"
-                  title="Re-add the bot to your channel"
-                >
-                  <Wifi className="w-3.5 h-3.5" />
-                  {joining ? "Reconnecting…" : "Reconnect Bot"}
-                </Button>
-              )}
-            </>
-          )}
-
-          <div className="w-px h-5 bg-border" />
-
-          {/* Bot status */}
-          <div className="flex items-center gap-2 px-3">
-            <Activity className="w-4 h-4 text-muted-foreground" />
-            {botLoading ? (
-              <Skeleton className="h-4 w-16" />
-            ) : botStatus?.connected ? (
-              <span className="flex items-center gap-1.5 text-green-500 font-bold text-sm tracking-wide" data-testid="status-connected">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                ONLINE
-                {uptimeSecs != null && (
-                  <span className="text-green-600/70 font-normal text-xs tabular-nums">{formatUptime(uptimeSecs)}</span>
-                )}
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-red-500 font-bold text-sm tracking-wide" data-testid="status-disconnected">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                OFFLINE
-              </span>
-            )}
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Operations Center</h1>
+          <p className="text-muted-foreground text-sm">Your live stream command center.</p>
         </div>
       </div>
 
-      {/* Stream info banner */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border bg-card/60 border-border text-sm flex-wrap gap-y-2">
-        <div className="flex items-center gap-4 flex-wrap">
-          {streamInfo?.isLive ? (
-            <>
-              <span className="flex items-center gap-1.5 font-bold text-red-400">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-                </span>
-                LIVE
-              </span>
-              {streamInfo.gameName && (
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Tv className="w-3.5 h-3.5 shrink-0" />
-                  <span className="font-medium text-foreground">{streamInfo.gameName}</span>
-                </span>
-              )}
-              {streamInfo.viewerCount != null && (
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Users className="w-3.5 h-3.5 shrink-0" />
-                  <span className="font-medium text-foreground">{streamInfo.viewerCount.toLocaleString()}</span> viewers
-                </span>
-              )}
-              {streamInfo.startedAt && (
-                <span className="text-muted-foreground">
-                  Up <span className="font-medium text-foreground tabular-nums">
-                    {formatUptime(Math.floor((Date.now() - new Date(streamInfo.startedAt).getTime()) / 1000))}
-                  </span>
-                </span>
-              )}
-              {streamInfo.title && (
-                <span className="text-xs text-muted-foreground/60 truncate max-w-[240px] hidden lg:block">
-                  "{streamInfo.title}"
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="flex items-center gap-2 text-muted-foreground">
-              <Radio className="w-3.5 h-3.5 shrink-0" />
-              <span>Offline — showing last 12 hours · goes live automatically when you stream</span>
-            </span>
-          )}
-        </div>
-      </div>
+      {/* ── Stream + Bot Status Hero ── */}
+      <StreamHero
+        streamInfo={streamInfo}
+        botStatus={botStatus}
+        botLoading={botLoading}
+        uptimeSecs={uptimeSecs}
+        restarting={restarting}
+        parting={parting}
+        joining={joining}
+        myChannel={myChannel}
+        botIsInMyChannel={botIsInMyChannel}
+        onRestart={() => restartBot()}
+        onPart={() => partChannel()}
+        onJoin={() => joinChannel()}
+      />
 
+      {/* ── Active giveaway callout ── */}
+      {!giveawaysLoading && activeGiveaway && (
+        <ActiveGiveawayBanner giveaway={activeGiveaway} />
+      )}
+
+      {/* ── Tabs ── */}
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="chat-users" data-testid="tab-chat-users">Community</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-8 mt-6">
-          {/* Top Stats Row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <StatCard title="Loot Dropped (this stream)" value={stats?.totalLootDrops} icon={<Gem className="w-5 h-5 text-primary" />} loading={statsLoading} />
-            <StatCard title="Giveaways Run" value={stats?.totalGiveaways} icon={<GiftIcon />} loading={statsLoading} />
-            <StatCard title="Unique Looters" value={stats?.uniqueUsers} icon={<Users className="w-5 h-5 text-secondary" />} loading={statsLoading} />
-            <StatCard title="Recent Entries" value={stats?.recentEntries} icon={<Zap className="w-5 h-5 text-accent" />} loading={statsLoading} />
+        <TabsContent value="overview" className="space-y-6 mt-6">
+
+          {/* Session stats — scoped to "current stream" (last 12h fallback) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard
+              title="Loot Dropped"
+              value={stats?.totalLootDrops}
+              icon={<Gem className="w-4 h-4" />}
+              loading={statsLoading}
+              accent="green"
+            />
+            <StatCard
+              title="Giveaways Run"
+              value={stats?.totalGiveaways}
+              icon={<GiftIcon className="w-4 h-4" />}
+              loading={statsLoading}
+              accent="amber"
+            />
+            <StatCard
+              title="Unique Looters"
+              value={stats?.uniqueUsers}
+              icon={<Users className="w-4 h-4" />}
+              loading={statsLoading}
+              accent="blue"
+            />
+            <StatCard
+              title="Recent Entries"
+              value={stats?.recentEntries}
+              icon={<Zap className="w-4 h-4" />}
+              loading={statsLoading}
+              accent="purple"
+            />
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-            <div className="xl:col-span-2 space-y-8">
-              {/*
-                "Current Hoard" used to live here as a duplicate of the
-                active-giveaway / spin-wheel surface that's now front and
-                center on the Loot Hoard page. Replaced with a "Recent
-                Winners" hall of fame so Operations stays useful at a
-                glance — streamers land here for the pulse of the show,
-                not to manage a single giveaway.
-              */}
-              <Card className="border-primary/20 shadow-[0_0_30px_rgba(46,204,113,0.05)] overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-                <CardHeader className="border-b border-border/50 bg-card/50">
+          {/* Main content grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+            {/* Left col: Recent Winners */}
+            <div className="xl:col-span-2">
+              <Card className="border-border/50 overflow-hidden h-full">
+                <CardHeader className="border-b border-border/50 bg-card/50 pb-4">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl flex items-center gap-2">
-                      <Crown className="w-5 h-5 text-amber-400" />
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Crown className="w-4 h-4 text-amber-400" />
                       Recent Winners
                     </CardTitle>
                     <Link
                       href="/giveaway"
-                      className="text-xs text-muted-foreground hover:text-primary underline-offset-2 hover:underline"
+                      className="text-xs text-muted-foreground hover:text-primary underline-offset-2 hover:underline transition-colors"
                       data-testid="link-recent-winners-hoard"
                     >
                       Manage giveaways →
                     </Link>
                   </div>
-                  <CardDescription>The last few crowns handed out across all your giveaways.</CardDescription>
+                  <CardDescription>Your last few crowned champions.</CardDescription>
                 </CardHeader>
-                <CardContent className="p-6">
+                <CardContent className="p-5">
                   {giveawaysLoading ? (
                     <div className="space-y-3">
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-14 w-full rounded-xl" />
+                      ))}
                     </div>
                   ) : recentWinners.length === 0 ? (
-                    <div className="text-center py-10">
+                    <div className="text-center py-12">
                       <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3 border border-border/50">
-                        <Trophy className="w-7 h-7 text-muted-foreground/50" />
+                        <Trophy className="w-7 h-7 text-muted-foreground/40" />
                       </div>
-                      <h3 className="text-lg font-bold text-foreground mb-1">No winners yet</h3>
-                      <p className="text-muted-foreground text-sm mb-4 max-w-md mx-auto">
+                      <h3 className="text-base font-bold mb-1">No winners yet</h3>
+                      <p className="text-muted-foreground text-sm mb-4 max-w-xs mx-auto">
                         Run a giveaway and the hall of fame fills in automatically.
                       </p>
                       <Link
@@ -329,25 +687,30 @@ export function Dashboard() {
                         <li key={g.id}>
                           <Link
                             href={`/giveaway/${g.id}`}
-                            className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/40 px-3 py-2.5 hover:border-amber-500/40 hover:bg-amber-500/5 transition-colors group"
+                            className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-4 py-3 hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group"
                             data-testid={`link-recent-winner-${g.id}`}
                           >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className="shrink-0 w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-                                <Crown className="w-4 h-4 text-amber-400" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-bold text-sm text-foreground group-hover:text-primary transition-colors truncate">
-                                  @{g.winnerUsername}
-                                </p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {g.title} · {g.prizeKind === "bot_coins" && g.prizeBotCoins
-                                    ? <span className="inline-flex items-center gap-0.5 text-amber-400/90"><Coins className="w-3 h-3" />{g.prizeBotCoins}</span>
-                                    : g.prize}
-                                </p>
-                              </div>
+                            <div className="shrink-0 w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+                              <Crown className="w-4 h-4 text-amber-400" />
                             </div>
-                            <span className="text-[10px] font-mono uppercase text-muted-foreground shrink-0">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm group-hover:text-primary transition-colors truncate">
+                                @{g.winnerUsername}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                {g.title}
+                                {" · "}
+                                {g.prizeKind === "bot_coins" && g.prizeBotCoins ? (
+                                  <span className="inline-flex items-center gap-0.5 text-amber-400/90">
+                                    <Coins className="w-3 h-3" />
+                                    {g.prizeBotCoins}
+                                  </span>
+                                ) : (
+                                  g.prize
+                                )}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 uppercase">
                               {new Date(g.endedAt ?? g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                             </span>
                           </Link>
@@ -359,130 +722,108 @@ export function Dashboard() {
               </Card>
             </div>
 
-            {/* Right column: Creator Tools + Live Loot Feed */}
-            <div className="xl:col-span-1 flex flex-col gap-6">
+            {/* Right col: Creator Tools + Live Loot Feed */}
+            <div className="flex flex-col gap-5">
 
               {/* Creator Tools */}
               <Card className="border-border/50 shrink-0">
-                <CardHeader className="border-b border-border/50 pb-4">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Tv className="w-5 h-5 text-primary" />
+                <CardHeader className="border-b border-border/50 pb-3.5">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="w-4 h-4 text-primary" />
                     Creator Tools
                   </CardTitle>
-                  <CardDescription>Links to share with your community</CardDescription>
+                  <CardDescription className="text-xs">Share these links with your community</CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 space-y-4">
+                <CardContent className="p-4 space-y-2.5">
                   {obsChannel ? (
                     <>
-                      {/* Viewer Portal */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-semibold text-foreground">Viewer Portal</p>
-                          {tier !== "pro" && (
-                            <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-semibold">Pro</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Share with chat — viewers track coins, enter giveaways, and roll loot via browser.</p>
-                        {tier === "pro" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full gap-2 text-xs"
-                            onClick={() => {
-                              const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-                              const url = `${window.location.origin}${base}/viewer/${obsChannel}`;
-                              void navigator.clipboard.writeText(url);
-                              toast({ title: "Viewer portal link copied!", description: url });
-                            }}
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            Copy Viewer Portal Link
-                          </Button>
-                        ) : (
-                          <Button variant="outline" size="sm" className="w-full gap-2 text-xs opacity-50 cursor-not-allowed" disabled>
-                            <Copy className="w-3.5 h-3.5" />
-                            Upgrade to Pro to unlock
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* OBS Overlay */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-semibold text-foreground">OBS Loot Overlay</p>
-                          {tier !== "pro" && (
-                            <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-semibold">Pro</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Add as a browser source in OBS — shows live loot drops as they happen.</p>
-                        {tier === "pro" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full gap-2 text-xs"
-                            title="Copy OBS browser source URL for this channel's live loot overlay"
-                            onClick={() => {
-                              const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-                              const url = `${window.location.origin}${base}/overlay/${obsChannel}`;
-                              void navigator.clipboard.writeText(url);
-                              toast({ title: "OBS overlay URL copied!", description: url });
-                            }}
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            Copy OBS Overlay URL
-                          </Button>
-                        ) : (
-                          <Button variant="outline" size="sm" className="w-full gap-2 text-xs opacity-50 cursor-not-allowed" disabled>
-                            <Copy className="w-3.5 h-3.5" />
-                            Upgrade to Pro to unlock
-                          </Button>
-                        )}
-                      </div>
+                      <CreatorToolLink
+                        label="Viewer Portal"
+                        description="Viewers track coins, enter giveaways, and roll loot in their browser"
+                        locked={tier !== "pro"}
+                        onClick={() => {
+                          const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                          const url = `${window.location.origin}${base}/viewer/${obsChannel}`;
+                          void navigator.clipboard.writeText(url);
+                          toast({ title: "Viewer portal link copied!", description: url });
+                        }}
+                      />
+                      <CreatorToolLink
+                        label="OBS Loot Overlay"
+                        description="Browser source in OBS — shows live loot drops as they happen"
+                        locked={tier !== "pro"}
+                        onClick={() => {
+                          const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                          const url = `${window.location.origin}${base}/overlay/${obsChannel}`;
+                          void navigator.clipboard.writeText(url);
+                          toast({ title: "OBS overlay URL copied!", description: url });
+                        }}
+                      />
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Link your Twitch account in Settings to get your shareable links.</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Link your Twitch account in{" "}
+                      <Link href="/account?tab=channel" className="text-primary hover:underline">
+                        Account Settings
+                      </Link>{" "}
+                      to unlock these links.
+                    </p>
                   )}
                 </CardContent>
               </Card>
 
               {/* Live Loot Feed */}
-              <Card className="flex-1 flex flex-col border-border/50 min-h-80">
-                <CardHeader className="border-b border-border/50 pb-4">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>
+              <Card className="flex-1 flex flex-col border-border/50 min-h-72">
+                <CardHeader className="border-b border-border/50 pb-3.5">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                    </span>
                     Live Loot Feed
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-hidden relative">
-                  <div className="absolute inset-0 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                  <div className="absolute inset-0 overflow-y-auto p-3 space-y-1.5">
                     {lootLoading ? (
                       Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="flex gap-3 items-center p-3 rounded-md bg-muted/50 border border-border/50">
-                          <Skeleton className="w-10 h-10 rounded-md" />
-                          <div className="space-y-2 flex-1">
-                            <Skeleton className="h-4 w-24" />
-                            <Skeleton className="h-3 w-32" />
+                        <div key={i} className="flex gap-2.5 items-center p-2.5 rounded-lg bg-muted/30 border border-border/30">
+                          <Skeleton className="w-2 h-2 rounded-full shrink-0" />
+                          <div className="space-y-1.5 flex-1">
+                            <Skeleton className="h-3 w-20" />
+                            <Skeleton className="h-2.5 w-28" />
                           </div>
                         </div>
                       ))
                     ) : recentLoot && recentLoot.length > 0 ? (
-                      recentLoot.map((drop) => (
-                        <div key={drop.id} className="flex gap-3 items-start p-3 rounded-md bg-card border border-border/50 hover:border-border transition-colors">
-                          <div className={`w-10 h-10 rounded-md flex items-center justify-center border shrink-0 ${getRarityColors(drop.rarity)}`}>
-                            <Gem className="w-5 h-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-foreground truncate">{drop.username}</span>
-                              <span className="text-xs font-mono text-muted-foreground shrink-0">{new Date(drop.droppedAt).toLocaleTimeString()}</span>
+                      recentLoot.map((drop) => {
+                        const rc = getRarityConfig(drop.rarity);
+                        return (
+                          <div
+                            key={drop.id}
+                            className={`flex gap-2.5 items-start p-2.5 rounded-lg border ${rc.border} ${rc.bg} transition-colors`}
+                          >
+                            <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${rc.dot}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className={`font-bold text-xs ${rc.label} truncate`}>
+                                  @{drop.username}
+                                </span>
+                                <span className="text-[10px] font-mono text-muted-foreground/50 shrink-0 tabular-nums">
+                                  {new Date(drop.droppedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5">
+                                {drop.item}
+                              </p>
                             </div>
-                            <p className="text-sm text-muted-foreground truncate mt-0.5">Found <span className="text-foreground">{drop.item}</span></p>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <p>No loot drops in this window yet.</p>
+                      <div className="flex flex-col items-center justify-center h-40 text-center">
+                        <Gem className="w-7 h-7 text-muted-foreground/25 mb-2" />
+                        <p className="text-sm text-muted-foreground/70">No drops in this window yet.</p>
                       </div>
                     )}
                   </div>
@@ -497,57 +838,5 @@ export function Dashboard() {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function StatCard({ title, value, icon, loading }: { title: string, value?: number, icon: React.ReactNode, loading: boolean }) {
-  return (
-    <Card className="border-border/50 bg-card/50">
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-          <div className="p-2 bg-background rounded-md border border-border">
-            {icon}
-          </div>
-        </div>
-        {loading ? (
-          <Skeleton className="h-8 w-20" />
-        ) : (
-          <div className="text-3xl font-bold font-mono tracking-tight">{value?.toLocaleString() || 0}</div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function getRarityColors(rarity: string) {
-  switch(rarity.toLowerCase()) {
-    case 'legendary': return 'bg-amber-500/10 text-amber-500 border-amber-500/30';
-    case 'epic': return 'bg-purple-500/10 text-purple-500 border-purple-500/30';
-    case 'rare': return 'bg-blue-500/10 text-blue-500 border-blue-500/30';
-    case 'uncommon': return 'bg-green-500/10 text-green-500 border-green-500/30';
-    default: return 'bg-gray-500/10 text-gray-400 border-gray-500/30';
-  }
-}
-
-function GiftIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="8" width="18" height="4" rx="1" />
-      <path d="M12 8v13" />
-      <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
-      <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" />
-    </svg>
   );
 }

@@ -564,12 +564,20 @@ router.get("/stream-info", async (req, res) => {
     }
 
     const json = await r.json() as {
-      data?: Array<{ viewer_count: number; title: string; game_name: string; started_at: string }>;
+      data?: Array<{
+        viewer_count: number;
+        title: string;
+        game_name: string;
+        game_id: string;
+        started_at: string;
+        thumbnail_url: string;
+        tags?: string[];
+      }>;
     };
     const stream = json.data?.[0];
 
     if (!stream) {
-      res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null });
+      res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null, gameId: null, thumbnailUrl: null, tags: [] });
       return;
     }
 
@@ -579,9 +587,12 @@ router.get("/stream-info", async (req, res) => {
       title: stream.title ?? null,
       gameName: stream.game_name ?? null,
       startedAt: stream.started_at ?? null,
+      gameId: stream.game_id ?? null,
+      thumbnailUrl: stream.thumbnail_url ?? null,
+      tags: stream.tags ?? [],
     });
   } catch {
-    res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null });
+    res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null, gameId: null, thumbnailUrl: null, tags: [] });
   }
 });
 
