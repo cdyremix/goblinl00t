@@ -553,6 +553,11 @@ export default function SettingsPage() {
         </FeatureLock>
       </section>
 
+      {/* Scheduled Announcements */}
+      <section className="space-y-3 max-w-2xl">
+        <AnnouncementsSection />
+      </section>
+
       </TabsContent>
 
       {/* ============================================================ */}
@@ -1733,9 +1738,7 @@ function NewCustomCommandForm({
   const [name, setName] = useState("");
   const [responseText, setResponseText] = useState("");
   const [cooldown, setCooldown] = useState(10);
-  const [theme, setTheme] = useState<CommandTheme>(
-    defaultTheme === "goblin" || defaultTheme === "cs2" ? defaultTheme : "both",
-  );
+  const [theme, setTheme] = useState<CommandTheme>(defaultTheme);
 
   const trimmedName = name.trim().toLowerCase();
   const nameOk = /^!?[a-z0-9_]{2,32}$/.test(trimmedName);
@@ -1795,9 +1798,10 @@ function NewCustomCommandForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="both">Both themes</SelectItem>
+            <SelectItem value="both">All themes</SelectItem>
             <SelectItem value="goblin">Goblin Horde only</SelectItem>
             <SelectItem value="cs2">CS2 Arms Deal only</SelectItem>
+            <SelectItem value="hearthstone">Hearthstone Tavern only</SelectItem>
           </SelectContent>
         </Select>
       </div>

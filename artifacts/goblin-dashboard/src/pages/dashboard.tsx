@@ -250,7 +250,7 @@ export function Dashboard() {
           ) : (
             <span className="flex items-center gap-2 text-muted-foreground">
               <Radio className="w-3.5 h-3.5 shrink-0" />
-              <span>Offline — showing last 12 hours of activity</span>
+              <span>Offline — showing last 12 hours · goes live automatically when you stream</span>
             </span>
           )}
         </div>

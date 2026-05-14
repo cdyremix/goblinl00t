@@ -131,6 +131,8 @@ export function Giveaways() {
   });
 
   const createMutation = useCreateGiveaway();
+  const { data: botSettings } = useGetBotSettings();
+  const activeTheme = botSettings?.botTheme ?? "goblin";
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -436,7 +438,7 @@ export function Giveaways() {
                                     if (next === "bot_coins") {
                                       form.setValue("prize", "Bag of Coins", { shouldValidate: true });
                                     } else if (next === "bot_item") {
-                                      form.setValue("prize", "Random Goblin Loot", { shouldValidate: true });
+                                      form.setValue("prize", activeTheme === "hearthstone" ? "Random Hearthstone Card" : "Random Goblin Loot", { shouldValidate: true });
                                     } else {
                                       form.setValue("prize", "", { shouldValidate: false });
                                     }
@@ -449,7 +451,7 @@ export function Giveaways() {
                                   </FormControl>
                                   <SelectContent>
                                     <SelectItem value="cs2">🔫 CS2 Skin</SelectItem>
-                                    <SelectItem value="bot_item">👺 Goblin Horde</SelectItem>
+                                    <SelectItem value="bot_item">{activeTheme === "hearthstone" ? "🃏 Hearthstone Pack" : "👺 Goblin Horde"}</SelectItem>
                                     <SelectItem value="bot_coins">🪙 Coins</SelectItem>
                                   </SelectContent>
                                 </Select>
@@ -692,7 +694,7 @@ export function Giveaways() {
                           <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Review your giveaway</p>
                           <div className="rounded-lg border border-border/50 bg-muted/10 divide-y divide-border/40 text-sm">
                             <div className="flex items-start gap-3 p-3">
-                              <span className="text-base shrink-0">{prizeKind === "cs2" ? "🔫" : prizeKind === "bot_item" ? "👺" : "🪙"}</span>
+                              <span className="text-base shrink-0">{prizeKind === "cs2" ? "🔫" : prizeKind === "bot_item" ? (activeTheme === "hearthstone" ? "🃏" : "👺") : "🪙"}</span>
                               <div className="min-w-0 flex-1">
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Prize</p>
                                 <p className="font-semibold text-foreground truncate">{form.getValues("prize")}</p>

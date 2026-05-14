@@ -132,7 +132,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const accountActive = location.startsWith("/account");
 
   return (
-    <div className="h-full w-full flex overflow-hidden bg-background text-foreground selection:bg-primary/30 dark">
+    <div className="h-screen w-full flex overflow-hidden bg-background text-foreground selection:bg-primary/30 dark">
       {/* Sidebar */}
       <aside className="w-64 shrink-0 border-r border-border bg-card/50 flex flex-col backdrop-blur-sm h-full overflow-hidden">
         {/* Brand */}

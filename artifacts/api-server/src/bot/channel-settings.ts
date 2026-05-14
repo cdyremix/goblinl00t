@@ -13,6 +13,8 @@ import type { RarityWeights } from "./inventory";
 export interface ChannelSettings {
   lootDropsEnabled: boolean;
   coinRedemptionEnabled: boolean;
+  /** What !redeem does with spent coins: entries | loot | luck */
+  redeemAction: "entries" | "loot" | "luck";
   coinCap: number | null;
   goblinEventsEnabled: boolean;
   wheelMode: "auto" | "manual";
@@ -24,6 +26,7 @@ export interface ChannelSettings {
 const DEFAULTS: ChannelSettings = {
   lootDropsEnabled: true,
   coinRedemptionEnabled: true,
+  redeemAction: "entries",
   coinCap: null,
   goblinEventsEnabled: true,
   wheelMode: "auto",
@@ -55,6 +58,8 @@ async function loadFromDb(channel: string): Promise<ChannelSettings> {
     wheelMode: (user.wheelMode === "manual" ? "manual" : "auto"),
     wheelSpeed:
       user.wheelSpeed === "slow" || user.wheelSpeed === "fast" ? user.wheelSpeed : "medium",
+    redeemAction:
+      user.redeemAction === "loot" || user.redeemAction === "luck" ? user.redeemAction : "entries",
     lootRarityWeights: user.lootRarityWeights ?? null,
   };
 }

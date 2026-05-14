@@ -20,6 +20,7 @@ import {
   inventoryFullMessage,
   getBuffFlavor,
   INVENTORY_CAP,
+  type RolledLoot,
 } from "./inventory";
 import { startGoblinEvents, setGoblinEventSink, trackChatter } from "./goblin-events";
 import { getCustomResponseFor, renderTemplate } from "./command-responses";
@@ -768,6 +769,69 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         void client?.say(channel, `🎟️ @${username}: Coin redemption is off right now.`);
         return;
       }
+
+      const action = settings.redeemAction ?? "entries";
+
+      // ── Loot Roll mode ──────────────────────────────────────────────────────
+      if (action === "loot") {
+        const COST = 200;
+        const { balance } = await getPointsBalance(username, ch);
+        if (balance < COST) {
+          void client?.say(channel, `🎲 @${username}: Need ${COST}🪙 to redeem a loot roll — you have ${balance}🪙.`);
+          return;
+        }
+        const loot = rollLootDrop({
+          luckBuffActive: false,
+          allowBuffs: settings.lootDropsEnabled,
+          theme: channelTheme,
+          weights: settings.lootRarityWeights ?? undefined,
+        });
+        const addResult = await addInventoryItem(ch, username, loot, { consumeLuckOnSuccess: false });
+        if (!addResult.ok) {
+          void client?.say(channel, inventoryFullMessage(username));
+          return;
+        }
+        await db.insert(lootDropsTable).values({ channel: ch, username, item: "!redeem (loot roll)", rarity: "common", points: -COST });
+        await db.insert(lootDropsTable).values({ channel: ch, username, item: loot.item, rarity: loot.rarity, points: 0 });
+        const emoji = getRarityEmoji(loot.rarity);
+        const slotTag = `[${addResult.slot}/${INVENTORY_CAP}]`;
+        if (loot.kind === "buff") {
+          void client?.say(channel, `🎲 @${username} spent ${COST}🪙 for a loot roll — 🍀[BUFF] ${loot.item}! ${slotTag} · ${loot.flavor} · !use ${addResult.slot}`);
+        } else {
+          const flavor = pickRandom(phrases.lootResponses[loot.rarity]);
+          void client?.say(channel, `🎲 @${username} spent ${COST}🪙 for a loot roll — ${emoji}[${loot.rarity.toUpperCase()}] ${loot.item}! ${slotTag} · !sell ${addResult.slot} for ${loot.coinValue}🪙 · ${flavor}`);
+        }
+        return;
+      }
+
+      // ── Luck Buff mode ──────────────────────────────────────────────────────
+      if (action === "luck") {
+        const COST = 300;
+        const { balance } = await getPointsBalance(username, ch);
+        if (balance < COST) {
+          void client?.say(channel, `🍀 @${username}: Need ${COST}🪙 for a Lucky Charm — you have ${balance}🪙.`);
+          return;
+        }
+        const luckyCharm: RolledLoot = {
+          item: "Lucky Charm",
+          rarity: "uncommon",
+          kind: "buff",
+          buffEffect: "luck",
+          coinValue: 50,
+          charges: 5,
+          flavor: "+25% chance to upgrade your next loot rolls",
+        };
+        const addResult = await addInventoryItem(ch, username, luckyCharm, { consumeLuckOnSuccess: false });
+        if (!addResult.ok) {
+          void client?.say(channel, inventoryFullMessage(username));
+          return;
+        }
+        await db.insert(lootDropsTable).values({ channel: ch, username, item: "!redeem (lucky charm)", rarity: "common", points: -COST });
+        void client?.say(channel, `🍀 @${username} spent ${COST}🪙 — Lucky Charm in slot [${addResult.slot}/${INVENTORY_CAP}]! · !use ${addResult.slot} to activate · Boosts next 5 loot rolls.`);
+        return;
+      }
+
+      // ── Entries mode (default) ───────────────────────────────────────────────
       const requested = Math.max(1, Math.floor(Number(parts[1] ?? 1)));
       // Channel-scope so coins earned in this channel are only spent into
       // this channel's giveaway (matches the channel-scoped balance read
