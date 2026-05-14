@@ -81,15 +81,15 @@
   --sidebar: 160 6% 8%;
   --sidebar-foreground: 45 20% 90%;
   --sidebar-border: 160 10% 12%;
-  --sidebar-primary: 43 96% 56%;
+  --sidebar-primary: 145 63% 49%;
   --sidebar-primary-foreground: 160 5% 6%;
   --sidebar-accent: 160 10% 15%;
   --sidebar-accent-foreground: 45 20% 90%;
-  --sidebar-ring: 43 96% 56%;
+  --sidebar-ring: 145 63% 49%;
   --popover: 160 6% 8%;
   --popover-foreground: 45 20% 90%;
   --popover-border: 160 10% 12%;
-  --primary: 43 96% 56%;
+  --primary: 145 63% 49%;
   --primary-foreground: 160 5% 6%;
   --secondary: 270 50% 40%;
   --secondary-foreground: 0 0% 100%;
@@ -100,7 +100,7 @@
   --destructive: 0 80% 50%;
   --destructive-foreground: 0 0% 100%;
   --input: 160 10% 15%;
-  --ring: 43 96% 56%;
+  --ring: 145 63% 49%;
 
   --app-font-sans: 'Bricolage Grotesque', sans-serif;
   --app-font-serif: Georgia, serif;
@@ -119,15 +119,15 @@
   --sidebar: 160 6% 8%;
   --sidebar-foreground: 45 20% 90%;
   --sidebar-border: 160 10% 12%;
-  --sidebar-primary: 43 96% 56%;
+  --sidebar-primary: 145 63% 49%;
   --sidebar-primary-foreground: 160 5% 6%;
   --sidebar-accent: 160 10% 15%;
   --sidebar-accent-foreground: 45 20% 90%;
-  --sidebar-ring: 43 96% 56%;
+  --sidebar-ring: 145 63% 49%;
   --popover: 160 6% 8%;
   --popover-foreground: 45 20% 90%;
   --popover-border: 160 10% 12%;
-  --primary: 43 96% 56%;
+  --primary: 145 63% 49%;
   --primary-foreground: 160 5% 6%;
   --secondary: 270 50% 40%;
   --secondary-foreground: 0 0% 100%;
@@ -138,7 +138,7 @@
   --destructive: 0 80% 50%;
   --destructive-foreground: 0 0% 100%;
   --input: 160 10% 15%;
-  --ring: 43 96% 56%;
+  --ring: 145 63% 49%;
 }
 
 @layer base {

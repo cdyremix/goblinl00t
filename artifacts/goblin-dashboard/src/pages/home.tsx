@@ -57,15 +57,19 @@ const CMD_LABEL: Record<string, string> = {
 type ChatLine = { who: string; whoColor: string; text: string; tint?: string };
 const CHAT_REEL: ChatLine[] = [
   { who: "loot_pirate", whoColor: "text-blue-400", text: "!loot" },
-  { who: "Goblin L00t", whoColor: "text-primary", text: "@loot_pirate rolled an EPIC Cursed Crown 👑 (+250 coins)", tint: "text-purple-400" },
+  { who: "Goblin L00t", whoColor: "text-primary", text: "🟣 @loot_pirate rolls EPIC — Cursed Crown 👑 (+250 coins) SCREEEEE!!", tint: "text-purple-400" },
   { who: "neon_cat", whoColor: "text-pink-400", text: "!enter" },
-  { who: "Goblin L00t", whoColor: "text-primary", text: "@neon_cat is in the giveaway. 47 entries so far!" },
-  { who: "speedrun_sam", whoColor: "text-green-400", text: "!steal loot_pirate" },
-  { who: "Goblin L00t", whoColor: "text-primary", text: "🦝 The goblin mugged loot_pirate for 80 coins. Chaos prevails." },
-  { who: "vapor_witch", whoColor: "text-purple-400", text: "!hoard" },
-  { who: "Goblin L00t", whoColor: "text-primary", text: "@vapor_witch you're sitting on 1,420 coins. Spend them wisely." },
-  { who: "streamer", whoColor: "text-amber-400", text: "ending the AWP | Asiimov giveaway now…" },
-  { who: "Goblin L00t", whoColor: "text-primary", text: "🎉 WINNER: @neon_cat! Drop your !tradeurl to claim.", tint: "text-amber-300" },
+  { who: "Goblin L00t", whoColor: "text-primary", text: "✅ @neon_cat is in the pool! 47 entries so far." },
+  { who: "vapor_witch", whoColor: "text-purple-400", text: "!loot" },
+  { who: "Goblin L00t", whoColor: "text-primary", text: "✨ GOLDEN LEGENDARY!! @vapor_witch cracked Ragnaros the Firelord! (+5000 pts) THE TAVERN IS IN UPROAR!!", tint: "text-yellow-300" },
+  { who: "speedrun_sam", whoColor: "text-green-400", text: "!steal neon_cat" },
+  { who: "Goblin L00t", whoColor: "text-primary", text: "🦝 speedrun_sam mugged neon_cat for 80 coins. Chaos prevails." },
+  { who: "pixel_knight", whoColor: "text-orange-400", text: "!gift neon_cat 200" },
+  { who: "Goblin L00t", whoColor: "text-primary", text: "💸 pixel_knight gifted neon_cat 200 coins. Very generous." },
+  { who: "chaos_reaper", whoColor: "text-red-400", text: "!top" },
+  { who: "Goblin L00t", whoColor: "text-primary", text: "🏆 Top coins: 1. vapor_witch 5,420 · 2. loot_pirate 1,340 · 3. neon_cat 980" },
+  { who: "streamer", whoColor: "text-primary/80", text: "ending the giveaway — spin that wheel!" },
+  { who: "Goblin L00t", whoColor: "text-primary", text: "🎉 WINNER: @neon_cat wins the Mystery Box! GG everyone!", tint: "text-green-300" },
 ];
 
 export function Home() {
@@ -120,13 +124,13 @@ export function Home() {
 
       {/* Hero */}
       <section className="pt-28 pb-20 px-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(255,180,0,0.15),transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(46,204,113,0.15),transparent)]" />
         <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-primary/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto grid lg:grid-cols-[1.1fr_1fr] gap-12 items-center">
           {/* Left: copy */}
           <div className="text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 bg-card border border-primary/30 rounded-full px-4 py-1.5 text-sm text-primary font-mono mb-6 shadow-[0_0_20px_rgba(255,180,0,0.15)]">
+            <div className="inline-flex items-center gap-2 bg-card border border-primary/30 rounded-full px-4 py-1.5 text-sm text-primary font-mono mb-6 shadow-[0_0_20px_rgba(46,204,113,0.15)]">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
@@ -141,18 +145,18 @@ export function Home() {
 
             <p className="text-lg text-muted-foreground max-w-xl lg:mx-0 mx-auto mb-8 leading-relaxed">
               Goblin L00t turns your Twitch chat into a loot economy — viewers earn coins, roll for drops,
-              and battle through an elimination wheel for whatever prize you put on the line. Pick a theme
-              like Goblin Horde or CS2 Arms Deal, or stick with the classic goblin chaos.
+              and battle through an elimination wheel for whatever prize you put on the line. Three themes:
+              Goblin Horde, CS2 Arms Deal, or Hearthstone Tavern. Pick your chaos.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 lg:justify-start justify-center mb-6">
               {isLoaded && isSignedIn ? (
-                <Link href="/dashboard" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_30px_rgba(255,180,0,0.3)]" data-testid="link-get-started">
+                <Link href="/dashboard" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_30px_rgba(46,204,113,0.3)]" data-testid="link-get-started">
                   Open Dashboard
                   <ChevronRight className="w-5 h-5" />
                 </Link>
               ) : (
-                <Link href="/sign-up" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_30px_rgba(255,180,0,0.3)]" data-testid="link-get-started">
+                <Link href="/sign-up" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_30px_rgba(46,204,113,0.3)]" data-testid="link-get-started">
                   Connect your channel
                   <ChevronRight className="w-5 h-5" />
                 </Link>
@@ -360,7 +364,7 @@ export function Home() {
                 {plan.badge && (
                   <div
                     className={`absolute top-0 right-0 text-[10px] font-bold px-3 py-1 ${
-                      plan.highlight ? "bg-purple-600 text-white" : "bg-amber-500 text-black"
+                      plan.highlight ? "bg-purple-600 text-white" : "bg-primary text-primary-foreground"
                     }`}
                   >
                     {plan.badge}
@@ -446,19 +450,19 @@ export function Home() {
 
       {/* CTA */}
       <section className="py-24 px-6 text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_50%_50%,rgba(255,180,0,0.08),transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_50%_50%,rgba(46,204,113,0.08),transparent)]" />
         <div className="relative max-w-2xl mx-auto">
           <h2 className="text-4xl font-bold text-foreground mb-4">Ready to run your first giveaway?</h2>
           <p className="text-muted-foreground mb-8 text-lg">
             Sign up, point the bot at your channel, and let chat fight for the loot.
           </p>
           {isLoaded && isSignedIn ? (
-            <Link href="/dashboard" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(255,180,0,0.25)]" data-testid="cta-dashboard">
+            <Link href="/dashboard" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(46,204,113,0.25)]" data-testid="cta-dashboard">
               Open Dashboard
               <ChevronRight className="w-5 h-5" />
             </Link>
           ) : (
-            <Link href="/sign-up" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(255,180,0,0.25)]" data-testid="cta-dashboard">
+            <Link href="/sign-up" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-base font-bold hover:brightness-110 transition-all shadow-[0_0_40px_rgba(46,204,113,0.25)]" data-testid="cta-dashboard">
               Get started — connect your channel
               <ChevronRight className="w-5 h-5" />
             </Link>
@@ -494,7 +498,7 @@ function StepCard({ n, icon, title, desc }: { n: number; icon: React.ReactNode; 
 
 function HeroFeature({ icon, title, desc, accent }: { icon: React.ReactNode; title: string; desc: string; accent: string }) {
   const ringMap: Record<string, string> = {
-    primary: "border-primary/30 hover:border-primary/60 hover:shadow-[0_0_30px_rgba(255,180,0,0.12)]",
+    primary: "border-primary/30 hover:border-primary/60 hover:shadow-[0_0_30px_rgba(46,204,113,0.12)]",
     purple: "border-purple-500/30 hover:border-purple-500/60 hover:shadow-[0_0_30px_rgba(168,85,247,0.12)]",
     blue: "border-blue-500/30 hover:border-blue-500/60 hover:shadow-[0_0_30px_rgba(59,130,246,0.12)]",
   };
@@ -511,7 +515,7 @@ function HeroFeature({ icon, title, desc, accent }: { icon: React.ReactNode; tit
 
 function FeatureCard({ icon, title, desc, accent }: { icon: React.ReactNode; title: string; desc: string; accent: string }) {
   const glowMap: Record<string, string> = {
-    primary: "hover:border-primary/40 hover:shadow-[0_0_20px_rgba(255,180,0,0.08)]",
+    primary: "hover:border-primary/40 hover:shadow-[0_0_20px_rgba(46,204,113,0.08)]",
     purple: "hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(168,85,247,0.08)]",
     green: "hover:border-green-500/40 hover:shadow-[0_0_20px_rgba(34,197,94,0.08)]",
     blue: "hover:border-blue-500/40 hover:shadow-[0_0_20px_rgba(59,130,246,0.08)]",

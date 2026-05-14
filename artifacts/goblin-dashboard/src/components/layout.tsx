@@ -195,7 +195,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Nav */}
-        <nav className="flex-1 py-4 px-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 min-h-0 py-4 px-4 space-y-1 overflow-y-auto">
           {links.map((link) => {
             const isActive = location.startsWith(link.href);
             const Icon = link.icon;
@@ -208,9 +208,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 onClick={() => markSeen(link.href)}
                 className={`relative flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 ${
                   isActive
-                    ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(255,180,0,0.1)]"
+                    ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(46,204,113,0.1)]"
                     : isNew
-                    ? "bg-primary/5 text-foreground border border-primary/40 shadow-[0_0_20px_rgba(255,180,0,0.15)]"
+                    ? "bg-primary/5 text-foreground border border-primary/40 shadow-[0_0_20px_rgba(46,204,113,0.15)]"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent"
                 }`}
                 data-testid={`nav-${link.label.toLowerCase().replace(" ", "-")}`}
@@ -232,7 +232,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             "Join Discord" intentionally targets a placeholder URL until the
             project has its own server — the goal is to surface the channel
             so streamers know support exists, not to fake an active community. */}
-        <div className="border-t border-border px-4 py-3 space-y-1">
+        <div className="shrink-0 border-t border-border px-4 py-3 space-y-1">
           <Link
             href="/help"
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -324,7 +324,7 @@ function ConnectTwitchReminder({ show, userId }: { show: boolean; userId: string
 
   return (
     <div
-      className="mb-6 flex items-start gap-3 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 shadow-[0_0_30px_rgba(255,180,0,0.08)]"
+      className="mb-6 flex items-start gap-3 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 shadow-[0_0_30px_rgba(46,204,113,0.08)]"
       role="status"
       data-testid="banner-connect-twitch"
     >

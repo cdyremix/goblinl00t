@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi, Copy } from "lucide-react";
+import { Crown, Gem, Activity, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi, Copy, Radio, Tv } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { ChatUsers } from "@/pages/chat-users";
@@ -83,6 +83,27 @@ export function Dashboard() {
 
   const { data: stats, isLoading: statsLoading } = useGetStatsOverview({ range: "stream" });
   const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 10, since: "stream" });
+
+  // Live Twitch stream data — viewer count, game, stream duration
+  const { data: streamInfo } = useQuery<{
+    isLive: boolean;
+    viewerCount: number | null;
+    title: string | null;
+    gameName: string | null;
+    startedAt: string | null;
+  }>({
+    queryKey: ["stream-info"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/stats/stream-info", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return { isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null };
+      return res.json();
+    },
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
   // Pull every giveaway and slice client-side to "the last 5 with a winner."
   // The list is small enough (one streamer's history) that paginating
   // server-side isn't worth a new endpoint.
@@ -189,19 +210,56 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Passive stream-window banner */}
-      <div className="flex items-center justify-between gap-3 px-4 py-2 rounded-md border bg-muted/30 border-border text-muted-foreground text-sm">
-        <span className="flex items-center gap-2 font-medium">
-          <span className="w-2 h-2 rounded-full bg-primary/60 animate-pulse" />
-          Showing this stream's activity (last 12 hours)
-        </span>
-        <div className="flex items-center gap-3">
-          <span className="text-xs hidden sm:inline">Stats &amp; loot feed below are scoped to this window.</span>
+      {/* Stream info banner */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border bg-card/60 border-border text-sm flex-wrap gap-y-2">
+        <div className="flex items-center gap-4 flex-wrap">
+          {streamInfo?.isLive ? (
+            <>
+              <span className="flex items-center gap-1.5 font-bold text-red-400">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                </span>
+                LIVE
+              </span>
+              {streamInfo.gameName && (
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <Tv className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-medium text-foreground">{streamInfo.gameName}</span>
+                </span>
+              )}
+              {streamInfo.viewerCount != null && (
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-medium text-foreground">{streamInfo.viewerCount.toLocaleString()}</span> viewers
+                </span>
+              )}
+              {streamInfo.startedAt && (
+                <span className="text-muted-foreground">
+                  Up <span className="font-medium text-foreground tabular-nums">
+                    {formatUptime(Math.floor((Date.now() - new Date(streamInfo.startedAt).getTime()) / 1000))}
+                  </span>
+                </span>
+              )}
+              {streamInfo.title && (
+                <span className="text-xs text-muted-foreground/60 truncate max-w-[240px] hidden lg:block">
+                  "{streamInfo.title}"
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Radio className="w-3.5 h-3.5 shrink-0" />
+              <span>Offline — showing last 12 hours of activity</span>
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           {obsChannel && tier !== "free" && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               title="Copy OBS browser source URL for this channel's live loot overlay"
               onClick={() => {
                 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -242,8 +300,8 @@ export function Dashboard() {
                 glance — streamers land here for the pulse of the show,
                 not to manage a single giveaway.
               */}
-              <Card className="border-amber-500/30 shadow-[0_0_30px_rgba(255,180,0,0.05)] overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+              <Card className="border-primary/20 shadow-[0_0_30px_rgba(46,204,113,0.05)] overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
                 <CardHeader className="border-b border-border/50 bg-card/50">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl flex items-center gap-2">

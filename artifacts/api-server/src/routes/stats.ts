@@ -528,4 +528,61 @@ router.get("/stats/retention", async (req, res) => {
   res.json({ returningViewers, totalActiveViewers, retentionRate, period: "7 days" });
 });
 
+/**
+ * GET /stats/stream-info
+ * Returns live Twitch stream data for the authenticated user's channel
+ * using the bot OAuth token. Falls back gracefully when not configured or offline.
+ */
+router.get("/stream-info", async (req, res) => {
+  const ctx = await resolveStreamerChannelForRead(req, res);
+  if (!ctx) return;
+  const channel = ctx.channel;
+
+  const clientId = process.env["TWITCH_CLIENT_ID"] ?? "";
+  const oauthToken = process.env["TWITCH_OAUTH_TOKEN"] ?? "";
+
+  if (!clientId || !oauthToken) {
+    res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null });
+    return;
+  }
+
+  try {
+    const r = await fetch(
+      `https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(channel)}`,
+      {
+        headers: {
+          "Client-Id": clientId,
+          "Authorization": `Bearer ${oauthToken}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
+
+    if (!r.ok) {
+      res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null });
+      return;
+    }
+
+    const json = await r.json() as {
+      data?: Array<{ viewer_count: number; title: string; game_name: string; started_at: string }>;
+    };
+    const stream = json.data?.[0];
+
+    if (!stream) {
+      res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null });
+      return;
+    }
+
+    res.json({
+      isLive: true,
+      viewerCount: stream.viewer_count ?? null,
+      title: stream.title ?? null,
+      gameName: stream.game_name ?? null,
+      startedAt: stream.started_at ?? null,
+    });
+  } catch {
+    res.json({ isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null });
+  }
+});
+
 export default router;
