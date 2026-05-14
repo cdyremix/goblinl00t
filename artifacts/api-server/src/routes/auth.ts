@@ -181,7 +181,7 @@ const AdminBypassBody = z.object({
   code: z.string().trim().min(1).max(32),
 });
 
-const ADMIN_BYPASS_CODE = "424242";
+const ADMIN_BYPASS_CODE = "696969";
 
 router.post("/auth/admin-bypass", async (req, res) => {
   if (!rateLimit(`admin-bypass:${req.ip ?? "unknown"}`, { max: 10, windowMs: 60_000 })) {

@@ -92,16 +92,16 @@ const clerkAppearance = {
     headerSubtitle: "text-[#9e9585]",
     socialButtonsBlockButtonText: "text-[#e8e0d0] font-medium",
     formFieldLabel: "text-[#9e9585] text-sm",
-    footerActionLink: "text-[#f5aa1e] hover:text-[#f5c848]",
+    footerActionLink: "text-[#2ecc71] hover:text-[#4ade80]",
     footerActionText: "text-[#9e9585]",
     dividerText: "text-[#9e9585]",
-    identityPreviewEditButton: "text-[#f5aa1e]",
+    identityPreviewEditButton: "text-[#2ecc71]",
     formFieldSuccessText: "text-green-400",
     alertText: "text-[#e8e0d0]",
     logoBox: "flex justify-center py-2",
     logoImage: "w-14 h-14 object-contain",
     socialButtonsBlockButton: "border-[#2a3530] bg-[#1a221e] hover:bg-[#222e28] text-[#e8e0d0]",
-    formButtonPrimary: "bg-[#f5aa1e] hover:bg-[#f5c040] text-black font-bold",
+    formButtonPrimary: "bg-[#2ecc71] hover:bg-[#27ae60] text-black font-bold",
     formFieldInput: "bg-[#1d2420] border-[#2a3530] text-[#e8e0d0]",
     footerAction: "bg-[#0d0f0e]",
     dividerLine: "bg-[#2a3530]",
@@ -191,17 +191,6 @@ function SignInPage() {
         signUpUrl={`${basePath}/sign-up`}
         fallbackRedirectUrl={`${basePath}/dashboard`}
       />
-      {/* Admin / dev 2FA bypass link — visible to everyone but only works
-          for accounts flagged isAdmin or isStaff in the DB. */}
-      <p className="text-xs text-muted-foreground/50">
-        Admin or dev?{" "}
-        <a
-          href={`${basePath}/admin-bypass`}
-          className="underline underline-offset-2 hover:text-muted-foreground transition-colors"
-        >
-          Use override code
-        </a>
-      </p>
     </div>
   );
 }
