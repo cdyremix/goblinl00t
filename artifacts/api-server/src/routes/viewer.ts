@@ -18,6 +18,7 @@ import {
   giveawaysTable,
   giveawayEntriesTable,
   usersTable,
+  tradeFulfillmentsTable,
 } from "@workspace/db";
 import { eq, and, sum, gt, count, or, desc } from "drizzle-orm";
 import { userHasFeature } from "../lib/tier-helpers";
@@ -30,6 +31,7 @@ import {
   listInventory,
   sellInventoryItem,
   hasActiveBuff,
+  useInventoryItem,
 } from "../bot/inventory";
 import {
   getPointsBalance,
@@ -183,10 +185,13 @@ async function getChannelStreamer(channel: string) {
   return streamer ?? null;
 }
 
-// ---------- In-memory loot cooldowns ----------
+// ---------- In-memory cooldowns ----------
 
 const lootCooldowns = new Map<string, number>();
 const LOOT_COOLDOWN_MS = 30_000;
+
+const stealCooldowns = new Map<string, number>();
+const STEAL_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes
 
 // ============================================================
 // Auth routes
@@ -299,7 +304,7 @@ router.post("/viewer/auth/logout", (_req, res) => {
 router.get("/viewer/:channel/status", async (req, res) => {
   const channel = req.params["channel"]!.toLowerCase();
   try {
-    const [streamer, currentGiveawayRows] = await Promise.all([
+    const [streamer, currentGiveawayRows, theme] = await Promise.all([
       getChannelStreamer(channel),
       db
         .select()
@@ -312,6 +317,7 @@ router.get("/viewer/:channel/status", async (req, res) => {
         )
         .orderBy(desc(giveawaysTable.createdAt))
         .limit(1),
+      getChannelTheme(channel),
     ]);
 
     const proRequired =
@@ -341,6 +347,7 @@ router.get("/viewer/:channel/status", async (req, res) => {
       proRequired,
       redeemAction: (streamer?.redeemAction ?? "entries") as "entries" | "loot" | "luck",
       entriesOpen: currentGiveaway?.status === "pending",
+      theme,
     });
   } catch (err) {
     logger.error({ err: (err as Error).message }, "viewer status failed");
@@ -626,6 +633,186 @@ router.post("/viewer/:channel/redeem", async (req, res) => {
   } catch (err) {
     logger.error({ err: (err as Error).message }, "viewer redeem failed");
     res.status(500).json({ error: "Failed to redeem" });
+  }
+});
+
+// POST /viewer/:channel/use — activate a buff item by id
+router.post("/viewer/:channel/use", async (req, res) => {
+  const channel = req.params["channel"]!.toLowerCase();
+  const session = requireViewerAuth(req as never, res as never, channel);
+  if (!session) return;
+
+  const itemId = Number((req.body as Record<string, unknown>)?.itemId);
+  if (!Number.isFinite(itemId) || itemId <= 0) {
+    res.status(400).json({ error: "itemId is required" });
+    return;
+  }
+  try {
+    const result = await useInventoryItem({ channel, username: session.username, itemId });
+    if (!result.ok) {
+      const statusCode = result.reason === "not_buff" ? 400 : 404;
+      const message = result.reason === "not_buff"
+        ? "That item isn't a buff — sell it instead"
+        : "Item not found";
+      res.status(statusCode).json({ error: message });
+      return;
+    }
+    const charges = result.item!.chargesRemaining;
+    void sayInChannel(channel, `✨ @${session.username} activated ${result.item!.item} via viewer portal! (${charges} charge${charges === 1 ? "" : "s"} left)`);
+    res.json({ ok: true, item: result.item, charges });
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "viewer use failed");
+    res.status(500).json({ error: "Failed to use item" });
+  }
+});
+
+// POST /viewer/:channel/gift — gift coins to another viewer
+router.post("/viewer/:channel/gift", async (req, res) => {
+  const channel = req.params["channel"]!.toLowerCase();
+  const session = requireViewerAuth(req as never, res as never, channel);
+  if (!session) return;
+  if (!rateLimit(`viewer_gift:${channel}:${session.username}`, { max: 10, windowMs: 60_000 })) {
+    res.status(429).json({ error: "Gifting too fast — try again in a minute" });
+    return;
+  }
+  const body = req.body as Record<string, unknown>;
+  const target = String(body?.target ?? "").toLowerCase().replace(/^@/, "");
+  const amount = Math.floor(Number(body?.amount ?? 0));
+  if (!target || !amount || amount <= 0 || !Number.isFinite(amount)) {
+    res.status(400).json({ error: "target and a positive amount are required" });
+    return;
+  }
+  if (target === session.username) {
+    res.status(400).json({ error: "You can't gift coins to yourself" });
+    return;
+  }
+  if (amount > 10_000) {
+    res.status(400).json({ error: "Maximum gift is 10,000 coins at once" });
+    return;
+  }
+  try {
+    const { balance } = await getPointsBalance(session.username, channel);
+    if (balance < amount) {
+      res.status(400).json({ error: `Not enough coins — you have ${balance}🪙 but need ${amount}🪙` });
+      return;
+    }
+    await db.insert(lootDropsTable).values({
+      username: session.username, channel,
+      item: `Gift to @${target}`, rarity: "common", points: -amount,
+    });
+    const credited = await clampCoinAward(channel, target, amount);
+    if (credited > 0) {
+      await db.insert(lootDropsTable).values({
+        username: target, channel,
+        item: `Gift from @${session.username}`, rarity: "common", points: credited,
+      });
+    }
+    const capNote = credited < amount ? ` (capped — ${target} hit their coin limit)` : "";
+    void sayInChannel(channel, `🎁 @${session.username} gifted ${amount}🪙 to @${target} via viewer portal!${capNote}`);
+    res.json({ ok: true, credited });
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "viewer gift failed");
+    res.status(500).json({ error: "Failed to gift coins" });
+  }
+});
+
+// POST /viewer/:channel/steal — steal coins from another viewer (goblin theme only, 3-min cooldown)
+router.post("/viewer/:channel/steal", async (req, res) => {
+  const channel = req.params["channel"]!.toLowerCase();
+  const session = requireViewerAuth(req as never, res as never, channel);
+  if (!session) return;
+
+  const theme = await getChannelTheme(channel);
+  if (theme !== "goblin") {
+    res.status(403).json({ error: "Stealing is only available in Goblin mode" });
+    return;
+  }
+
+  const cooldownKey = `${channel}:${session.username}`;
+  const last = stealCooldowns.get(cooldownKey) ?? 0;
+  const elapsed = Date.now() - last;
+  if (elapsed < STEAL_COOLDOWN_MS) {
+    const retryAfter = Math.ceil((STEAL_COOLDOWN_MS - elapsed) / 1000);
+    res.status(429).json({ error: `Steal on cooldown — ${retryAfter}s remaining`, retryAfter });
+    return;
+  }
+
+  const target = String((req.body as Record<string, unknown>)?.target ?? "").toLowerCase().replace(/^@/, "");
+  if (!target) { res.status(400).json({ error: "target is required" }); return; }
+  if (target === session.username) { res.status(400).json({ error: "You can't steal from yourself" }); return; }
+
+  stealCooldowns.set(cooldownKey, Date.now());
+
+  try {
+    const { balance: targetBalance } = await getPointsBalance(target, channel);
+    if (targetBalance < 10) {
+      void sayInChannel(channel, `👺 @${session.username} tried to steal from @${target} but their pockets were empty! HEHEHE`);
+      res.json({ ok: false, message: `${target} has nothing worth stealing!` });
+      return;
+    }
+
+    const success = Math.random() < 0.55;
+    if (!success) {
+      void sayInChannel(channel, `👺 @${session.username} tried to steal from @${target} but got caught red-handed! GOBLIN FAIL!`);
+      res.json({ ok: false, message: `Caught red-handed — ${target} saw you coming!` });
+      return;
+    }
+
+    const stealAmount = Math.min(100, Math.max(10, Math.floor(targetBalance * 0.15)));
+    await db.insert(lootDropsTable).values({
+      username: target, channel,
+      item: `Stolen by @${session.username}`, rarity: "common", points: -stealAmount,
+    });
+    const credited = await clampCoinAward(channel, session.username, stealAmount);
+    if (credited > 0) {
+      await db.insert(lootDropsTable).values({
+        username: session.username, channel,
+        item: `Stolen from @${target}`, rarity: "common", points: credited,
+      });
+    }
+    void sayInChannel(channel, `👺 @${session.username} STOLE ${stealAmount}🪙 from @${target}!! HEHEHE goblin wins AGAIN!`);
+    res.json({ ok: true, stolen: stealAmount, credited });
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "viewer steal failed");
+    res.status(500).json({ error: "Steal failed" });
+  }
+});
+
+// POST /viewer/:channel/tradeurl — save Steam trade URL on a pending trade fulfillment (CS2)
+router.post("/viewer/:channel/tradeurl", async (req, res) => {
+  const channel = req.params["channel"]!.toLowerCase();
+  const session = requireViewerAuth(req as never, res as never, channel);
+  if (!session) return;
+
+  const tradeUrl = String((req.body as Record<string, unknown>)?.tradeUrl ?? "").trim();
+  if (!tradeUrl || !tradeUrl.includes("steamcommunity.com/tradeoffer/new/")) {
+    res.status(400).json({ error: "Invalid trade URL — must be a steamcommunity.com/tradeoffer/new/ link" });
+    return;
+  }
+  try {
+    const [pending] = await db
+      .select()
+      .from(tradeFulfillmentsTable)
+      .where(
+        and(
+          eq(tradeFulfillmentsTable.winnerTwitchUsername, session.username),
+          eq(tradeFulfillmentsTable.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (!pending) {
+      res.status(404).json({ error: "No pending trade found — contact the streamer if this seems wrong" });
+      return;
+    }
+    await db
+      .update(tradeFulfillmentsTable)
+      .set({ steamTradeUrl: tradeUrl })
+      .where(eq(tradeFulfillmentsTable.id, pending.id));
+    void sayInChannel(channel, `✅ @${session.username}: Trade URL saved via viewer portal! The streamer will send your skin soon 🎁`);
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "viewer tradeurl failed");
+    res.status(500).json({ error: "Failed to save trade URL" });
   }
 });
 
