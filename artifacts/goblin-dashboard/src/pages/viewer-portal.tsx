@@ -567,7 +567,7 @@ export function ViewerPortal() {
 
   async function handleSwitchAccount() {
     await fetch("/api/viewer/auth/logout", { method: "POST", credentials: "include" });
-    window.location.href = `/api/viewer/auth/init?channel=${encodeURIComponent(channel)}`;
+    window.location.href = `/api/viewer/auth/init?channel=${encodeURIComponent(channel)}&force_verify=true`;
   }
 
   const redeemEmoji = redeemAction === "luck" ? "🍀" : redeemAction === "loot" ? tc.lootEmoji : "🎟️";

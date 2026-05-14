@@ -211,6 +211,7 @@ router.get("/viewer/auth/init", (req, res) => {
       res.status(500).json({ error: "Twitch OAuth not configured on this server" });
       return;
     }
+    const forceVerify = req.query["force_verify"] === "true";
     const state = signViewerState(channel);
     const url = new URL("https://id.twitch.tv/oauth2/authorize");
     url.searchParams.set("client_id", CLIENT_ID);
@@ -218,6 +219,7 @@ router.get("/viewer/auth/init", (req, res) => {
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "user:read:email");
     url.searchParams.set("state", state);
+    if (forceVerify) url.searchParams.set("force_verify", "true");
     res.redirect(url.toString());
   },
 );
