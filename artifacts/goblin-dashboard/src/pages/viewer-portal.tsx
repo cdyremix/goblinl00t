@@ -49,6 +49,9 @@ interface StatusData {
   giveaway: Giveaway | null;
   entryCount: number;
   leaderboard: LeaderEntry[];
+  proRequired?: boolean;
+  redeemAction?: "entries" | "loot" | "luck";
+  entriesOpen?: boolean;
 }
 
 interface InventoryItem {
@@ -260,12 +263,25 @@ export function ViewerPortal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entries: redeemEntries }),
       }),
-    onSuccess: (data: { ticketsAdded: number; pointsSpent: number; balanceAfter: number }) => {
+    onSuccess: (data: {
+      ticketsAdded?: number; pointsSpent?: number; balanceAfter?: number;
+      action?: string; type?: string; item?: string; rarity?: string;
+      slot?: number; coins?: number; flavor?: string;
+    }) => {
       void refetchAll();
-      toast({
-        title: `🎟️ Redeemed ${data.ticketsAdded} ticket${data.ticketsAdded !== 1 ? "s" : ""}!`,
-        description: `Spent ${data.pointsSpent}🪙 — balance: ${data.balanceAfter}🪙`,
-      });
+      if (data.action === "loot") {
+        toast({
+          title: data.type === "item" ? `🎲 Found: ${data.item}!` : `🎲 Pouch full — earned ${data.coins}🪙`,
+          description: data.flavor,
+        });
+      } else if (data.action === "luck") {
+        toast({ title: "🍀 Luck buff added!", description: `Lucky Charm in slot ${data.slot} — next !loot rolls upgraded rarity!` });
+      } else {
+        toast({
+          title: `🎟️ Redeemed ${data.ticketsAdded} ticket${(data.ticketsAdded ?? 1) !== 1 ? "s" : ""}!`,
+          description: `Spent ${data.pointsSpent}🪙 — balance: ${data.balanceAfter}🪙`,
+        });
+      }
     },
     onError: (err: Error) => {
       toast({ title: "Redeem failed", description: err.message, variant: "destructive" });
@@ -311,8 +327,12 @@ export function ViewerPortal() {
   const slots = Array.from({ length: 5 }, (_, i) => inventory[i] ?? null);
   const leaderboard = status?.leaderboard ?? [];
   const giveaway = status?.giveaway ?? null;
-  const REDEEM_COST = 100;
-  const maxRedeemEntries = Math.floor(balance / REDEEM_COST);
+  const redeemAction = status?.redeemAction ?? "entries";
+  const entriesOpen = status?.entriesOpen ?? false;
+  const REDEEM_COST = redeemAction === "luck" ? 300 : redeemAction === "loot" ? 200 : 100;
+  const maxRedeemEntries = redeemAction === "entries"
+    ? Math.floor(balance / REDEEM_COST)
+    : balance >= REDEEM_COST ? 1 : 0;
 
   return (
     <div
@@ -434,26 +454,30 @@ export function ViewerPortal() {
               {/* Enter Giveaway */}
               <button
                 onClick={() => enterMutation.mutate()}
-                disabled={!giveaway || enterMutation.isPending || hasEntered}
+                disabled={!giveaway || !entriesOpen || enterMutation.isPending || hasEntered}
                 className="flex flex-col items-center gap-1.5 px-3 py-4 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400 hover:border-amber-500/60 active:scale-95"
               >
-                <span className="text-2xl">{hasEntered ? "✅" : "🏆"}</span>
+                <span className="text-2xl">{hasEntered ? "✅" : !giveaway ? "🏆" : !entriesOpen ? "🔒" : "🏆"}</span>
                 {!giveaway
                   ? "No Giveaway"
-                  : hasEntered
-                    ? "Entered!"
-                    : enterMutation.isPending
-                      ? "Entering…"
-                      : "Enter Giveaway"}
+                  : !entriesOpen
+                    ? "Entries Closed"
+                    : hasEntered
+                      ? "Entered!"
+                      : enterMutation.isPending
+                        ? "Entering…"
+                        : "Enter Giveaway"}
               </button>
 
               {/* Redeem coins */}
               <button
                 onClick={() => redeemMutation.mutate()}
-                disabled={!giveaway || maxRedeemEntries < 1 || redeemMutation.isPending}
+                disabled={maxRedeemEntries < 1 || redeemMutation.isPending}
                 className="flex flex-col items-center gap-1.5 px-3 py-4 rounded-xl font-semibold text-sm transition-all border disabled:opacity-50 bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30 text-blue-400 hover:border-blue-500/60 active:scale-95"
               >
-                <span className="text-2xl">🎟️</span>
+                <span className="text-2xl">
+                  {redeemAction === "loot" ? "🎲" : redeemAction === "luck" ? "🍀" : "🎟️"}
+                </span>
                 {redeemMutation.isPending ? "Redeeming…" : `Redeem ${REDEEM_COST}🪙`}
               </button>
 
@@ -465,8 +489,8 @@ export function ViewerPortal() {
               </div>
             </div>
 
-            {/* Redeem entry count picker */}
-            {giveaway && maxRedeemEntries > 1 && (
+            {/* Redeem entry count picker — only for entries mode */}
+            {redeemAction === "entries" && giveaway && entriesOpen && maxRedeemEntries > 1 && (
               <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-950/20 border border-blue-500/20 text-sm">
                 <span className="text-blue-300 font-medium flex-1">Redeem how many tickets?</span>
                 <div className="flex items-center gap-2">

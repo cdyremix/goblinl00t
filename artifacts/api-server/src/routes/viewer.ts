@@ -17,8 +17,10 @@ import {
   pointRedemptionsTable,
   giveawaysTable,
   giveawayEntriesTable,
+  usersTable,
 } from "@workspace/db";
-import { eq, and, sum, gt, count } from "drizzle-orm";
+import { eq, and, sum, gt, count, or, desc } from "drizzle-orm";
+import { userHasFeature } from "../lib/tier-helpers";
 import { rateLimit } from "../lib/auth-helpers";
 import { getChannelSettings } from "../bot/channel-settings";
 import { getChannelTheme } from "../bot/channel-theme";
@@ -164,6 +166,22 @@ async function getLeaderboard(channel: string, limit = 10) {
     .slice(0, limit);
 }
 
+// ---------- Channel streamer helper ----------
+
+async function getChannelStreamer(channel: string) {
+  const [streamer] = await db
+    .select({
+      subscriptionTier: usersTable.subscriptionTier,
+      isAdmin: usersTable.isAdmin,
+      coinRedemptionEnabled: usersTable.coinRedemptionEnabled,
+      redeemAction: usersTable.redeemAction,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.twitchUsername, channel))
+    .limit(1);
+  return streamer ?? null;
+}
+
 // ---------- In-memory loot cooldowns ----------
 
 const lootCooldowns = new Map<string, number>();
@@ -276,27 +294,53 @@ router.post("/viewer/auth/logout", (_req, res) => {
 // Public: channel status
 // ============================================================
 
-// GET /viewer/:channel/status — public: leaderboard + active giveaway + entry count
+// GET /viewer/:channel/status — public: leaderboard + pending/active giveaway + entry count
 router.get("/viewer/:channel/status", async (req, res) => {
   const channel = req.params["channel"]!.toLowerCase();
   try {
-    const [activeGiveaway] = await db
-      .select()
-      .from(giveawaysTable)
-      .where(and(eq(giveawaysTable.channel, channel), eq(giveawaysTable.status, "active")))
-      .limit(1);
+    const [streamer, currentGiveawayRows] = await Promise.all([
+      getChannelStreamer(channel),
+      db
+        .select()
+        .from(giveawaysTable)
+        .where(
+          and(
+            eq(giveawaysTable.channel, channel),
+            or(eq(giveawaysTable.status, "pending"), eq(giveawaysTable.status, "active")),
+          ),
+        )
+        .orderBy(desc(giveawaysTable.createdAt))
+        .limit(1),
+    ]);
 
+    const proRequired =
+      !streamer?.isAdmin &&
+      !userHasFeature(
+        streamer
+          ? { subscriptionTier: streamer.subscriptionTier, isAdmin: streamer.isAdmin, isStaff: false }
+          : null,
+        "viewer-portal",
+      );
+
+    const currentGiveaway = currentGiveawayRows[0] ?? null;
     let entryCount = 0;
-    if (activeGiveaway) {
+    if (currentGiveaway) {
       const [ec] = await db
         .select({ n: count() })
         .from(giveawayEntriesTable)
-        .where(eq(giveawayEntriesTable.giveawayId, activeGiveaway.id));
+        .where(eq(giveawayEntriesTable.giveawayId, currentGiveaway.id));
       entryCount = ec?.n ?? 0;
     }
 
     const leaderboard = await getLeaderboard(channel);
-    res.json({ giveaway: activeGiveaway ?? null, entryCount, leaderboard });
+    res.json({
+      giveaway: currentGiveaway,
+      entryCount,
+      leaderboard,
+      proRequired,
+      redeemAction: (streamer?.redeemAction ?? "entries") as "entries" | "loot" | "luck",
+      entriesOpen: currentGiveaway?.status === "pending",
+    });
   } catch (err) {
     logger.error({ err: (err as Error).message }, "viewer status failed");
     res.status(500).json({ error: "Failed to load channel status" });
@@ -396,7 +440,7 @@ router.post("/viewer/:channel/loot", async (req, res) => {
   }
 });
 
-// POST /viewer/:channel/enter — enter the active giveaway
+// POST /viewer/:channel/enter — enter a pending giveaway (entries locked once started)
 router.post("/viewer/:channel/enter", async (req, res) => {
   const channel = req.params["channel"]!.toLowerCase();
   const session = requireViewerAuth(req as never, res as never, channel);
@@ -405,9 +449,21 @@ router.post("/viewer/:channel/enter", async (req, res) => {
     const [giveaway] = await db
       .select()
       .from(giveawaysTable)
-      .where(and(eq(giveawaysTable.channel, channel), eq(giveawaysTable.status, "active")))
+      .where(and(eq(giveawaysTable.channel, channel), eq(giveawaysTable.status, "pending")))
       .limit(1);
-    if (!giveaway) { res.status(404).json({ error: "No active giveaway" }); return; }
+    if (!giveaway) {
+      // Check if there's an active (wheel-phase) giveaway to give a better error
+      const [spinning] = await db
+        .select({ id: giveawaysTable.id })
+        .from(giveawaysTable)
+        .where(and(eq(giveawaysTable.channel, channel), eq(giveawaysTable.status, "active")))
+        .limit(1);
+      const msg = spinning
+        ? "The giveaway has started — entries are now closed!"
+        : "No open giveaway accepting entries";
+      res.status(404).json({ error: msg });
+      return;
+    }
 
     await db
       .insert(giveawayEntriesTable)
@@ -446,7 +502,7 @@ router.post("/viewer/:channel/sell", async (req, res) => {
   }
 });
 
-// POST /viewer/:channel/redeem — spend coins for extra giveaway tickets
+// POST /viewer/:channel/redeem — spend coins (action depends on channel's redeemAction setting)
 router.post("/viewer/:channel/redeem", async (req, res) => {
   const channel = req.params["channel"]!.toLowerCase();
   const session = requireViewerAuth(req as never, res as never, channel);
@@ -454,20 +510,103 @@ router.post("/viewer/:channel/redeem", async (req, res) => {
 
   const entries = Math.max(1, Math.floor(Number((req.body as Record<string, unknown>)?.entries ?? 1)));
   try {
-    const [giveaway] = await db
-      .select()
-      .from(giveawaysTable)
-      .where(and(eq(giveawaysTable.channel, channel), eq(giveawaysTable.status, "active")))
-      .limit(1);
-    if (!giveaway) { res.status(404).json({ error: "No active giveaway" }); return; }
+    const [streamer, channelSettings] = await Promise.all([
+      getChannelStreamer(channel),
+      getChannelSettings(channel),
+    ]);
 
-    const result = await redeemEntriesForUser({
-      giveawayId: giveaway.id,
-      username: session.username,
-      entries,
-    });
-    if (!result.ok) { res.status(400).json({ error: result.message }); return; }
-    res.json(result);
+    if (!channelSettings.coinRedemptionEnabled) {
+      res.status(403).json({ error: "Coin redemption is disabled for this channel" });
+      return;
+    }
+
+    const redeemAction = streamer?.redeemAction ?? "entries";
+
+    // ── entries mode: spend 100 coins per ticket into a pending giveaway ──
+    if (redeemAction === "entries") {
+      const [giveaway] = await db
+        .select()
+        .from(giveawaysTable)
+        .where(and(eq(giveawaysTable.channel, channel), eq(giveawaysTable.status, "pending")))
+        .limit(1);
+      if (!giveaway) {
+        const [spinning] = await db
+          .select({ id: giveawaysTable.id })
+          .from(giveawaysTable)
+          .where(and(eq(giveawaysTable.channel, channel), eq(giveawaysTable.status, "active")))
+          .limit(1);
+        const msg = spinning
+          ? "The giveaway has started — entries are now closed!"
+          : "No open giveaway accepting entries";
+        res.status(404).json({ error: msg });
+        return;
+      }
+      const result = await redeemEntriesForUser({ giveawayId: giveaway.id, username: session.username, entries });
+      if (!result.ok) { res.status(400).json({ error: result.message }); return; }
+      res.json(result);
+      return;
+    }
+
+    // ── loot mode: 200 coins → roll a loot item ──
+    if (redeemAction === "loot") {
+      const COST = 200;
+      const { balance } = await getPointsBalance(session.username, channel);
+      if (balance < COST) {
+        res.status(400).json({ error: `Not enough coins — need ${COST}🪙 but you have ${balance}🪙` });
+        return;
+      }
+      await db.insert(lootDropsTable).values({
+        username: session.username, channel,
+        item: "Redeem: Loot Roll", rarity: "common", points: -COST,
+      });
+      const theme = await getChannelTheme(channel);
+      const loot = rollLootDrop({ luckBuffActive: false, allowBuffs: true, theme });
+      const result = await addInventoryItem(channel, session.username, loot, { consumeLuckOnSuccess: false });
+      if (!result.ok) {
+        const awarded = await clampCoinAward(channel, session.username, loot.coinValue);
+        if (awarded > 0) {
+          await db.insert(lootDropsTable).values({ username: session.username, channel, item: loot.item, rarity: loot.rarity, points: awarded });
+        }
+        res.json({ ok: true, action: "loot", type: "coins", item: loot.item, rarity: loot.rarity, coins: awarded, flavor: loot.flavor });
+        return;
+      }
+      await db.insert(lootDropsTable).values({ username: session.username, channel, item: loot.item, rarity: loot.rarity, points: 0 });
+      res.json({ ok: true, action: "loot", type: "item", item: loot.item, rarity: loot.rarity, slot: result.slot, flavor: loot.flavor });
+      return;
+    }
+
+    // ── luck mode: 300 coins → Lucky Charm buff ──
+    if (redeemAction === "luck") {
+      const COST = 300;
+      const { balance } = await getPointsBalance(session.username, channel);
+      if (balance < COST) {
+        res.status(400).json({ error: `Not enough coins — need ${COST}🪙 but you have ${balance}🪙` });
+        return;
+      }
+      await db.insert(lootDropsTable).values({
+        username: session.username, channel,
+        item: "Redeem: Luck Buff", rarity: "uncommon", points: -COST,
+      });
+      const luckItem = {
+        item: "Lucky Charm", rarity: "uncommon" as const, kind: "buff" as const,
+        buffEffect: "luck" as const, charges: 1, coinValue: 0,
+        flavor: "Your next !loot roll gets an upgraded rarity!",
+      };
+      const result = await addInventoryItem(channel, session.username, luckItem, { consumeLuckOnSuccess: false });
+      if (!result.ok) {
+        // Inventory full — refund the cost
+        await db.insert(lootDropsTable).values({
+          username: session.username, channel,
+          item: "Luck Buff Refund (full inventory)", rarity: "common", points: COST,
+        });
+        res.status(400).json({ error: "Inventory full — sell an item first" });
+        return;
+      }
+      res.json({ ok: true, action: "luck", slot: result.slot });
+      return;
+    }
+
+    res.status(400).json({ error: "Unknown redeem action" });
   } catch (err) {
     logger.error({ err: (err as Error).message }, "viewer redeem failed");
     res.status(500).json({ error: "Failed to redeem" });

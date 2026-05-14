@@ -87,6 +87,8 @@ export type FeatureId =
   | "discord-webhooks"
   | "custom-responses"
   | "full-ledger-export"
+  | "viewer-portal"
+  | "obs-overlay"
   | "custom-bot-name"
   | "advanced-analytics"
   | "priority-support";
@@ -131,6 +133,8 @@ export const DISPLAYED_FEATURES: Feature[] = [
   { id: "discord-webhooks", label: "Discord webhook winner announcements", minTier: "premium" },
   { id: "custom-responses", label: "Custom command responses", minTier: "premium" },
   { id: "full-ledger-export", label: "Full ledger history & CSV export", minTier: "premium" },
+  { id: "viewer-portal", label: "Viewer portal for your community", minTier: "pro" },
+  { id: "obs-overlay", label: "OBS browser source loot overlay", minTier: "pro" },
   { id: "custom-bot-name", label: "Custom bot display name", minTier: "pro" },
   { id: "advanced-analytics", label: "Advanced sponsorship analytics", minTier: "pro" },
   { id: "priority-support", label: "Priority support & onboarding", minTier: "pro" },

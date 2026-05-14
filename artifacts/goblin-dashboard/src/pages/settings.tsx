@@ -58,6 +58,8 @@ interface BotSettings {
   discordWebhookUrl: string | null;
   /** Custom rarity weights for !loot rolls. null = server defaults. */
   lootRarityWeights: RarityWeights | null;
+  /** What !redeem does. */
+  redeemAction: "entries" | "loot" | "luck";
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -401,20 +403,6 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* Discord Webhook */}
-      <section className="space-y-3 max-w-2xl">
-        <FeatureLock
-          feature="discord-webhooks"
-          description="Auto-post a winner embed to your Discord server every time a giveaway ends."
-        >
-          <DiscordWebhookSection
-            value={settings?.discordWebhookUrl ?? null}
-            saving={mutation.isPending}
-            onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
-          />
-        </FeatureLock>
-      </section>
-
       {/* Economy & Loot */}
       <section className="space-y-4 max-w-2xl">
         <div className="flex items-center gap-2">
@@ -493,6 +481,50 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Redeem Action — only shown when coin redemption is on */}
+        {(settings?.coinRedemptionEnabled ?? true) && (
+          <div className="rounded-xl border border-blue-400/15 bg-blue-500/5 p-5 space-y-3 ml-2">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🎯</span>
+              <Label className="text-sm font-semibold text-foreground">!redeem Action</Label>
+              <Hint text="What viewers get when they spend coins via !redeem in chat (or the redeem button on the viewer portal)." side="right" />
+            </div>
+            <p className="text-xs text-muted-foreground">Choose what !redeem does with viewers' coins.</p>
+            <div className="space-y-2">
+              {(
+                [
+                  { id: "entries", label: "🎟️ Giveaway Entries", desc: "100 coins = 1 extra giveaway ticket. Only works while a giveaway is accepting entries." },
+                  { id: "loot",    label: "🎲 Extra Loot Roll",  desc: "200 coins = roll a random loot item immediately, bypassing the !loot cooldown." },
+                  { id: "luck",    label: "🍀 Luck Buff",        desc: "300 coins = gain a luck-buff charge — next !loot roll gets an upgraded rarity." },
+                ] as const
+              ).map((opt) => (
+                <label
+                  key={opt.id}
+                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    (settings?.redeemAction ?? "entries") === opt.id
+                      ? "border-blue-500/50 bg-blue-500/10"
+                      : "border-border/40 hover:border-border"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="redeemAction"
+                    value={opt.id}
+                    checked={(settings?.redeemAction ?? "entries") === opt.id}
+                    onChange={() => !mutation.isPending && mutation.mutate({ redeemAction: opt.id })}
+                    className="mt-0.5 accent-blue-500"
+                    disabled={mutation.isPending}
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-foreground">{opt.label}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <CoinCapSection
           value={settings?.coinCap ?? null}
           saving={mutation.isPending}
@@ -518,6 +550,20 @@ export default function SettingsPage() {
           />
         </div>
         <AnnouncementsSection />
+      </section>
+
+      {/* Discord Webhook */}
+      <section className="space-y-3 max-w-2xl">
+        <FeatureLock
+          feature="discord-webhooks"
+          description="Auto-post a winner embed to your Discord server every time a giveaway ends."
+        >
+          <DiscordWebhookSection
+            value={settings?.discordWebhookUrl ?? null}
+            saving={mutation.isPending}
+            onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
+          />
+        </FeatureLock>
       </section>
 
       </TabsContent>

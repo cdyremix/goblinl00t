@@ -49,6 +49,7 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
     eliminationFlavorEnabled: user.eliminationFlavorEnabled,
     discordWebhookUrl: user.discordWebhookUrl ?? null,
     lootRarityWeights: user.lootRarityWeights ?? null,
+    redeemAction: (user.redeemAction ?? "entries") as "entries" | "loot" | "luck",
   };
 }
 
@@ -80,6 +81,7 @@ router.put("/settings", async (req, res) => {
     lootRarityWeights?: {
       common: number; uncommon: number; rare: number; epic: number; legendary: number;
     } | null;
+    redeemAction?: string;
   };
 
   // Resolve the caller's row early so we can tier-gate paid settings
@@ -197,6 +199,15 @@ router.put("/settings", async (req, res) => {
       res.status(400).json({ error: "Invalid Discord webhook URL — must be a discord.com/api/webhooks/... URL." });
       return;
     }
+  }
+
+  if (typeof body.redeemAction === "string") {
+    const VALID_REDEEM_ACTIONS = ["entries", "loot", "luck"] as const;
+    if (!VALID_REDEEM_ACTIONS.includes(body.redeemAction as (typeof VALID_REDEEM_ACTIONS)[number])) {
+      res.status(400).json({ error: "redeemAction must be 'entries', 'loot', or 'luck'" });
+      return;
+    }
+    updates.redeemAction = body.redeemAction;
   }
 
   const [updated] = await db

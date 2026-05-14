@@ -576,11 +576,21 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const [active] = await db
         .select()
         .from(giveawaysTable)
-        .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, chForGiveaway)))
+        .where(and(eq(giveawaysTable.status, "pending"), eq(giveawaysTable.channel, chForGiveaway)))
         .limit(1);
 
       if (!active) {
-        void client?.say(channel, phrases.enterNoGiveaway(username));
+        // Check if there's an active (wheel-spinning) giveaway — give a better message.
+        const [spinning] = await db
+          .select({ id: giveawaysTable.id })
+          .from(giveawaysTable)
+          .where(and(eq(giveawaysTable.status, "active"), eq(giveawaysTable.channel, chForGiveaway)))
+          .limit(1);
+        if (spinning) {
+          void client?.say(channel, `@${username}: The giveaway has started — entries are now closed! 🎡`);
+        } else {
+          void client?.say(channel, phrases.enterNoGiveaway(username));
+        }
         return;
       }
 

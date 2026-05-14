@@ -254,42 +254,6 @@ export function Dashboard() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          {obsChannel && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              title="Copy the viewer portal link to share with your chat"
-              onClick={() => {
-                const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-                const url = `${window.location.origin}${base}/viewer/${obsChannel}`;
-                void navigator.clipboard.writeText(url);
-                toast({ title: "Viewer portal link copied!", description: url });
-              }}
-            >
-              <Copy className="w-3.5 h-3.5" />
-              Viewer Portal
-            </Button>
-          )}
-          {obsChannel && tier !== "free" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              title="Copy OBS browser source URL for this channel's live loot overlay"
-              onClick={() => {
-                const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-                const url = `${window.location.origin}${base}/overlay/${obsChannel}`;
-                void navigator.clipboard.writeText(url);
-                toast({ title: "OBS overlay URL copied!", description: url });
-              }}
-            >
-              <Copy className="w-3.5 h-3.5" />
-              OBS Overlay
-            </Button>
-          )}
-        </div>
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
@@ -395,9 +359,94 @@ export function Dashboard() {
               </Card>
             </div>
 
-            {/* Live Loot Feed */}
-            <div className="xl:col-span-1">
-              <Card className="h-full flex flex-col border-border/50">
+            {/* Right column: Creator Tools + Live Loot Feed */}
+            <div className="xl:col-span-1 flex flex-col gap-6">
+
+              {/* Creator Tools */}
+              <Card className="border-border/50 shrink-0">
+                <CardHeader className="border-b border-border/50 pb-4">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Tv className="w-5 h-5 text-primary" />
+                    Creator Tools
+                  </CardTitle>
+                  <CardDescription>Links to share with your community</CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  {obsChannel ? (
+                    <>
+                      {/* Viewer Portal */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-semibold text-foreground">Viewer Portal</p>
+                          {tier !== "pro" && (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-semibold">Pro</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Share with chat — viewers track coins, enter giveaways, and roll loot via browser.</p>
+                        {tier === "pro" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-2 text-xs"
+                            onClick={() => {
+                              const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                              const url = `${window.location.origin}${base}/viewer/${obsChannel}`;
+                              void navigator.clipboard.writeText(url);
+                              toast({ title: "Viewer portal link copied!", description: url });
+                            }}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            Copy Viewer Portal Link
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" className="w-full gap-2 text-xs opacity-50 cursor-not-allowed" disabled>
+                            <Copy className="w-3.5 h-3.5" />
+                            Upgrade to Pro to unlock
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* OBS Overlay */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-semibold text-foreground">OBS Loot Overlay</p>
+                          {tier !== "pro" && (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-semibold">Pro</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Add as a browser source in OBS — shows live loot drops as they happen.</p>
+                        {tier === "pro" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-2 text-xs"
+                            title="Copy OBS browser source URL for this channel's live loot overlay"
+                            onClick={() => {
+                              const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                              const url = `${window.location.origin}${base}/overlay/${obsChannel}`;
+                              void navigator.clipboard.writeText(url);
+                              toast({ title: "OBS overlay URL copied!", description: url });
+                            }}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            Copy OBS Overlay URL
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" className="w-full gap-2 text-xs opacity-50 cursor-not-allowed" disabled>
+                            <Copy className="w-3.5 h-3.5" />
+                            Upgrade to Pro to unlock
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Link your Twitch account in Settings to get your shareable links.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Live Loot Feed */}
+              <Card className="flex-1 flex flex-col border-border/50 min-h-80">
                 <CardHeader className="border-b border-border/50 pb-4">
                   <CardTitle className="text-lg flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>

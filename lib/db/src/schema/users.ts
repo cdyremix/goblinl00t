@@ -72,6 +72,11 @@ export const usersTable = pgTable("users", {
   // embed announcing the winner. Validated against discord.com/api/webhooks/...
   // before write; any other URL shape is rejected.
   discordWebhookUrl: text("discord_webhook_url"),
+  // What !redeem does when coinRedemptionEnabled is true.
+  // 'entries' = spend coins for giveaway entries (default, requires pending giveaway)
+  // 'loot'    = spend coins to roll an extra loot item (always available)
+  // 'luck'    = spend coins to gain a luck buff charge (always available)
+  redeemAction: text("redeem_action").notNull().default("entries"),
   // Per-channel rarity weights for loot rolls. When null, the bot falls back
   // to the hardcoded defaults (common:50, uncommon:30, rare:15, epic:4, legendary:1).
   // Values are relative weights — they don't need to sum to 100; the roll is

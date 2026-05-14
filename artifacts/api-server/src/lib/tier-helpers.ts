@@ -24,6 +24,8 @@ export type FeatureId =
   | "discord-webhooks"
   | "custom-responses"
   | "full-ledger-export"
+  | "viewer-portal"
+  | "obs-overlay"
   | "custom-bot-name"
   | "advanced-analytics"
   | "priority-support";
@@ -35,6 +37,8 @@ export const FEATURE_MIN_TIER: Record<FeatureId, TierId> = {
   "discord-webhooks": "premium",
   "custom-responses": "premium",
   "full-ledger-export": "premium",
+  "viewer-portal": "pro",
+  "obs-overlay": "pro",
   "custom-bot-name": "pro",
   "advanced-analytics": "pro",
   "priority-support": "pro",
