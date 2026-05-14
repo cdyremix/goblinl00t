@@ -25,6 +25,7 @@ import Privacy from "@/pages/privacy";
 import Changelog from "@/pages/changelog";
 import SupportPage from "@/pages/support";
 import { OverlayPage } from "@/pages/overlay";
+import { ViewerPortal } from "@/pages/viewer-portal";
 import NotFound from "@/pages/not-found";
 import DevSignIn from "@/pages/dev-sign-in";
 import AdminBypassSignIn from "@/pages/admin-bypass-signin";
@@ -287,6 +288,8 @@ function AppRouter() {
       </Route>
       {/* Public OBS browser-source overlay — no auth, no Layout wrapper */}
       <Route path="/overlay/:channel" component={OverlayPage} />
+      {/* Public viewer portal — Twitch-authed via signed cookie, no Clerk/Layout */}
+      <Route path="/viewer/:channel" component={ViewerPortal} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -342,6 +345,26 @@ function ClerkProviderWithRoutes() {
 }
 
 function App() {
+  // Viewer portal is fully standalone — it uses its own Twitch-based session
+  // cookie and must NOT go through ClerkProvider or MaintenanceGate (both
+  // require Clerk JS to resolve, which breaks the public viewer flow).
+  const isViewerPortal = window.location.pathname.startsWith(`${basePath}/viewer/`);
+
+  if (isViewerPortal) {
+    return (
+      <ErrorBoundary>
+        <WouterRouter base={basePath}>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <Route path="/viewer/:channel" component={ViewerPortal} />
+              <Toaster />
+            </TooltipProvider>
+          </QueryClientProvider>
+        </WouterRouter>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     // Wrap the whole tree so a render error in any page (or a flaky third-
     // party hook) shows the friendly Reload screen instead of a white tab.

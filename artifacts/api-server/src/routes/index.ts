@@ -22,6 +22,7 @@ import maintenanceRouter from "./maintenance";
 import supportRouter from "./support";
 import overlayRouter from "./overlay";
 import announcementsRouter from "./announcements";
+import viewerRouter from "./viewer";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(maintenanceRouter);
 router.use(supportRouter);
 router.use(overlayRouter);
 router.use(announcementsRouter);
+router.use(viewerRouter);
 
 export default router;

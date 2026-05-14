@@ -29,7 +29,7 @@ const PATH_ALLOWLIST = new Set<string>([
 // The Twitch chat bot itself is fully maintenance-independent (talks directly
 // to the DB, never through the HTTP API), so viewers keep getting responses
 // to !loot, !enter, etc. even while the maintenance wall is up.
-const PREFIX_ALLOWLIST = ["/auth/", "/bot/"];
+const PREFIX_ALLOWLIST = ["/auth/", "/bot/", "/viewer/"];
 
 function pathPasses(urlPath: string): boolean {
   if (PATH_ALLOWLIST.has(urlPath)) return true;

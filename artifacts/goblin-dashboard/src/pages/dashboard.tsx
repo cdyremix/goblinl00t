@@ -254,7 +254,24 @@ export function Dashboard() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {obsChannel && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              title="Copy the viewer portal link to share with your chat"
+              onClick={() => {
+                const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                const url = `${window.location.origin}${base}/viewer/${obsChannel}`;
+                void navigator.clipboard.writeText(url);
+                toast({ title: "Viewer portal link copied!", description: url });
+              }}
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Viewer Portal
+            </Button>
+          )}
           {obsChannel && tier !== "free" && (
             <Button
               variant="ghost"
