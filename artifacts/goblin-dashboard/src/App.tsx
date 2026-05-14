@@ -71,7 +71,7 @@ const clerkAppearance = {
     logoImageUrl: `${window.location.origin}${basePath}/goblin-logo.png`,
   },
   variables: {
-    colorPrimary: "#f5aa1e",
+    colorPrimary: "#2ecc71",
     colorForeground: "#e8e0d0",
     colorMutedForeground: "#9e9585",
     colorDanger: "#cc2222",
