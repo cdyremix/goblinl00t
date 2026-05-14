@@ -36,6 +36,16 @@ export default function Changelog() {
         <p className="text-sm text-muted-foreground mt-1">What's new in Goblin L00t</p>
       </div>
 
+      <Entry version="v1.2" date="May 2026">
+        <Item type="new">Viewer portal live chat feed — polls Twitch chat in real time and displays a scrolling chat window at /viewer/:channel. Bot messages highlighted in purple; auto-scrolls as new messages arrive.</Item>
+        <Item type="new">Switch Account on viewer portal — dedicated button instantly clears the session and restarts Twitch OAuth so a different account can log in without navigating away.</Item>
+        <Item type="new">Portal actions echo in Twitch chat — !loot rolls, giveaway entries, coin redeems, and item sells from the viewer portal are announced in Twitch chat as if the viewer typed the command themselves.</Item>
+        <Item type="new">!redeem action modes — streamers can configure !redeem to give giveaway entry tickets (100 coins), roll a loot item (200 coins), or apply a Lucky Charm luck buff (300 coins). Set in Forge → Economy &amp; Loot.</Item>
+        <Item type="change">Viewer Portal and OBS Loot Overlay promoted from Horde Master (Premium) to Goblin King (Pro).</Item>
+        <Item type="change">Creator Tools card added to the Dashboard right column — shows Viewer Portal link and OBS Overlay link with copy-to-clipboard, replacing old stream banner buttons.</Item>
+        <Item type="change">Scheduled Announcements removed from Forge settings. Manage them from the Loot Horde page.</Item>
+      </Entry>
+
       <Entry version="v1.1" date="May 2026">
         <Item type="new">Hearthstone Tavern theme — Innkeeper bot personality, card-pack loot table (Murloc Raider → Golden Ragnaros), and Tavern Brawl giveaway phrases. Gated behind Horde Master alongside CS2.</Item>
         <Item type="change">Alternative themes (CS2, Hearthstone) now share the same Horde Master gate — previously only CS2 was gated.</Item>

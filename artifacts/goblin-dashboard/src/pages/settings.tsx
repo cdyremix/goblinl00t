@@ -539,19 +539,6 @@ export default function SettingsPage() {
 
       </section>
 
-      {/* Scheduled Announcements */}
-      <section className="space-y-4 max-w-2xl">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">📢</span>
-          <h2 className="text-lg font-semibold text-foreground">Scheduled Announcements</h2>
-          <Hint
-            text="The bot automatically posts these messages to your Twitch chat at the interval you set. Useful for reminding viewers about !loot, !enter, or your social links."
-            side="right"
-          />
-        </div>
-        <AnnouncementsSection />
-      </section>
-
       {/* Discord Webhook */}
       <section className="space-y-3 max-w-2xl">
         <FeatureLock

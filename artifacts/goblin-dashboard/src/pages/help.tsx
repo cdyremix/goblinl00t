@@ -36,7 +36,9 @@ const SECTIONS: Section[] = [
       { title: "Live loot feed", body: "Every drop, redemption, buff activation, and goblin event scrolls here in real time. Great for keeping on screen during a stream." },
       { title: "Recent winners", body: "The last few giveaway winners with prize details. Scoped to your current stream window." },
       { title: "Onboarding checklist", body: "Appears until you complete the core setup steps: link Twitch, pick a theme, run your first giveaway. Dismissible once done." },
-      { title: "OBS overlay link", body: "Horde Master feature — copy a browser-source URL from the stream banner to show a live loot ticker in OBS. Add it as a Browser Source in OBS Studio." },
+      { title: "OBS overlay link", body: "Goblin King (Pro) feature — copy a browser-source URL from the Creator Tools card on the Dashboard to show a live loot ticker in OBS. Add it as a Browser Source in OBS Studio." },
+      { title: "Viewer portal link", body: "Goblin King (Pro) feature — share a public URL (/viewer/:channel) with your community so they can roll loot, enter giveaways, and redeem coins from any browser without needing Twitch open. Actions echo into Twitch chat." },
+      { title: "Creator Tools card", body: "Located in the Dashboard right column. Contains one-click copy links for your Viewer Portal URL and OBS Overlay URL. Both require Goblin King." },
       { title: "Chat Users tab", body: "Every viewer who has ever earned coins or picked up an item. Search by name, adjust coin balances manually, and see full inventory." },
     ],
   },
@@ -63,7 +65,7 @@ const SECTIONS: Section[] = [
       { title: "Buff items", body: "Lucky Charm (doubles loot luck on next !loot), Coin Pouch (doubles sell value), Ticket Charm (!enter adds an extra ticket). Activated with !use <slot>." },
       { title: "Random Goblin Events", body: "The bot fires random coin drops and steal events automatically when viewers are active in chat. Toggle in Forge → Economy & Loot." },
       { title: "Coin cap", body: "Set a ceiling so balances don't grow unbounded. Coins still earn normally but !coins and the leaderboard clip to the cap. Set in Forge → Economy & Loot." },
-      { title: "Coin redemption", body: "Allow viewers to exchange coins for giveaway entries with !redeem. Toggle on/off per stream." },
+      { title: "Coin redemption", body: "Allow viewers to exchange coins with !redeem. Three configurable modes set in Forge → Economy & Loot: Entry Tickets (100 coins for a giveaway ticket), Roll Loot (200 coins for a random drop), or Lucky Charm (300 coins for a one-use luck buff). Toggle on/off per stream." },
       { title: "Coin adjustments", body: "Manually add or remove coins from any viewer via Dashboard → Chat Users → Adjust Coins. Great for raid rewards or punishments." },
       { title: "!top leaderboard", body: "Viewers (or you) can type !top in chat to show the top 5 coin holders for your channel. Great for promoting competition." },
       { title: "!gift transfers", body: "Viewers can give coins to each other with !gift @username amount. Respects per-channel coin caps and requires the sender to have sufficient balance." },
@@ -108,11 +110,12 @@ const SECTIONS: Section[] = [
     title: "Forge (settings)",
     description: "Central control for the bot, economy, theme, and integrations.",
     bullets: [
-      { title: "General tab", body: "Set your bot display name, toggle Random Goblin Events / Special-Item Drops / Coin Redemption, set the coin cap, configure the Discord webhook for winner announcements, and set Elimination Wheel speed and mode." },
+      { title: "General tab", body: "Set your bot display name, configure Elimination Wheel speed and mode, and adjust loot rarity weights." },
+      { title: "Economy & Loot tab", body: "Toggle Random Goblin Events, Special-Item Drops, and Coin Redemption. Set the coin cap and choose which action !redeem performs (Entry Tickets / Roll Loot / Lucky Charm). Adjust per-rarity loot weights." },
       { title: "Theme tab", body: "Switch between Goblin Horde, CS2 Arms Deal, or Hearthstone Tavern. Changing theme instantly swaps the loot table, bot quips, and command aliases — no restart needed. CS2 and Hearthstone are Horde Master perks." },
-      { title: "Scheduled announcements", body: "Set up timed messages the bot posts to chat automatically on a repeating interval. Useful for reminding viewers about !loot, giveaway keywords, or external links. Managed from the Loot Horde page." },
-      { title: "Discord webhook", body: "Paste a Discord channel webhook URL and the bot will post a winner embed whenever a giveaway ends. Host must be discord.com or discordapp.com." },
+      { title: "Discord webhook", body: "Paste a Discord channel webhook URL and the bot will post a winner embed whenever a giveaway ends. Host must be discord.com or discordapp.com. Requires Horde Master." },
       { title: "Steam connection", body: "Required for CS2 prize delivery. Connect your Steam account and the bot will look up your CS2 inventory for skin giveaways." },
+      { title: "Scheduled announcements", body: "Set up timed messages the bot posts to chat automatically on a repeating interval. Managed from the Loot Horde page (not Forge)." },
     ],
   },
   {
@@ -140,9 +143,9 @@ const SECTIONS: Section[] = [
     title: "Subscription tiers",
     description: "What's included at each plan level.",
     bullets: [
-      { title: "Free — Cave Dweller", body: "Bot in chat, loot drops, giveaways, basic stats, coin economy, inventory system. All core features." },
-      { title: "Premium — Horde Master", body: "Everything in Free plus CS2 and Hearthstone themes, OBS loot overlay, Discord webhook for winner announcements, giveaway presets, CSV export, and scheduled chat announcements." },
-      { title: "Pro — Goblin King", body: "Everything in Horde Master plus the AI Goblin Advisor on the Ledger page and priority support." },
+      { title: "Free — Cave Dweller", body: "Bot in chat, loot drops, giveaways, basic stats, coin economy, inventory system. All core features — no credit card needed." },
+      { title: "Premium — Horde Master", body: "Everything in Free plus CS2 and Hearthstone themes, Discord webhook for winner announcements, giveaway presets, CSV export, and scheduled chat announcements." },
+      { title: "Pro — Goblin King", body: "Everything in Horde Master plus the Viewer Portal (public loot/giveaway portal for your community), OBS browser source loot overlay, the AI Goblin Advisor on the Ledger page, and priority support." },
     ],
   },
   {
@@ -194,9 +197,10 @@ const FAQ = [
   { q: "Can I run multiple giveaways at the same time?", a: "Only one giveaway can be active at a time per channel. Start the next one after ending the current one." },
   { q: "How do I change the bot's language/style?", a: "Switch themes in Forge → Theme. Goblin Horde is the default. CS2 Arms Deal switches to Counter-Strike flavor with skin giveaway support. Hearthstone Tavern uses Innkeeper personality and card-pack loot. CS2 and Hearthstone require Horde Master." },
   { q: "Can viewers on my channel spend coins they earned on another channel?", a: "No. Coins are strictly per-channel. A viewer's balance in your chat is entirely separate from any other streamer using Goblin L00t." },
-  { q: "How do I show the loot feed on stream (OBS)?", a: "From the Dashboard, click the 'OBS Overlay' button to copy a browser-source URL. In OBS Studio, add a Browser Source and paste that URL. The overlay auto-updates with every loot drop. Requires Horde Master." },
+  { q: "How do I show the loot feed on stream (OBS)?", a: "From the Dashboard, find the Creator Tools card in the right column and click 'Copy OBS link'. In OBS Studio, add a Browser Source and paste that URL. The overlay auto-updates with every loot drop and giveaway winner. Requires Goblin King (Pro)." },
   { q: "What does !gift do?", a: "Viewers can use !gift @username amount to transfer coins to each other. The sender needs enough balance, the transfer respects the channel's coin cap, and the bot confirms the transaction in chat." },
-  { q: "How do scheduled announcements work?", a: "Add timed messages in Loot Horde → Scheduled Announcements. Each one posts to chat on a repeating interval you choose (e.g. every 15 minutes). Useful for !loot reminders or giveaway callouts." },
+  { q: "How do scheduled announcements work?", a: "Open the Loot Horde page and expand the Scheduled Announcements section. Each message posts to chat on a repeating interval you choose (e.g. every 15 minutes). Useful for !loot reminders or giveaway callouts. Requires Horde Master." },
+  { q: "What is the Viewer Portal?", a: "The Viewer Portal (/viewer/:channel) is a public web page you share with your community. Viewers log in with Twitch and can roll loot, enter giveaways, redeem coins, and sell items — all without having Twitch open. Every action is also posted to Twitch chat so the rest of the stream can see it. Requires Goblin King (Pro)." },
 ];
 
 /* ─── Page ─── */

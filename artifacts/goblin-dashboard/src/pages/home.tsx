@@ -19,7 +19,9 @@ const COMMANDS: { cmd: string; desc: string; rarity: string; group: CmdGroup }[]
   { cmd: "!inventory", desc: "List the items in your pouch (5-slot cap)", rarity: "uncommon", group: "general" },
   { cmd: "!sell", desc: "Sell an inventory slot for coins — !sell <slot> or !sell all", rarity: "uncommon", group: "general" },
   { cmd: "!use", desc: "Activate a buff item from your inventory — !use <slot>", rarity: "rare", group: "general" },
-  { cmd: "!redeem", desc: "Redeem coins for extra giveaway entries (100 coins = 1 entry)", rarity: "rare", group: "general" },
+  { cmd: "!redeem", desc: "Spend coins on the streamer's chosen reward — entries, a loot roll, or a luck buff", rarity: "rare", group: "general" },
+  { cmd: "!top", desc: "Show the top 5 coin holders for this channel in chat", rarity: "uncommon", group: "general" },
+  { cmd: "!gift", desc: "Transfer coins to another viewer — !gift @username amount", rarity: "uncommon", group: "general" },
   { cmd: "!coins", desc: "Check your coin balance (alias for !points)", rarity: "common", group: "general" },
   { cmd: "!help", desc: "Show the bot's currently-enabled commands", rarity: "common", group: "general" },
   { cmd: "!goblin", desc: "Summon the goblin for a chaotic response", rarity: "uncommon", group: "goblin" },
@@ -213,7 +215,7 @@ export function Home() {
       <section className="border-y border-border/50 bg-card/30">
         <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <ProofStat value="2 min" label="Average setup time" />
-          <ProofStat value="14" label="Built-in chat commands" />
+          <ProofStat value="16" label="Built-in chat commands" />
           <ProofStat value="3" label="Themes" />
           <ProofStat value="5" label="Loot rarity tiers" />
         </div>
