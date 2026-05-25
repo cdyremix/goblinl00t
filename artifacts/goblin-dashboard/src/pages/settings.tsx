@@ -23,6 +23,7 @@ import { defaultBotNameFor } from "@/lib/cs2-agents";
 import { FeatureLock, useSubscriptionTier, LockedHint } from "@/hooks/use-tier";
 import { hasFeature } from "@/lib/plans";
 import { withAdminAs } from "@/lib/admin-as";
+import { isReservedKeyword } from "@/lib/bot-commands";
 
 type BotTheme = "goblin" | "cs2" | "hearthstone";
 
@@ -1635,9 +1636,10 @@ function NewCustomCommandForm({
 
   const trimmedName = name.trim().toLowerCase();
   const nameOk = /^!?[a-z0-9_]{2,32}$/.test(trimmedName);
+  const nameReserved = nameOk && isReservedKeyword(trimmedName);
   const responseOk = responseText.trim().length > 0 && responseText.length <= 400;
   const cooldownOk = Number.isInteger(cooldown) && cooldown >= 0 && cooldown <= 3600;
-  const valid = nameOk && responseOk && cooldownOk;
+  const valid = nameOk && !nameReserved && responseOk && cooldownOk;
 
   return (
     <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
@@ -1654,6 +1656,9 @@ function NewCustomCommandForm({
           />
           {!nameOk && name.length > 0 && (
             <p className="text-[11px] text-destructive">Letters, numbers, underscores only (2–32 chars)</p>
+          )}
+          {nameOk && nameReserved && (
+            <p className="text-[11px] text-destructive">!{trimmedName.replace(/^!/, "")} is a built-in command — choose a different name</p>
           )}
         </div>
         <div className="space-y-1">

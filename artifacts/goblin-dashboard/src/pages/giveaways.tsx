@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Giveaway } from "@workspace/api-client-react";
 import { withAdminAs } from "@/lib/admin-as";
+import { isReservedKeyword } from "@/lib/bot-commands";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +46,10 @@ const formSchema = z.object({
   prizeIconUrl: z.string().optional(),
   prizeBotCoins: z.number().int().positive().optional(),
   prizeBotRarity: z.enum(["common", "uncommon", "rare", "epic", "legendary"]).optional(),
-  keyword: z.string().min(1, "Keyword is required").regex(/^\w+$/, "Must be a single word (no spaces)"),
+  keyword: z.string().min(1, "Keyword is required").regex(/^\w+$/, "Must be a single word (no spaces)").refine(
+    (v) => !isReservedKeyword(v),
+    (v) => ({ message: `!${v} is a built-in bot command — choose a different keyword` }),
+  ),
   description: z.string().optional(),
   requireFollower: z.boolean().default(false),
   subscriberOnly: z.boolean().default(false),

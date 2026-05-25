@@ -17,7 +17,7 @@ import {
   DeleteGiveawayEntryParams,
   ListGiveawaysQueryParams,
 } from "@workspace/api-zod";
-import { announceGiveawayStart, announceGiveawayEnd } from "../bot/bot-service";
+import { announceGiveawayStart, announceGiveawayEnd, isBuiltInCommand } from "../bot/bot-service";
 import { getChannelTheme } from "../bot/channel-theme";
 import { fireDiscordWebhook } from "../lib/discord-webhook";
 import { requireStreamerChannel, resolveStreamerChannelForRead } from "../lib/auth-helpers";
@@ -149,6 +149,14 @@ router.post("/giveaway", async (req, res) => {
       error: "CS2 skin prizes require Horde Master. Try a coin or bot-item prize instead.",
       feature: "skin-trading",
     });
+    return;
+  }
+
+  // Prevent giveaway keywords from shadowing built-in bot commands.
+  // The keyword is stored without "!" so we normalise before checking.
+  const kw = (body.keyword ?? "enter").trim().toLowerCase().replace(/^!/, "");
+  if (isBuiltInCommand(`!${kw}`)) {
+    res.status(400).json({ error: `!${kw} is a built-in bot command — choose a different keyword` });
     return;
   }
 
