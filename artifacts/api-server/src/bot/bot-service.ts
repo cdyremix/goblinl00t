@@ -432,14 +432,13 @@ async function replyToUser(
   if (opts?.whisper) {
     const ok = await helixWhisper(username, message);
     if (ok) return;
+    // Helix whisper rejected — fall through to public chat so the message
+    // is never silently lost.
   }
   try {
-    await client.whisper(username, message);
-  } catch {
-    // Whisper failed (not verified, rate-limited, etc.) — fall back to chat.
-    try { await client.say(channel, message); } catch (fallbackErr) {
-      logger.warn({ err: fallbackErr, username, channel }, "replyToUser: both whisper and say failed");
-    }
+    await client.say(channel, message);
+  } catch (err) {
+    logger.warn({ err, username, channel }, "replyToUser: say failed");
   }
 }
 
