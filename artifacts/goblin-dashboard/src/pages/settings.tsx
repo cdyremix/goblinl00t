@@ -22,6 +22,7 @@ import { Hint } from "@/components/hint";
 import { defaultBotNameFor } from "@/lib/cs2-agents";
 import { FeatureLock, useSubscriptionTier, LockedHint } from "@/hooks/use-tier";
 import { hasFeature } from "@/lib/plans";
+import { withAdminAs } from "@/lib/admin-as";
 
 type BotTheme = "goblin" | "cs2" | "hearthstone";
 
@@ -90,7 +91,7 @@ function useSettings() {
     queryKey: ["bot-settings"],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch("/api/settings", {
+      const res = await fetch(withAdminAs("/api/settings"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to load settings");
@@ -101,7 +102,7 @@ function useSettings() {
   const mutation = useMutation<BotSettings, Error, Partial<BotSettings>>({
     mutationFn: async (data) => {
       const token = await getToken();
-      const res = await fetch("/api/settings", {
+      const res = await fetch(withAdminAs("/api/settings"), {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(data),

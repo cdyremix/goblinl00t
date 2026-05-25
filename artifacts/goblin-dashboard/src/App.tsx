@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { setAdminAs } from "@/lib/admin-as";
 import { Layout } from "@/components/layout";
 import { Home } from "@/pages/home";
 import { Dashboard } from "@/pages/dashboard";
@@ -210,8 +211,26 @@ function SignUpPage() {
   );
 }
 
+/**
+ * Reads `?as=` from the URL and syncs it into the module-level admin-as
+ * store so that every API call (reads + writes) on any page automatically
+ * includes the impersonation param.  Runs on every route change.
+ */
+function AdminAsSync() {
+  const [location] = useLocation();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ch = params.get("as")?.trim().toLowerCase() ?? null;
+    setAdminAs(ch);
+    return () => setAdminAs(null);
+  }, [location]);
+  return null;
+}
+
 function AppRouter() {
   return (
+    <>
+      <AdminAsSync />
     <Switch>
       <Route path="/" component={HomeRedirect} />
       <Route path="/sign-in/*?" component={SignInPage} />
@@ -281,6 +300,7 @@ function AppRouter() {
       <Route path="/viewer/:channel" component={ViewerPortal} />
       <Route component={NotFound} />
     </Switch>
+    </>
   );
 }
 

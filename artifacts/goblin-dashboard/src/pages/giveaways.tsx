@@ -7,6 +7,7 @@ import {
   getGetGiveawayEntriesQueryKey, getGetBotSettingsQueryKey,
 } from "@workspace/api-client-react";
 import type { Giveaway } from "@workspace/api-client-react";
+import { withAdminAs } from "@/lib/admin-as";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +81,7 @@ export function Giveaways() {
     queryKey: ["announcements"],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch("/api/settings/announcements", {
+      const res = await fetch(withAdminAs("/api/settings/announcements"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return [];
@@ -91,7 +92,7 @@ export function Giveaways() {
   const createAnnouncement = useMutation({
     mutationFn: async (data: { message: string; intervalMinutes: number }) => {
       const token = await getToken();
-      const res = await fetch("/api/settings/announcements", {
+      const res = await fetch(withAdminAs("/api/settings/announcements"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(data),
@@ -108,7 +109,7 @@ export function Giveaways() {
   const deleteAnnouncement = useMutation({
     mutationFn: async (id: number) => {
       const token = await getToken();
-      const res = await fetch(`/api/settings/announcements/${id}`, {
+      const res = await fetch(withAdminAs(`/api/settings/announcements/${id}`), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -120,7 +121,7 @@ export function Giveaways() {
   const toggleAnnouncement = useMutation({
     mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
       const token = await getToken();
-      const res = await fetch(`/api/settings/announcements/${id}`, {
+      const res = await fetch(withAdminAs(`/api/settings/announcements/${id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ enabled }),
@@ -920,7 +921,7 @@ function QuickPrizePanel() {
   >({
     mutationFn: async (body) => {
       const token = await getToken();
-      const res = await fetch("/api/loot-hoard/drop", {
+      const res = await fetch(withAdminAs("/api/loot-hoard/drop"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),

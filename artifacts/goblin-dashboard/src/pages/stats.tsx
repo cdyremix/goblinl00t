@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/react";
+import { withAdminAs } from "@/lib/admin-as";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -68,7 +69,7 @@ export function Stats() {
     setExporting(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/stats/export?range=${effectiveRange}&kind=${exportKind}`, {
+      const res = await fetch(withAdminAs(`/api/stats/export?range=${effectiveRange}&kind=${exportKind}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);

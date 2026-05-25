@@ -47,21 +47,42 @@ export async function requireStreamerChannel(
     res.status(401).json({ error: "Unauthorized" });
     return null;
   }
-  const [user] = await db
+  const [caller] = await db
     .select()
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId))
     .limit(1);
-  if (!user) {
+  if (!caller) {
     res.status(401).json({ error: "Unknown user" });
     return null;
   }
-  const channel = user.twitchUsername?.trim().toLowerCase();
+
+  // Admin override: admins may pass ?as=channelname to control any channel.
+  // We look up the target user row so that channel-specific settings (theme,
+  // feature flags, etc.) all resolve against the correct account.
+  const asParam =
+    typeof req.query["as"] === "string"
+      ? req.query["as"].trim().toLowerCase().replace(/^#/, "")
+      : null;
+  if (asParam && caller.isAdmin) {
+    const [target] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.twitchUsername, asParam))
+      .limit(1);
+    if (!target) {
+      res.status(404).json({ error: `Channel '${asParam}' not found.` });
+      return null;
+    }
+    return { user: target, channel: asParam };
+  }
+
+  const channel = caller.twitchUsername?.trim().toLowerCase();
   if (!channel) {
     res.status(403).json({ error: "Connect your Twitch account first." });
     return null;
   }
-  return { user, channel };
+  return { user: caller, channel };
 }
 
 /**

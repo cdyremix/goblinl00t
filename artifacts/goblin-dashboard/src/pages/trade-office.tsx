@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/react";
+import { withAdminAs } from "@/lib/admin-as";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Package, ExternalLink, CheckCircle2, Clock, Send, Ban, ChevronDown,
@@ -54,7 +55,7 @@ function useTrades() {
     queryKey: ["trade-fulfillments"],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch("/api/trade-fulfillments", {
+      const res = await fetch(withAdminAs("/api/trade-fulfillments"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to load");
@@ -65,7 +66,7 @@ function useTrades() {
   const update = useMutation<TradeFulfillment, Error, { id: number } & Partial<TradeFulfillment>>({
     mutationFn: async ({ id, ...data }) => {
       const token = await getToken();
-      const res = await fetch(`/api/trade-fulfillments/${id}`, {
+      const res = await fetch(withAdminAs(`/api/trade-fulfillments/${id}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(data),

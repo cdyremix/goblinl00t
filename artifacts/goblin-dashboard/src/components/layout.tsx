@@ -4,7 +4,7 @@ import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
-  Plug, X, MessageCircle, Crown, Users2,
+  Plug, X, MessageCircle, Crown, Users2, ShieldAlert,
 } from "lucide-react";
 import { useSubscriptionTier } from "@/hooks/use-tier";
 import { UserAvatar } from "@/components/user-avatar";
@@ -286,6 +286,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative">
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
         <div className="relative z-10 p-8 max-w-7xl mx-auto min-h-full">
+          <AdminControlBanner />
           <ConnectTwitchReminder
             show={!profileQuery.isLoading && profileQuery.data !== undefined && !twitchUsername && !location.startsWith("/account")}
             userId={user?.id}
@@ -293,6 +294,55 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Shown whenever the admin is controlling another streamer's account via
+ * the `?as=` param.  Reminds the admin which channel they are operating as
+ * and provides an escape hatch back to their own dashboard.
+ */
+function AdminControlBanner() {
+  const [location] = useLocation();
+  // Read from the live URL each render so it updates on navigation.
+  const params = new URLSearchParams(window.location.search);
+  const adminAs = params.get("as")?.trim().toLowerCase() ?? null;
+
+  if (!adminAs) return null;
+
+  // Build links that carry the ?as= param to other pages.
+  const asParam = `?as=${encodeURIComponent(adminAs)}`;
+
+  return (
+    <div
+      className="mb-6 flex items-center gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 shadow-[0_0_20px_rgba(245,158,11,0.08)]"
+      role="status"
+      data-testid="banner-admin-control"
+    >
+      <div className="w-9 h-9 rounded-md bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+        <ShieldAlert className="w-4 h-4 text-amber-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-amber-300">
+          Admin control: <span className="font-mono">{adminAs}</span>
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-3">
+          <Link href={`/dashboard${asParam}`} className={`hover:text-foreground transition-colors ${location === "/dashboard" ? "text-amber-400 font-medium" : ""}`}>Dashboard</Link>
+          <Link href={`/settings${asParam}`} className={`hover:text-foreground transition-colors ${location === "/settings" ? "text-amber-400 font-medium" : ""}`}>Settings</Link>
+          <Link href={`/giveaway${asParam}`} className={`hover:text-foreground transition-colors ${location === "/giveaway" ? "text-amber-400 font-medium" : ""}`}>Giveaways</Link>
+          <Link href={`/stats${asParam}`} className={`hover:text-foreground transition-colors ${location === "/stats" ? "text-amber-400 font-medium" : ""}`}>Stats</Link>
+          <Link href={`/trade-office${asParam}`} className={`hover:text-foreground transition-colors ${location === "/trade-office" ? "text-amber-400 font-medium" : ""}`}>Trade Office</Link>
+        </p>
+      </div>
+      <Link
+        href="/dashboard"
+        className="shrink-0 inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-amber-500/30 transition-all"
+        data-testid="button-exit-admin-control"
+      >
+        <X className="w-3 h-3" />
+        Exit
+      </Link>
     </div>
   );
 }
