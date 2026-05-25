@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@clerk/react";
+import { useSignIn } from "@clerk/react/legacy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Crown, Search, Shield, Sword, Tv, Box, Coins, RefreshCw, AlertTriangle, Trash2,
   Pencil, Mail, Key, Receipt, ExternalLink, Loader2, Wrench, Lock, UserPlus,
   CheckCircle2, XCircle, MoreHorizontal, UserCog, UserX, Inbox, ChevronDown, ChevronUp,
+  LogIn,
 } from "lucide-react";
 import { PasswordInput } from "@/components/password-input";
 import {
@@ -384,6 +386,7 @@ export function Admin() {
                   onDelete={() => setDeletingUser(u)}
                   onQuickAction={(action) => quickAction.mutate({ user: u, action })}
                   quickActionPending={quickAction.isPending && quickAction.variables?.user.id === u.id}
+                  authedFetch={authedFetch}
                 />
               ))}
             </div>
@@ -969,18 +972,70 @@ type QuickAction =
   | "make-regular"
   | "verify-email";
 
+function ImpersonateButton({ userId, authedFetch }: { userId: number; authedFetch: ReturnType<typeof useAuthedFetch> }) {
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const [, setLocation] = useLocation();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleTakeOver() {
+    if (!isLoaded || !signIn) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await authedFetch(`/api/admin/users/${userId}/impersonate`, { method: "POST" });
+      const json = (await r.json().catch(() => ({}))) as { ticket?: string; error?: string };
+      if (!r.ok || !json.ticket) {
+        setError(json.error ?? `Failed (${r.status})`);
+        return;
+      }
+      const result = await signIn.create({ strategy: "ticket", ticket: json.ticket });
+      if (result.status === "complete" && result.createdSessionId) {
+        await setActive({ session: result.createdSessionId });
+        setLocation("/dashboard");
+        return;
+      }
+      setError(`Unexpected status: ${result.status}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleTakeOver}
+        disabled={busy}
+        data-testid={`button-impersonate-${userId}`}
+        title="Sign in as this user"
+        className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+      >
+        {busy ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <LogIn className="w-3.5 h-3.5 mr-1.5" />}
+        Take Over
+      </Button>
+      {error && <p className="text-[10px] text-destructive max-w-[160px] text-right leading-tight">{error}</p>}
+    </div>
+  );
+}
+
 function UserRow({
   user,
   onEdit,
   onDelete,
   onQuickAction,
   quickActionPending,
+  authedFetch,
 }: {
   user: AdminUser;
   onEdit: () => void;
   onDelete: () => void;
   onQuickAction: (action: QuickAction) => void;
   quickActionPending: boolean;
+  authedFetch: ReturnType<typeof useAuthedFetch>;
 }) {
   const tier = (user.subscriptionTier in TIER_BADGE ? user.subscriptionTier : "free") as Tier;
   const badge = TIER_BADGE[tier];
@@ -1060,19 +1115,7 @@ function UserRow({
       </div>
 
       <div className="flex items-center gap-2 shrink-0 flex-wrap">
-        {user.twitchUsername && (
-          <Link href={`/dashboard?as=${encodeURIComponent(user.twitchUsername.toLowerCase())}`}>
-            <Button
-              variant="outline"
-              size="sm"
-              data-testid={`button-view-dashboard-${user.id}`}
-              title={`View @${user.twitchUsername}'s dashboard`}
-            >
-              <Tv className="w-3.5 h-3.5 mr-1.5" />
-              View
-            </Button>
-          </Link>
-        )}
+        <ImpersonateButton userId={user.id} authedFetch={authedFetch} />
         <Button
           variant="outline"
           size="sm"

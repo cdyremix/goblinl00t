@@ -852,6 +852,44 @@ router.post("/admin/users/:id/password", async (req, res) => {
  * Refuses to delete the caller themselves so an admin can't lock
  * themselves out with one slip.
  */
+/**
+ * POST /admin/users/:id/impersonate
+ * Mints a short-lived Clerk sign-in ticket for the target user so an admin
+ * can take over their session without knowing their password.
+ * Server-gated: requireAdmin only — never trust the client.
+ */
+router.post("/admin/users/:id/impersonate", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+  if (id === ctx.user.id) {
+    res.status(400).json({ error: "You are already logged in as this user." });
+    return;
+  }
+  const [user] = await db.select({ clerkUserId: usersTable.clerkUserId })
+    .from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  try {
+    const token = await clerkClient.signInTokens.createSignInToken({
+      userId: user.clerkUserId,
+      expiresInSeconds: 120,
+    });
+    req.log.info({ adminId: ctx.user.id, targetId: id }, "admin: impersonate token minted");
+    res.json({ ticket: token.token });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : "Unknown error";
+    req.log.warn({ errMessage, targetId: id }, "admin: impersonate token failed");
+    res.status(500).json({ error: "Failed to mint impersonation ticket" });
+  }
+});
+
 router.delete("/admin/users/:id", async (req, res) => {
   const ctx = await requireAdmin(req, res);
   if (!ctx) return;
