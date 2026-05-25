@@ -392,6 +392,22 @@ async function logCommand(command: string, username: string, channel: string) {
 }
 
 /**
+ * Rarity tiers ranked lowest→highest. Used for loot announce threshold checks.
+ */
+const RARITY_RANK: Record<string, number> = {
+  common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4,
+};
+
+/**
+ * Returns true if `rarity` meets or exceeds the per-channel announce threshold.
+ * null / "all" = always announce (original behaviour).
+ */
+function meetsAnnounceThreshold(rarity: string, minRarity: string | null): boolean {
+  if (!minRarity || minRarity === "all") return true;
+  return (RARITY_RANK[rarity] ?? 0) >= (RARITY_RANK[minRarity] ?? 0);
+}
+
+/**
  * Send a direct reply to the viewer who typed the command.
  *
  * Tries `client.whisper()` first so the response is private; if tmi.js
@@ -524,18 +540,25 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       });
 
       const slotTag = `[${result.slot}/${INVENTORY_CAP}]`;
-      if (loot.kind === "buff") {
-        void replyToUser(
-          channel,
-          username,
-          `${emoji} @${username} found [BUFF] ${loot.item}! ${slotTag} · ${loot.flavor} · !use ${result.slot} (${loot.charges}×) · !sell ${result.slot} for ${loot.coinValue}🪙`
-        );
-      } else {
-        void replyToUser(
-          channel,
-          username,
-          `${emoji} @${username} snagged [${loot.rarity.toUpperCase()}] ${loot.item}! ${slotTag} · !sell ${result.slot} for ${loot.coinValue}🪙 · ${flavor}`
-        );
+      // Buffs always announce (they need !use / !sell instructions).
+      // Plain items only announce if rarity meets the channel's threshold.
+      const shouldAnnounce =
+        loot.kind === "buff" ||
+        meetsAnnounceThreshold(loot.rarity, settings.lootAnnounceMinRarity);
+      if (shouldAnnounce) {
+        if (loot.kind === "buff") {
+          void replyToUser(
+            channel,
+            username,
+            `${emoji} @${username} found [BUFF] ${loot.item}! ${slotTag} · ${loot.flavor} · !use ${result.slot} (${loot.charges}×) · !sell ${result.slot} for ${loot.coinValue}🪙`
+          );
+        } else {
+          void replyToUser(
+            channel,
+            username,
+            `${emoji} @${username} snagged [${loot.rarity.toUpperCase()}] ${loot.item}! ${slotTag} · !sell ${result.slot} for ${loot.coinValue}🪙 · ${flavor}`
+          );
+        }
       }
     }
 

@@ -61,6 +61,7 @@ interface BotSettings {
   discordWebhookUrl: string | null;
   lootRarityWeights: RarityWeights | null;
   redeemAction: "entries" | "loot" | "luck";
+  lootAnnounceMinRarity: string | null;
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -545,6 +546,38 @@ export default function SettingsPage() {
               onCheckedChange={(v) => mutation.mutate({ lootDropsEnabled: v })}
               data-testid="switch-loot-drops"
             />
+          </div>
+        </div>
+
+        {/* Loot Announce Threshold */}
+        <div className="rounded-xl border border-purple-400/15 bg-purple-500/5 p-5">
+          <div className="flex items-center gap-3">
+            <span className="text-base">🔕</span>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-semibold text-foreground">Chat Announce Threshold</Label>
+                <Hint text="Only post !loot results to chat when the drop meets this rarity. Lower rarities succeed silently — the item still lands in the viewer's pouch. Buff items always announce. Set to 'All drops' to restore the original behaviour." side="right" />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Quiet Common/Uncommon drops to reduce chat flood.</p>
+            </div>
+            <Select
+              value={settings?.lootAnnounceMinRarity ?? "all"}
+              onValueChange={(v) =>
+                mutation.mutate({ lootAnnounceMinRarity: v === "all" ? null : v })
+              }
+              disabled={mutation.isPending}
+            >
+              <SelectTrigger className="w-44 h-8 text-xs" data-testid="select-loot-announce-rarity">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All drops</SelectItem>
+                <SelectItem value="uncommon">⚪ Uncommon &amp; above</SelectItem>
+                <SelectItem value="rare">🔵 Rare &amp; above</SelectItem>
+                <SelectItem value="epic">🟣 Epic &amp; above</SelectItem>
+                <SelectItem value="legendary">🟡 Legendary only</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

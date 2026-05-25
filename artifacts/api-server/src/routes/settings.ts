@@ -52,6 +52,7 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
     discordWebhookUrl: user.discordWebhookUrl ?? null,
     lootRarityWeights: user.lootRarityWeights ?? null,
     redeemAction: (user.redeemAction ?? "entries") as "entries" | "loot" | "luck",
+    lootAnnounceMinRarity: user.lootAnnounceMinRarity ?? null,
   };
 }
 
@@ -86,6 +87,7 @@ router.put("/settings", async (req, res) => {
       common: number; uncommon: number; rare: number; epic: number; legendary: number;
     } | null;
     redeemAction?: string;
+    lootAnnounceMinRarity?: string | null;
   };
 
   // Resolve the caller's row early so we can tier-gate paid settings
@@ -241,6 +243,19 @@ router.put("/settings", async (req, res) => {
       return;
     }
     updates.redeemAction = body.redeemAction;
+  }
+
+  if ("lootAnnounceMinRarity" in body) {
+    const v = body.lootAnnounceMinRarity;
+    const VALID_ANNOUNCE_RARITIES = ["all", "uncommon", "rare", "epic", "legendary"] as const;
+    if (v === null || v === undefined || v === "all") {
+      updates.lootAnnounceMinRarity = null;
+    } else if (VALID_ANNOUNCE_RARITIES.includes(v as (typeof VALID_ANNOUNCE_RARITIES)[number])) {
+      updates.lootAnnounceMinRarity = v;
+    } else {
+      res.status(400).json({ error: "lootAnnounceMinRarity must be null, 'all', 'uncommon', 'rare', 'epic', or 'legendary'" });
+      return;
+    }
   }
 
   const [updated] = await db

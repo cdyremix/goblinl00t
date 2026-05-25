@@ -36,4 +36,9 @@ export interface UpdateBotSettings {
   wheelMode?: UpdateBotSettingsWheelMode;
   wheelSpeed?: UpdateBotSettingsWheelSpeed;
   eliminationFlavorEnabled?: boolean;
+  /**
+   * Minimum rarity to post in chat after a successful !loot drop. null/all = announce all. uncommon|rare|epic|legendary = only at or above that tier.
+   * @nullable
+   */
+  lootAnnounceMinRarity?: string | null;
 }

@@ -25,6 +25,12 @@ export interface ChannelSettings {
   wheelSpeed: "slow" | "medium" | "fast";
   /** Custom rarity weights for !loot rolls. null = use DEFAULT_RARITY_WEIGHTS. */
   lootRarityWeights: RarityWeights | null;
+  /**
+   * Minimum rarity the bot announces in chat after a successful !loot drop.
+   * Drops below this tier are silently added to inventory.
+   * null / "all" = announce everything (default). Buffs always announce.
+   */
+  lootAnnounceMinRarity: string | null;
 }
 
 const DEFAULTS: ChannelSettings = {
@@ -38,6 +44,7 @@ const DEFAULTS: ChannelSettings = {
   wheelMode: "auto",
   wheelSpeed: "medium",
   lootRarityWeights: null,
+  lootAnnounceMinRarity: null,
 };
 
 const cache = new Map<string, ChannelSettings>();
@@ -69,6 +76,7 @@ async function loadFromDb(channel: string): Promise<ChannelSettings> {
     redeemAction:
       user.redeemAction === "loot" || user.redeemAction === "luck" ? user.redeemAction : "entries",
     lootRarityWeights: user.lootRarityWeights ?? null,
+    lootAnnounceMinRarity: user.lootAnnounceMinRarity ?? null,
   };
 }
 

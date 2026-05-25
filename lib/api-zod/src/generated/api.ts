@@ -1086,6 +1086,12 @@ export const GetBotSettingsResponse = zod.object({
   wheelMode: zod.enum(["auto", "manual"]),
   wheelSpeed: zod.enum(["slow", "medium", "fast"]),
   eliminationFlavorEnabled: zod.boolean(),
+  lootAnnounceMinRarity: zod
+    .string()
+    .nullable()
+    .describe(
+      "Minimum rarity to post in chat after a successful !loot drop. null\/all = announce all drops. uncommon|rare|epic|legendary = only announce at or above that tier. Buffs always announce.",
+    ),
 });
 
 /**
@@ -1114,6 +1120,12 @@ export const UpdateBotSettingsBody = zod.object({
   wheelMode: zod.enum(["auto", "manual"]).optional(),
   wheelSpeed: zod.enum(["slow", "medium", "fast"]).optional(),
   eliminationFlavorEnabled: zod.boolean().optional(),
+  lootAnnounceMinRarity: zod
+    .string()
+    .nullish()
+    .describe(
+      "Minimum rarity to post in chat after a successful !loot drop. null\/all = announce all. uncommon|rare|epic|legendary = only at or above that tier.",
+    ),
 });
 
 export const UpdateBotSettingsResponse = zod.object({
@@ -1139,6 +1151,12 @@ export const UpdateBotSettingsResponse = zod.object({
   wheelMode: zod.enum(["auto", "manual"]),
   wheelSpeed: zod.enum(["slow", "medium", "fast"]),
   eliminationFlavorEnabled: zod.boolean(),
+  lootAnnounceMinRarity: zod
+    .string()
+    .nullable()
+    .describe(
+      "Minimum rarity to post in chat after a successful !loot drop. null\/all = announce all drops. uncommon|rare|epic|legendary = only announce at or above that tier. Buffs always announce.",
+    ),
 });
 
 /**

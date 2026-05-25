@@ -36,4 +36,9 @@ export interface BotSettings {
   wheelMode: BotSettingsWheelMode;
   wheelSpeed: BotSettingsWheelSpeed;
   eliminationFlavorEnabled: boolean;
+  /**
+   * Minimum rarity to post in chat after a successful !loot drop. null/all = announce all drops. uncommon|rare|epic|legendary = only announce at or above that tier. Buffs always announce.
+   * @nullable
+   */
+  lootAnnounceMinRarity: string | null;
 }

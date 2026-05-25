@@ -90,6 +90,12 @@ export const usersTable = pgTable("users", {
   lootRarityWeights: jsonb("loot_rarity_weights").$type<{
     common: number; uncommon: number; rare: number; epic: number; legendary: number;
   }>(),
+  // Minimum rarity for the bot to announce a successful !loot result in chat.
+  // Drops below this tier are silently added to inventory — the viewer still
+  // gets the item, but the bot stays quiet. null / "all" = announce everything
+  // (original behaviour). "uncommon" | "rare" | "epic" | "legendary" = quiet below.
+  // Buffs are always announced regardless of this setting.
+  lootAnnounceMinRarity: text("loot_announce_min_rarity"),
   // Stripe customer + active subscription IDs. Customer created lazily on
   // first checkout; subscription written back from webhook + reconciled
   // on every /users/me read so the UI is never stale even if a webhook
