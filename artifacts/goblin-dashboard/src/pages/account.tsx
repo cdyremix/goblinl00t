@@ -494,7 +494,7 @@ export function Account() {
             <DialogTitle className="font-medieval">Choose your goblin form</DialogTitle>
             <DialogDescription>This avatar shows up in the sidebar and on your profile.</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
             {AVATAR_PRESETS.map((p) => {
               const selected = profile?.user.avatarPreset === p.id;
               return (

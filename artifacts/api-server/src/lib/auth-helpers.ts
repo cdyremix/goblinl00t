@@ -85,10 +85,17 @@ export async function resolveStreamerChannelForRead(
     return null;
   }
   const [user] = await db
-    .select({ twitchUsername: usersTable.twitchUsername })
+    .select({ twitchUsername: usersTable.twitchUsername, isAdmin: usersTable.isAdmin })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, userId))
     .limit(1);
+
+  // Admin override: admins may pass ?as=channelname to read any channel's data.
+  const asParam = typeof req.query["as"] === "string"
+    ? req.query["as"].trim().toLowerCase().replace(/^#/, "")
+    : null;
+  if (asParam && user?.isAdmin) return { channel: asParam };
+
   const linked = user?.twitchUsername?.trim().toLowerCase();
   if (linked) return { channel: linked };
   if (process.env["NODE_ENV"] !== "production") {

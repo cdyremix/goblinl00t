@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { clerkClient } from "@clerk/express";
 import { requireAdmin } from "../lib/auth-helpers";
@@ -1104,9 +1104,25 @@ router.post("/admin/users/:id/subscription/cancel", async (req, res) => {
 });
 
 /**
- * GET /admin/stats — system-wide summary card for the admin dashboard.
- * Aggregates total users, paid users by tier, twitch-linked count, etc.
+ * GET /admin/channels — list all users that have linked a Twitch account.
+ * Used by the admin "view as" dashboard feature.
  */
+router.get("/admin/channels", async (req, res) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const channels = await db
+    .select({
+      id: usersTable.id,
+      twitchUsername: usersTable.twitchUsername,
+      botName: usersTable.botName,
+      subscriptionTier: usersTable.subscriptionTier,
+    })
+    .from(usersTable)
+    .where(isNotNull(usersTable.twitchUsername))
+    .orderBy(usersTable.twitchUsername);
+  res.json({ channels });
+});
+
 router.get("/admin/stats", async (req, res) => {
   const ctx = await requireAdmin(req, res);
   if (!ctx) return;

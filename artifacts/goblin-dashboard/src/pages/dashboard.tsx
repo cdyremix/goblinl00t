@@ -6,13 +6,16 @@ import {
   useRestartBot,
   useBotPartChannel,
   useBotJoinChannel,
+  type Giveaway,
+  type LootDrop,
+  type StatsOverview,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Crown, Gem, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi,
-  Copy, Radio, Tv, Clock, Gift, Package, LayoutDashboard,
+  Copy, Radio, Tv, Clock, Gift, Package, LayoutDashboard, Eye, ArrowLeft,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
@@ -82,6 +85,7 @@ function StreamHero({
   onRestart,
   onPart,
   onJoin,
+  adminView,
 }: {
   streamInfo: StreamInfo | undefined;
   botStatus: { connected: boolean; channels?: string[] } | undefined;
@@ -95,6 +99,7 @@ function StreamHero({
   onRestart: () => void;
   onPart: () => void;
   onJoin: () => void;
+  adminView?: boolean;
 }) {
   const isLive = streamInfo?.isLive === true;
 
@@ -249,48 +254,52 @@ function StreamHero({
               )}
             </div>
 
-            {/* Restart bot */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRestart}
-              disabled={restarting}
-              className="gap-1.5 h-8 px-3 text-xs rounded-full"
-              data-testid="btn-restart-bot"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
-              {restarting ? "Restarting…" : "Restart Bot"}
-            </Button>
+            {!adminView && (
+              <>
+                {/* Restart bot */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRestart}
+                  disabled={restarting}
+                  className="gap-1.5 h-8 px-3 text-xs rounded-full"
+                  data-testid="btn-restart-bot"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} />
+                  {restarting ? "Restarting…" : "Restart Bot"}
+                </Button>
 
-            {/* Connect / disconnect */}
-            {myChannel && (
-              botIsInMyChannel ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onPart}
-                  disabled={parting}
-                  className="gap-1.5 h-8 px-3 text-xs rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  data-testid="btn-disconnect-bot"
-                  title="Remove the bot from your channel (Twitch link stays intact)"
-                >
-                  <WifiOff className="w-3.5 h-3.5" />
-                  {parting ? "Disconnecting…" : "Disconnect Bot"}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onJoin}
-                  disabled={joining}
-                  className="gap-1.5 h-8 px-3 text-xs rounded-full text-green-500 hover:text-green-400 hover:bg-green-500/10"
-                  data-testid="btn-reconnect-bot"
-                  title="Re-add the bot to your channel"
-                >
-                  <Wifi className="w-3.5 h-3.5" />
-                  {joining ? "Reconnecting…" : "Reconnect Bot"}
-                </Button>
-              )
+                {/* Connect / disconnect */}
+                {myChannel && (
+                  botIsInMyChannel ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onPart}
+                      disabled={parting}
+                      className="gap-1.5 h-8 px-3 text-xs rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      data-testid="btn-disconnect-bot"
+                      title="Remove the bot from your channel (Twitch link stays intact)"
+                    >
+                      <WifiOff className="w-3.5 h-3.5" />
+                      {parting ? "Disconnecting…" : "Disconnect Bot"}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onJoin}
+                      disabled={joining}
+                      className="gap-1.5 h-8 px-3 text-xs rounded-full text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                      data-testid="btn-reconnect-bot"
+                      title="Re-add the bot to your channel"
+                    >
+                      <Wifi className="w-3.5 h-3.5" />
+                      {joining ? "Reconnecting…" : "Reconnect Bot"}
+                    </Button>
+                  )
+                )}
+              </>
             )}
           </div>
         </div>
@@ -476,6 +485,10 @@ export function Dashboard() {
   const { toast } = useToast();
   const { tier } = useSubscriptionTier();
 
+  // Admin "view as" mode — pass ?as=channelname to view any streamer's dashboard.
+  // The backend resolveStreamerChannelForRead accepts this param for admin callers.
+  const adminAs = new URLSearchParams(window.location.search).get("as")?.toLowerCase() ?? null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: botStatus, isLoading: botLoading, refetch: refetchBotStatus } = useGetBotStatus({ query: { refetchInterval: 10000 } as any });
 
@@ -515,12 +528,20 @@ export function Dashboard() {
   const myChannel = profileData?.user.twitchUsername?.toLowerCase() ?? null;
   const botIsInMyChannel = myChannel ? (botStatus?.channels ?? []).includes(myChannel) : null;
 
-  const { data: stats, isLoading: statsLoading } = useGetStatsOverview({ range: "stream" });
-  const { data: recentLoot, isLoading: lootLoading } = useGetRecentLoot({ limit: 15, since: "stream" });
-
-  // Live Twitch stream data with game art and thumbnail
-  const { data: streamInfo } = useQuery<StreamInfo>({
+  // ── Channel-scoped queries — normal mode (disabled in admin view) ────────────
+  const { data: _statsNormal, isLoading: _statsNormalLoading } = useGetStatsOverview(
+    { range: "stream" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { query: { enabled: !adminAs } as any },
+  );
+  const { data: _lootNormal, isLoading: _lootNormalLoading } = useGetRecentLoot(
+    { limit: 15, since: "stream" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { query: { enabled: !adminAs } as any },
+  );
+  const { data: _streamInfoNormal } = useQuery<StreamInfo>({
     queryKey: ["stream-info"],
+    enabled: !adminAs,
     queryFn: async () => {
       const token = await getToken();
       const res = await fetch("/api/stats/stream-info", {
@@ -532,8 +553,73 @@ export function Dashboard() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+  const { data: _giveawaysNormal, isLoading: _giveawaysNormalLoading } = useListGiveaways(
+    undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { query: { enabled: !adminAs } as any },
+  );
 
-  const { data: allGiveaways, isLoading: giveawaysLoading } = useListGiveaways();
+  // ── Admin "view as" queries — only fire when ?as= is present ─────────────────
+  const { data: _statsAdmin, isLoading: _statsAdminLoading } = useQuery({
+    queryKey: ["admin-stats-overview", adminAs],
+    enabled: !!adminAs,
+    queryFn: async () => {
+      const token = await getToken();
+      const r = await fetch(`/api/stats/overview?range=stream&as=${adminAs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    refetchInterval: 30_000,
+  });
+  const { data: _lootAdmin, isLoading: _lootAdminLoading } = useQuery({
+    queryKey: ["admin-recent-loot", adminAs],
+    enabled: !!adminAs,
+    queryFn: async () => {
+      const token = await getToken();
+      const r = await fetch(`/api/loot/recent?limit=15&since=stream&as=${adminAs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+  const { data: _giveawaysAdmin, isLoading: _giveawaysAdminLoading } = useQuery({
+    queryKey: ["admin-giveaways", adminAs],
+    enabled: !!adminAs,
+    queryFn: async () => {
+      const token = await getToken();
+      const r = await fetch(`/api/giveaway?as=${adminAs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+  const { data: _streamInfoAdmin } = useQuery<StreamInfo>({
+    queryKey: ["admin-stream-info", adminAs],
+    enabled: !!adminAs,
+    queryFn: async () => {
+      const token = await getToken();
+      const r = await fetch(`/api/stats/stream-info?as=${adminAs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return { isLive: false, viewerCount: null, title: null, gameName: null, startedAt: null, gameId: null, thumbnailUrl: null, tags: [] };
+      return r.json() as Promise<StreamInfo>;
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  // ── Unified — admin view overrides normal when ?as= is set ───────────────────
+  const stats = (adminAs ? _statsAdmin : _statsNormal) as StatsOverview | undefined;
+  const statsLoading = adminAs ? _statsAdminLoading : _statsNormalLoading;
+  const recentLoot = (adminAs ? _lootAdmin : _lootNormal) as LootDrop[] | undefined;
+  const lootLoading = adminAs ? _lootAdminLoading : _lootNormalLoading;
+  const allGiveaways = (adminAs ? _giveawaysAdmin : _giveawaysNormal) as Giveaway[] | undefined;
+  const giveawaysLoading = adminAs ? _giveawaysAdminLoading : _giveawaysNormalLoading;
+  const streamInfo = adminAs ? _streamInfoAdmin : _streamInfoNormal;
 
   const recentWinners = (allGiveaways ?? [])
     .filter((g) => g.status === "ended" && !!g.winnerUsername)
@@ -562,6 +648,25 @@ export function Dashboard() {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
+      {/* ── Admin view banner ── */}
+      {adminAs && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <Eye className="w-4 h-4 text-amber-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-300">
+              Admin view — <span className="font-mono">@{adminAs}</span>
+            </p>
+            <p className="text-xs text-amber-400/70">Read-only. Bot controls are hidden.</p>
+          </div>
+          <Link href="/dashboard">
+            <Button variant="outline" size="sm" className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 shrink-0">
+              <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+              Exit
+            </Button>
+          </Link>
+        </div>
+      )}
+
       {/* ── Page header ── */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
@@ -569,7 +674,9 @@ export function Dashboard() {
         </div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Operations Center</h1>
-          <p className="text-muted-foreground text-sm">Your live stream command center.</p>
+          <p className="text-muted-foreground text-sm">
+            {adminAs ? `Viewing @${adminAs}'s channel` : "Your live stream command center."}
+          </p>
         </div>
       </div>
 
@@ -587,6 +694,7 @@ export function Dashboard() {
         onRestart={() => restartBot()}
         onPart={() => partChannel()}
         onJoin={() => joinChannel()}
+        adminView={!!adminAs}
       />
 
       {/* ── Active giveaway callout ── */}

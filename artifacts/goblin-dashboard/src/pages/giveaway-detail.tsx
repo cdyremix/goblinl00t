@@ -434,7 +434,7 @@ export function GiveawayDetail() {
             <p className="text-sm text-muted-foreground text-center py-4">No entries recorded yet.</p>
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-lg bg-muted/30 border border-border/50 p-3 text-center">
                   <p className="text-2xl font-bold text-foreground">{analytics.totalEntries}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Participants</p>

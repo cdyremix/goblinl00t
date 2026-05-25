@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useAuth } from "@clerk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1058,7 +1059,20 @@ function UserRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        {user.twitchUsername && (
+          <Link href={`/dashboard?as=${encodeURIComponent(user.twitchUsername.toLowerCase())}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid={`button-view-dashboard-${user.id}`}
+              title={`View @${user.twitchUsername}'s dashboard`}
+            >
+              <Tv className="w-3.5 h-3.5 mr-1.5" />
+              View
+            </Button>
+          </Link>
+        )}
         <Button
           variant="outline"
           size="sm"
