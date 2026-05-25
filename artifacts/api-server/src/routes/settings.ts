@@ -37,6 +37,8 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
     steamId64: user.steamId64 ?? null,
     steamUsername: user.steamUsername ?? null,
     goblinEventsEnabled: user.goblinEventsEnabled,
+    lootDropIntervalMinutes: user.lootDropIntervalMinutes ?? null,
+    botBlacklist: (Array.isArray(user.botBlacklist) ? user.botBlacklist : []) as string[],
     lootDropsEnabled: user.lootDropsEnabled,
     coinRedemptionEnabled: user.coinRedemptionEnabled,
     coinCap: user.coinCap,
@@ -71,6 +73,8 @@ router.put("/settings", async (req, res) => {
     steamId64?: string | null;
     steamUsername?: string | null;
     goblinEventsEnabled?: boolean;
+    lootDropIntervalMinutes?: number | null;
+    botBlacklist?: string[] | null;
     lootDropsEnabled?: boolean;
     coinRedemptionEnabled?: boolean;
     coinCap?: number | null;
@@ -134,6 +138,35 @@ router.put("/settings", async (req, res) => {
   if ("steamId64" in body) updates.steamId64 = body.steamId64 ?? null;
   if ("steamUsername" in body) updates.steamUsername = body.steamUsername ?? null;
   if (typeof body.goblinEventsEnabled === "boolean") updates.goblinEventsEnabled = body.goblinEventsEnabled;
+  if ("lootDropIntervalMinutes" in body) {
+    const v = body.lootDropIntervalMinutes;
+    if (v === null || v === undefined) {
+      updates.lootDropIntervalMinutes = null;
+    } else if (Number.isFinite(v) && v >= 1 && v <= 120) {
+      updates.lootDropIntervalMinutes = Math.floor(v);
+    } else {
+      res.status(400).json({ error: "lootDropIntervalMinutes must be 1–120 or null" });
+      return;
+    }
+  }
+  if ("botBlacklist" in body) {
+    const raw = body.botBlacklist;
+    if (raw === null || raw === undefined) {
+      updates.botBlacklist = null;
+    } else if (Array.isArray(raw)) {
+      const cleaned = raw
+        .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+        .map((u) => u.trim().toLowerCase().replace(/^@/, ""));
+      if (cleaned.some((u) => u.length > 25)) {
+        res.status(400).json({ error: "Usernames must be 25 characters or fewer" });
+        return;
+      }
+      updates.botBlacklist = cleaned as string[];
+    } else {
+      res.status(400).json({ error: "botBlacklist must be an array or null" });
+      return;
+    }
+  }
   if (typeof body.lootDropsEnabled === "boolean") updates.lootDropsEnabled = body.lootDropsEnabled;
   if (typeof body.coinRedemptionEnabled === "boolean") updates.coinRedemptionEnabled = body.coinRedemptionEnabled;
   if ("coinCap" in body) {

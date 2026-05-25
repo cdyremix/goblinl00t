@@ -48,6 +48,8 @@ interface BotSettings {
   steamId64: string | null;
   steamUsername: string | null;
   goblinEventsEnabled: boolean;
+  lootDropIntervalMinutes: number | null;
+  botBlacklist: string[] | null;
   lootDropsEnabled: boolean;
   coinRedemptionEnabled: boolean;
   coinCap: number | null;
@@ -413,16 +415,16 @@ export default function SettingsPage() {
         </div>
 
         {/* Random Goblin Events */}
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-lg">👺</span>
                 <Label htmlFor="goblin-events" className="text-base font-semibold text-foreground">Random Goblin Events</Label>
-                <Hint text="Every 5–15 minutes the goblin pops into chat to drop coins on a recent chatter — or steal some. Requires viewers to have spoken since the bot started." side="right" />
+                <Hint text="The goblin pops into chat at random intervals to drop coins on a recent chatter. Requires viewers to have spoken since the bot started." side="right" />
               </div>
               <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-                Surprise drops &amp; steals on recent chatters at random intervals.
+                Surprise coin drops on random chatters at configurable intervals.
               </p>
             </div>
             <Switch
@@ -433,6 +435,36 @@ export default function SettingsPage() {
               data-testid="switch-goblin-events"
             />
           </div>
+
+          {(settings?.goblinEventsEnabled ?? true) && (
+            <div className="flex items-center gap-3 pt-1 border-t border-amber-500/15">
+              <Clock className="w-4 h-4 text-amber-400/70 shrink-0" />
+              <div className="flex-1">
+                <Label className="text-xs font-medium text-muted-foreground">Drop Frequency</Label>
+                <p className="text-[11px] text-muted-foreground/70 mt-0.5">How often the goblin appears in chat.</p>
+              </div>
+              <Select
+                value={settings?.lootDropIntervalMinutes != null ? String(settings.lootDropIntervalMinutes) : "random"}
+                onValueChange={(v) =>
+                  mutation.mutate({ lootDropIntervalMinutes: v === "random" ? null : Number(v) })
+                }
+                disabled={mutation.isPending}
+              >
+                <SelectTrigger className="w-36 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="random">Random (5–15 min)</SelectItem>
+                  <SelectItem value="5">Every 5 min</SelectItem>
+                  <SelectItem value="10">Every 10 min</SelectItem>
+                  <SelectItem value="15">Every 15 min</SelectItem>
+                  <SelectItem value="20">Every 20 min</SelectItem>
+                  <SelectItem value="30">Every 30 min</SelectItem>
+                  <SelectItem value="60">Every 60 min</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Special-Item Loot Drops */}
@@ -537,6 +569,24 @@ export default function SettingsPage() {
           onSave={(v) => mutation.mutate({ lootRarityWeights: v })}
         />
 
+      </section>
+
+      {/* Bot Blacklist */}
+      <section className="space-y-4 max-w-2xl">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🚫</span>
+          <h2 className="text-lg font-semibold text-foreground">Bot Blacklist</h2>
+          <Hint
+            text="Usernames on this list are completely ignored by the bot — no commands, no coin drops, no goblin events. Useful for blocking bots, banned viewers, or alt accounts."
+            side="right"
+          />
+        </div>
+
+        <BlacklistSection
+          value={settings?.botBlacklist ?? []}
+          saving={mutation.isPending}
+          onSave={(v) => mutation.mutate({ botBlacklist: v })}
+        />
       </section>
 
       </TabsContent>
@@ -1673,6 +1723,98 @@ function NewCustomCommandForm({
           Cancel
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ─── Blacklist Section ───────────────────────────────────────────────────────
+
+function BlacklistSection({
+  value,
+  saving,
+  onSave,
+}: {
+  value: string[] | null;
+  saving: boolean;
+  onSave: (list: string[]) => void;
+}) {
+  const list = Array.isArray(value) ? value : [];
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function addUser() {
+    const username = input.trim().toLowerCase().replace(/^@/, "");
+    if (!username) return;
+    if (!/^[a-z0-9_]{1,25}$/.test(username)) {
+      setError("Twitch usernames can only contain letters, numbers, and underscores (max 25 chars)");
+      return;
+    }
+    if (list.includes(username)) {
+      setError("Already on the list");
+      return;
+    }
+    setError(null);
+    setInput("");
+    onSave([...list, username]);
+  }
+
+  function removeUser(username: string) {
+    onSave(list.filter((u) => u !== username));
+  }
+
+  return (
+    <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5 space-y-4">
+      <div className="flex gap-2">
+        <Input
+          value={input}
+          onChange={(e) => { setInput(e.target.value); setError(null); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addUser(); } }}
+          placeholder="username"
+          maxLength={25}
+          className="font-mono text-sm h-9"
+          disabled={saving}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-9 shrink-0"
+          onClick={addUser}
+          disabled={saving || !input.trim()}
+        >
+          <Plus className="w-4 h-4 mr-1" /> Add
+        </Button>
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5" /> {error}
+        </p>
+      )}
+
+      {list.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No blocked users. Add usernames above to prevent them from using the bot.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {list.map((u) => (
+            <div
+              key={u}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-red-500/30 bg-red-500/10 text-xs font-mono text-red-300"
+            >
+              @{u}
+              <button
+                onClick={() => removeUser(u)}
+                disabled={saving}
+                className="text-red-400/60 hover:text-red-300 transition-colors"
+                aria-label={`Remove ${u}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

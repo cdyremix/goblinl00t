@@ -410,9 +410,12 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
   if (!command || !command.startsWith("!")) return;
 
-  // Custom commands — channel-scoped lookup so a custom from streamer A
-  // never fires in streamer B's channel.
+  // Blacklist check — silently ignore any command from a blocked username.
   const channelKey = channel.replace(/^#/, "").toLowerCase();
+  {
+    const blSettings = await getChannelSettings(channelKey);
+    if (blSettings.botBlacklist.includes(username)) return;
+  }
   // Theme is per-channel (read from `usersTable.botTheme` for the
   // channel's owner). Resolved once per message and threaded into every
   // handler that branches on theme — replaces the previous module-global
@@ -720,7 +723,19 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
     if (command === "!tradeurl") {
       const tradeUrl = parts[1] ?? null;
-      if (!tradeUrl || !tradeUrl.includes("steamcommunity.com/tradeoffer/new/")) {
+      const isValidTradeUrl = (() => {
+        if (!tradeUrl) return false;
+        try {
+          const u = new URL(tradeUrl);
+          return (
+            (u.hostname === "steamcommunity.com" || u.hostname === "www.steamcommunity.com") &&
+            u.pathname.startsWith("/tradeoffer/new") &&
+            u.searchParams.has("partner") &&
+            u.searchParams.has("token")
+          );
+        } catch { return false; }
+      })();
+      if (!isValidTradeUrl) {
         void client?.say(channel, `@${username}: !tradeurl <Steam trade URL> — find yours at steamcommunity.com/id/YOU/tradeoffers/privacy`);
         return;
       }

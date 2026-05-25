@@ -17,6 +17,10 @@ export interface ChannelSettings {
   redeemAction: "entries" | "loot" | "luck";
   coinCap: number | null;
   goblinEventsEnabled: boolean;
+  /** Minimum minutes between random goblin drops. null = random 5–15 min. */
+  lootDropIntervalMinutes: number | null;
+  /** Lowercase Twitch usernames the bot should completely ignore. */
+  botBlacklist: string[];
   wheelMode: "auto" | "manual";
   wheelSpeed: "slow" | "medium" | "fast";
   /** Custom rarity weights for !loot rolls. null = use DEFAULT_RARITY_WEIGHTS. */
@@ -29,6 +33,8 @@ const DEFAULTS: ChannelSettings = {
   redeemAction: "entries",
   coinCap: null,
   goblinEventsEnabled: true,
+  lootDropIntervalMinutes: null,
+  botBlacklist: [],
   wheelMode: "auto",
   wheelSpeed: "medium",
   lootRarityWeights: null,
@@ -55,6 +61,8 @@ async function loadFromDb(channel: string): Promise<ChannelSettings> {
     coinRedemptionEnabled: user.coinRedemptionEnabled,
     coinCap: user.coinCap,
     goblinEventsEnabled: user.goblinEventsEnabled,
+    lootDropIntervalMinutes: user.lootDropIntervalMinutes ?? null,
+    botBlacklist: Array.isArray(user.botBlacklist) ? (user.botBlacklist as string[]).map((u) => u.toLowerCase()) : [],
     wheelMode: (user.wheelMode === "manual" ? "manual" : "auto"),
     wheelSpeed:
       user.wheelSpeed === "slow" || user.wheelSpeed === "fast" ? user.wheelSpeed : "medium",

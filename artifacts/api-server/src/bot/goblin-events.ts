@@ -1,7 +1,7 @@
-import { db, lootDropsTable, pointRedemptionsTable, goblinEventsTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, lootDropsTable, goblinEventsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { getPointsBalance, clampCoinAward } from "./points";
+import { getChannelSettings } from "./channel-settings";
 
 type SayFn = (channel: string, message: string) => void;
 
@@ -12,8 +12,13 @@ interface ChatterInfo {
 
 const RECENT_CHATTERS = new Map<string, Map<string, ChatterInfo>>();
 const RECENT_WINDOW_MS = 30 * 60 * 1000; // 30 min
-const TICK_MIN_MS = 5 * 60 * 1000;        // 5 min
-const TICK_MAX_MS = 15 * 60 * 1000;       // 15 min
+
+const TICK_DEFAULT_MIN_MS = 5 * 60 * 1000;   // 5 min (default lower bound)
+const TICK_DEFAULT_MAX_MS = 15 * 60 * 1000;  // 15 min (default upper bound)
+
+// Track when each channel last received a goblin drop, so per-channel interval
+// settings are honoured even though we run a single global timer.
+const LAST_CHANNEL_FIRE = new Map<string, number>();
 
 let timer: NodeJS.Timeout | null = null;
 let saySink: SayFn | null = null;
@@ -29,33 +34,20 @@ export function trackChatter(channel: string, username: string): void {
   RECENT_CHATTERS.get(ch)!.set(username, { username, lastSeen: Date.now() });
 }
 
-function pickRecentChatter(channel: string): string | null {
+function pickRecentChatter(channel: string, blacklist: string[]): string | null {
   const map = RECENT_CHATTERS.get(channel);
   if (!map || map.size === 0) return null;
   const cutoff = Date.now() - RECENT_WINDOW_MS;
   const live: string[] = [];
   for (const [name, info] of map) {
-    if (info.lastSeen >= cutoff) live.push(name);
-    else map.delete(name);
+    if (info.lastSeen >= cutoff) {
+      if (!blacklist.includes(name)) live.push(name);
+    } else {
+      map.delete(name);
+    }
   }
   if (live.length === 0) return null;
   return live[Math.floor(Math.random() * live.length)]!;
-}
-
-async function isEnabledForChannel(channel: string): Promise<boolean> {
-  const ch = channel.replace(/^#/, "").toLowerCase();
-  try {
-    const [user] = await db
-      .select({ enabled: usersTable.goblinEventsEnabled })
-      .from(usersTable)
-      .where(eq(usersTable.twitchUsername, ch))
-      .limit(1);
-    if (!user) return true; // default-on if no user record
-    return user.enabled;
-  } catch (err) {
-    logger.warn({ err }, "Failed to read goblinEventsEnabled, defaulting to enabled");
-    return true;
-  }
 }
 
 function randomAmount(): number {
@@ -68,8 +60,6 @@ function randomAmount(): number {
 
 async function fireDrop(channel: string, target: string): Promise<void> {
   const requested = randomAmount();
-  // Honor the channel's coin cap so random goblin gifts can't push viewers
-  // past the configured ceiling (silently skip if they're already at cap).
   const amount = await clampCoinAward(channel, target, requested);
   if (amount <= 0) return;
   await db.insert(lootDropsTable).values({
@@ -88,40 +78,27 @@ async function fireDrop(channel: string, target: string): Promise<void> {
   saySink?.(`#${channel}`, `👺💰 The goblin appears, hands ${target} a fistful of ${amount} coins, and cackles into the shadows!`);
 }
 
-async function fireSteal(channel: string, target: string): Promise<void> {
-  // Channel-scoped balance read: in a multi-tenant world we MUST only
-  // steal from what `target` earned in *this* streamer's channel — not
-  // from a global per-username pile.
-  const { balance } = await getPointsBalance(target, channel);
-  if (balance <= 0) return; // nothing to steal — silently skip
-  const amount = Math.min(balance, randomAmount());
-  await db.insert(pointRedemptionsTable).values({
-    channel,
-    username: target,
-    points: amount,
-    kind: "goblin_steal",
-    giveawayId: null,
-    ticketsAdded: 0,
-  });
-  await db.insert(goblinEventsTable).values({
-    channel,
-    kind: "steal",
-    targetUsername: target,
-    amount,
-  });
-  saySink?.(`#${channel}`, `👺🪙 The goblin SNATCHES ${amount} coins from ${target} and disappears! "MINE!"`);
-}
-
 async function tick(): Promise<void> {
   try {
     for (const channel of RECENT_CHATTERS.keys()) {
-      const enabled = await isEnabledForChannel(channel);
-      if (!enabled) continue;
-      const target = pickRecentChatter(channel);
+      const settings = await getChannelSettings(channel);
+      if (!settings.goblinEventsEnabled) continue;
+
+      // Per-channel interval gate
+      const intervalMs = settings.lootDropIntervalMinutes != null
+        ? settings.lootDropIntervalMinutes * 60 * 1000
+        : null; // null = use default random schedule (already handled by schedule())
+
+      if (intervalMs !== null) {
+        const lastFire = LAST_CHANNEL_FIRE.get(channel) ?? 0;
+        if (Date.now() - lastFire < intervalMs) continue;
+      }
+
+      const target = pickRecentChatter(channel, settings.botBlacklist);
       if (!target) continue;
-      const isDrop = Math.random() < 0.55; // slightly favor drops
-      if (isDrop) await fireDrop(channel, target);
-      else await fireSteal(channel, target);
+
+      await fireDrop(channel, target);
+      LAST_CHANNEL_FIRE.set(channel, Date.now());
     }
   } catch (err) {
     logger.error({ err }, "Goblin event tick failed");
@@ -131,7 +108,7 @@ async function tick(): Promise<void> {
 }
 
 function schedule(): void {
-  const delay = TICK_MIN_MS + Math.floor(Math.random() * (TICK_MAX_MS - TICK_MIN_MS));
+  const delay = TICK_DEFAULT_MIN_MS + Math.floor(Math.random() * (TICK_DEFAULT_MAX_MS - TICK_DEFAULT_MIN_MS));
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => { void tick(); }, delay);
   if (typeof timer.unref === "function") timer.unref();

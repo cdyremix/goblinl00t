@@ -787,8 +787,19 @@ router.post("/viewer/:channel/tradeurl", async (req, res) => {
   if (!session) return;
 
   const tradeUrl = String((req.body as Record<string, unknown>)?.tradeUrl ?? "").trim();
-  if (!tradeUrl || !tradeUrl.includes("steamcommunity.com/tradeoffer/new/")) {
-    res.status(400).json({ error: "Invalid trade URL — must be a steamcommunity.com/tradeoffer/new/ link" });
+  const isValidTradeUrl = (() => {
+    try {
+      const u = new URL(tradeUrl);
+      return (
+        (u.hostname === "steamcommunity.com" || u.hostname === "www.steamcommunity.com") &&
+        u.pathname.startsWith("/tradeoffer/new") &&
+        u.searchParams.has("partner") &&
+        u.searchParams.has("token")
+      );
+    } catch { return false; }
+  })();
+  if (!isValidTradeUrl) {
+    res.status(400).json({ error: "Invalid trade URL — must be a steamcommunity.com/tradeoffer/new/?partner=...&token=... link" });
     return;
   }
   try {

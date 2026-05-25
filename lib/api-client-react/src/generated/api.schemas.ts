@@ -301,6 +301,16 @@ export interface BotSettings {
   /** @nullable */
   steamUsername: string | null;
   goblinEventsEnabled: boolean;
+  /**
+   * Minimum minutes between random goblin-event drops. null = random 5–15 min.
+   * @nullable
+   */
+  lootDropIntervalMinutes: number | null;
+  /**
+   * Twitch usernames to ignore entirely (no commands, no drops).
+   * @nullable
+   */
+  botBlacklist: string[] | null;
   lootDropsEnabled: boolean;
   coinRedemptionEnabled: boolean;
   /** @nullable */
@@ -346,6 +356,16 @@ export interface UpdateBotSettings {
   /** @nullable */
   steamUsername?: string | null;
   goblinEventsEnabled?: boolean;
+  /**
+   * Minimum minutes between random goblin-event drops. null = random 5–15 min.
+   * @nullable
+   */
+  lootDropIntervalMinutes?: number | null;
+  /**
+   * Twitch usernames to ignore entirely (no commands, no drops).
+   * @nullable
+   */
+  botBlacklist?: string[] | null;
   lootDropsEnabled?: boolean;
   coinRedemptionEnabled?: boolean;
   /** @nullable */

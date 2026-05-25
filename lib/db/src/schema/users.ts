@@ -36,6 +36,12 @@ export const usersTable = pgTable("users", {
   steamUsername: text("steam_username"),
   avatarPreset: text("avatar_preset"),
   goblinEventsEnabled: boolean("goblin_events_enabled").notNull().default(true),
+  // Minimum minutes between random goblin-event drops per channel.
+  // null = random 5–15 min (original behaviour). Integer = fixed floor in minutes.
+  lootDropIntervalMinutes: integer("loot_drop_interval_minutes"),
+  // Comma-separated or array of Twitch usernames the bot should completely
+  // ignore (no commands, no coin drops, no goblin events).
+  botBlacklist: jsonb("bot_blacklist").$type<string[]>(),
   // When false, !loot will not roll buff items (only plain sellable items).
   lootDropsEnabled: boolean("loot_drops_enabled").notNull().default(true),
   // When false, viewers cannot redeem coins for giveaway entries (!redeem & POST /redeem).

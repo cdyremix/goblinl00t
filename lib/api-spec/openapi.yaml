@@ -1605,6 +1605,14 @@ components:
           type: ["string", "null"]
         goblinEventsEnabled:
           type: boolean
+        lootDropIntervalMinutes:
+          type: ["integer", "null"]
+          description: "Minimum minutes between random goblin-event drops. null = random 5–15 min."
+        botBlacklist:
+          type: ["array", "null"]
+          items:
+            type: string
+          description: "Twitch usernames to ignore entirely (no commands, no drops)."
         lootDropsEnabled:
           type: boolean
         coinRedemptionEnabled:
@@ -1626,6 +1634,8 @@ components:
         - steamId64
         - steamUsername
         - goblinEventsEnabled
+        - lootDropIntervalMinutes
+        - botBlacklist
         - lootDropsEnabled
         - coinRedemptionEnabled
         - coinCap
@@ -1649,6 +1659,14 @@ components:
           type: ["string", "null"]
         goblinEventsEnabled:
           type: boolean
+        lootDropIntervalMinutes:
+          type: ["integer", "null"]
+          description: "Minimum minutes between random goblin-event drops. null = random 5–15 min."
+        botBlacklist:
+          type: ["array", "null"]
+          items:
+            type: string
+          description: "Twitch usernames to ignore entirely (no commands, no drops)."
         lootDropsEnabled:
           type: boolean
         coinRedemptionEnabled:

@@ -1070,6 +1070,16 @@ export const GetBotSettingsResponse = zod.object({
   steamId64: zod.string().nullable(),
   steamUsername: zod.string().nullable(),
   goblinEventsEnabled: zod.boolean(),
+  lootDropIntervalMinutes: zod
+    .number()
+    .nullable()
+    .describe(
+      "Minimum minutes between random goblin-event drops. null = random 5–15 min.",
+    ),
+  botBlacklist: zod
+    .array(zod.string())
+    .nullable()
+    .describe("Twitch usernames to ignore entirely (no commands, no drops)."),
   lootDropsEnabled: zod.boolean(),
   coinRedemptionEnabled: zod.boolean(),
   coinCap: zod.number().nullable(),
@@ -1088,6 +1098,16 @@ export const UpdateBotSettingsBody = zod.object({
   steamId64: zod.string().nullish(),
   steamUsername: zod.string().nullish(),
   goblinEventsEnabled: zod.boolean().optional(),
+  lootDropIntervalMinutes: zod
+    .number()
+    .nullish()
+    .describe(
+      "Minimum minutes between random goblin-event drops. null = random 5–15 min.",
+    ),
+  botBlacklist: zod
+    .array(zod.string())
+    .nullish()
+    .describe("Twitch usernames to ignore entirely (no commands, no drops)."),
   lootDropsEnabled: zod.boolean().optional(),
   coinRedemptionEnabled: zod.boolean().optional(),
   coinCap: zod.number().nullish(),
@@ -1103,6 +1123,16 @@ export const UpdateBotSettingsResponse = zod.object({
   steamId64: zod.string().nullable(),
   steamUsername: zod.string().nullable(),
   goblinEventsEnabled: zod.boolean(),
+  lootDropIntervalMinutes: zod
+    .number()
+    .nullable()
+    .describe(
+      "Minimum minutes between random goblin-event drops. null = random 5–15 min.",
+    ),
+  botBlacklist: zod
+    .array(zod.string())
+    .nullable()
+    .describe("Twitch usernames to ignore entirely (no commands, no drops)."),
   lootDropsEnabled: zod.boolean(),
   coinRedemptionEnabled: zod.boolean(),
   coinCap: zod.number().nullable(),
