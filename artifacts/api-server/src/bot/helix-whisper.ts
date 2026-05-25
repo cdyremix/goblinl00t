@@ -69,6 +69,9 @@ export async function helixWhisper(toUsername: string, message: string): Promise
     const fromId = await getBotUserId();
     const toId = await helixGetUserId(toUsername);
     if (!fromId || !toId) return false;
+    // Twitch rejects whispers where sender == recipient (e.g. streamer
+    // using the same account as the bot). Fall back to chat in this case.
+    if (fromId === toId) return false;
 
     const resp = await fetch(
       `${HELIX_BASE}/whispers?from_user_id=${encodeURIComponent(fromId)}&to_user_id=${encodeURIComponent(toId)}`,
