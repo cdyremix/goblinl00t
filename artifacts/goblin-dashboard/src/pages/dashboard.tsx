@@ -483,7 +483,7 @@ function CreatorToolLink({
 export function Dashboard() {
   const { getToken } = useAuth();
   const { toast } = useToast();
-  const { tier } = useSubscriptionTier();
+  const { tier, hasFeature } = useSubscriptionTier();
 
   // Admin "view as" mode — pass ?as=channelname to view any streamer's dashboard.
   // The backend resolveStreamerChannelForRead accepts this param for admin callers.
@@ -848,7 +848,7 @@ export function Dashboard() {
                       <CreatorToolLink
                         label="Viewer Portal"
                         description="Viewers track coins, enter giveaways, and roll loot in their browser"
-                        locked={tier !== "pro"}
+                        locked={!hasFeature("viewer-portal")}
                         onClick={() => {
                           const base = import.meta.env.BASE_URL.replace(/\/$/, "");
                           const url = `${window.location.origin}${base}/viewer/${obsChannel}`;
@@ -859,7 +859,7 @@ export function Dashboard() {
                       <CreatorToolLink
                         label="OBS Loot Overlay"
                         description="Browser source in OBS — shows live loot drops as they happen"
-                        locked={tier !== "pro"}
+                        locked={!hasFeature("obs-overlay")}
                         onClick={() => {
                           const base = import.meta.env.BASE_URL.replace(/\/$/, "");
                           const url = `${window.location.origin}${base}/overlay/${obsChannel}`;
