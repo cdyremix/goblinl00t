@@ -877,12 +877,19 @@ router.post("/admin/users/:id/impersonate", async (req, res) => {
     return;
   }
   try {
-    const token = await clerkClient.signInTokens.createSignInToken({
-      userId: user.clerkUserId,
-      expiresInSeconds: 120,
-    });
+    const [targetToken, adminReturnToken] = await Promise.all([
+      clerkClient.signInTokens.createSignInToken({
+        userId: user.clerkUserId,
+        expiresInSeconds: 120,
+      }),
+      // Long-lived return ticket so the admin can snap back without re-login.
+      clerkClient.signInTokens.createSignInToken({
+        userId: ctx.user.clerkUserId,
+        expiresInSeconds: 1800,
+      }),
+    ]);
     req.log.info({ adminId: ctx.user.id, targetId: id }, "admin: impersonate token minted");
-    res.json({ ticket: token.token });
+    res.json({ ticket: targetToken.token, adminReturnTicket: adminReturnToken.token });
   } catch (err) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
     req.log.warn({ errMessage, targetId: id }, "admin: impersonate token failed");

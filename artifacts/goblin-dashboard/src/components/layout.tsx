@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk, useAuth } from "@clerk/react";
+import { useSignIn } from "@clerk/react/legacy";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
-  Plug, X, MessageCircle, Crown, Users2, ShieldAlert, Zap,
+  Plug, X, MessageCircle, Crown, Users2, ShieldAlert, Zap, LogIn,
 } from "lucide-react";
 import { useSubscriptionTier } from "@/hooks/use-tier";
 import { UserAvatar } from "@/components/user-avatar";
@@ -291,6 +292,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background relative">
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
         <div className="relative z-10 p-8 max-w-7xl mx-auto min-h-full">
+          <ImpersonationBanner />
           <AdminControlBanner />
           <ConnectTwitchReminder
             show={!profileQuery.isLoading && profileQuery.data !== undefined && !twitchUsername && !location.startsWith("/account")}
@@ -308,6 +310,77 @@ export function Layout({ children }: { children: React.ReactNode }) {
  * the `?as=` param.  Reminds the admin which channel they are operating as
  * and provides an escape hatch back to their own dashboard.
  */
+const IMPERSONATION_KEY = "goblin-impersonating";
+
+function ImpersonationBanner() {
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const { signOut } = useClerk();
+  const [state, setState] = useState<{ targetUsername: string; adminReturnTicket: string | null } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(IMPERSONATION_KEY);
+      return raw ? (JSON.parse(raw) as { targetUsername: string; adminReturnTicket: string | null }) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [busy, setBusy] = useState(false);
+
+  if (!state) return null;
+
+  async function handleExit() {
+    if (!isLoaded || !signIn || !state) return;
+    setBusy(true);
+    try {
+      sessionStorage.removeItem(IMPERSONATION_KEY);
+      await signOut();
+      if (state.adminReturnTicket) {
+        const result = await signIn.create({ strategy: "ticket", ticket: state.adminReturnTicket });
+        if (result.status === "complete" && result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+          window.location.href = "/admin";
+          return;
+        }
+      }
+      window.location.href = "/sign-in";
+    } catch {
+      window.location.href = "/sign-in";
+    } finally {
+      setBusy(false);
+      setState(null);
+    }
+  }
+
+  return (
+    <div
+      className="mb-6 flex items-center gap-3 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 shadow-[0_0_20px_rgba(239,68,68,0.08)]"
+      role="status"
+      data-testid="banner-impersonation"
+    >
+      <div className="w-9 h-9 rounded-md bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+        <ShieldAlert className="w-4 h-4 text-red-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-red-300">
+          Viewing as <span className="font-mono">@{state.targetUsername}</span>
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          You are impersonating this account. All actions are real.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleExit}
+        disabled={busy}
+        className="shrink-0 inline-flex items-center gap-1.5 bg-red-500/20 border border-red-500/40 text-red-300 text-xs font-bold px-3 py-1.5 rounded-md hover:bg-red-500/30 transition-all disabled:opacity-50"
+        data-testid="button-exit-impersonation"
+      >
+        {busy ? <span className="w-3 h-3 border-2 border-red-300/40 border-t-red-300 rounded-full animate-spin" /> : <LogIn className="w-3 h-3" />}
+        Exit {state.targetUsername}&apos;s account
+      </button>
+    </div>
+  );
+}
+
 function AdminControlBanner() {
   const [location] = useLocation();
   // Read from the live URL each render so it updates on navigation.

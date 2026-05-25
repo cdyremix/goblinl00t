@@ -972,7 +972,7 @@ type QuickAction =
   | "make-regular"
   | "verify-email";
 
-function ImpersonateButton({ userId, authedFetch }: { userId: number; authedFetch: ReturnType<typeof useAuthedFetch> }) {
+function ImpersonateButton({ userId, targetUsername, authedFetch }: { userId: number; targetUsername?: string; authedFetch: ReturnType<typeof useAuthedFetch> }) {
   const { signIn, setActive, isLoaded } = useSignIn();
   const { signOut } = useClerk();
   const [busy, setBusy] = useState(false);
@@ -984,13 +984,24 @@ function ImpersonateButton({ userId, authedFetch }: { userId: number; authedFetc
     setBusy(true);
     try {
       const r = await authedFetch(`/api/admin/users/${userId}/impersonate`, { method: "POST" });
-      const json = (await r.json().catch(() => ({}))) as { ticket?: string; error?: string };
+      const json = (await r.json().catch(() => ({}))) as {
+        ticket?: string;
+        adminReturnTicket?: string;
+        targetUsername?: string;
+        error?: string;
+      };
       if (!r.ok || !json.ticket) {
         setError(json.error ?? `Failed (${r.status})`);
         return;
       }
-      // Must sign out first — Clerk rejects a new sign-in while a session
-      // is already active.
+      // Stash the return ticket so the ImpersonationBanner can restore the
+      // admin session when they click Exit.
+      try {
+        sessionStorage.setItem("goblin-impersonating", JSON.stringify({
+          targetUsername: targetUsername ?? `user #${userId}`,
+          adminReturnTicket: json.adminReturnTicket ?? null,
+        }));
+      } catch { /* quota / private mode */ }
       await signOut();
       const result = await signIn.create({ strategy: "ticket", ticket: json.ticket });
       if (result.status === "complete" && result.createdSessionId) {
@@ -1118,7 +1129,7 @@ function UserRow({
       </div>
 
       <div className="flex items-center gap-2 shrink-0 flex-wrap">
-        <ImpersonateButton userId={user.id} authedFetch={authedFetch} />
+        <ImpersonateButton userId={user.id} targetUsername={user.twitchUsername ?? undefined} authedFetch={authedFetch} />
         <Button
           variant="outline"
           size="sm"
