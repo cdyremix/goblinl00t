@@ -101,7 +101,7 @@ export const usersTable = pgTable("users", {
   // chat. Falls back to public chat if the API rejects the whisper.
   // Requires TWITCH_OAUTH_TOKEN to have `user:manage:whispers` scope and the
   // bot account to have a verified phone number on Twitch.
-  whisperModeEnabled: boolean("whisper_mode_enabled").notNull().default(false),
+  whisperModeEnabled: boolean("whisper_mode_enabled").notNull().default(true),
   // Stripe customer + active subscription IDs. Customer created lazily on
   // first checkout; subscription written back from webhook + reconciled
   // on every /users/me read so the UI is never stale even if a webhook

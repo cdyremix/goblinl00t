@@ -332,7 +332,7 @@ export default function SettingsPage() {
         <TabsList className="grid w-full grid-cols-4 max-w-lg">
           <TabsTrigger value="general" data-testid="tab-settings-general">General</TabsTrigger>
           <TabsTrigger value="economy" data-testid="tab-settings-economy">Economy</TabsTrigger>
-          <TabsTrigger value="commands" data-testid="tab-settings-commands">Commands</TabsTrigger>
+          <TabsTrigger value="commands" data-testid="tab-settings-commands">Community</TabsTrigger>
           <TabsTrigger value="integrations" data-testid="tab-settings-integrations">Integrations</TabsTrigger>
         </TabsList>
 
