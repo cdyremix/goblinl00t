@@ -82,9 +82,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const allLinks = [
     { href: "/dashboard", label: "Dashboard", description: "Bot status & live activity", icon: LayoutDashboard },
     { href: "/giveaway", label: "Giveaways", description: "Run giveaways & spin the wheel", icon: Gift },
-    { href: "/commands", label: "Community", description: "Toggle & customize bot commands", icon: Zap },
     { href: "/stats", label: "Stats", description: "Activity, coins & leaderboards", icon: BarChart3 },
-    { href: "/users", label: "Chat Users", description: "Manage viewers & inventory", icon: Users2 },
+    { href: "/users", label: "Community", description: "Manage viewers & inventory", icon: Users2 },
     { href: "/settings", label: "Settings", description: "Theme, economy & integrations", icon: Settings2 },
     { href: "/trade-office", label: "Trade Office", description: "Fulfill CS2 skin deliveries", icon: Send, cs2Only: true, newWhen: isCS2 },
     // Admin Console — only rendered for super-users (`usersTable.isAdmin`).
