@@ -323,6 +323,8 @@ export interface BotSettings {
    * @nullable
    */
   lootAnnounceMinRarity: string | null;
+  /** When true, !inventory, !points/!coins/!hoard, !sell, and !use replies are sent via Twitch Helix whisper instead of public chat. Falls back to public chat if the whisper is rejected. */
+  whisperModeEnabled: boolean;
 }
 
 export type UpdateBotSettingsBotTheme =
@@ -383,6 +385,8 @@ export interface UpdateBotSettings {
    * @nullable
    */
   lootAnnounceMinRarity?: string | null;
+  /** When true, personal command replies are sent via Twitch Helix whisper instead of public chat. */
+  whisperModeEnabled?: boolean;
 }
 
 export type ManualDropRequestKind =

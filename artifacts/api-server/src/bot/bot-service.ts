@@ -25,6 +25,7 @@ import {
 import { startGoblinEvents, setGoblinEventSink, trackChatter } from "./goblin-events";
 import { getCustomResponseFor, renderTemplate } from "./command-responses";
 import { getToggleFor, getAllToggles } from "./command-toggles";
+import { helixWhisper } from "./helix-whisper";
 
 export type CommandTheme = "goblin" | "cs2" | "hearthstone" | "both";
 
@@ -418,8 +419,20 @@ function meetsAnnounceThreshold(rarity: string, minRarity: string | null): boole
  * accounts will commonly hit failures — the fallback ensures chat still
  * works regardless.
  */
-async function replyToUser(channel: string, username: string, message: string): Promise<void> {
+async function replyToUser(
+  channel: string,
+  username: string,
+  message: string,
+  opts?: { whisper?: boolean },
+): Promise<void> {
   if (!client) return;
+  // When whisper mode is requested, try the Helix API first.
+  // If it succeeds (returns true) we're done — no public message.
+  // If it fails, fall through to the normal tmi.js whisper + say path.
+  if (opts?.whisper) {
+    const ok = await helixWhisper(username, message);
+    if (ok) return;
+  }
   try {
     await client.whisper(username, message);
   } catch {
@@ -564,9 +577,11 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
 
     if (command === "!inventory") {
       const ch = channel.replace(/^#/, "");
+      const { whisperModeEnabled } = await getChannelSettings(ch);
+      const w = whisperModeEnabled ? { whisper: true } : undefined;
       const items = await listInventory(ch, username);
       if (items.length === 0) {
-        void replyToUser(channel, username, `🎒 @${username}: Pouch is empty — type !loot to grab something!`);
+        void replyToUser(channel, username, `🎒 @${username}: Pouch is empty — type !loot to grab something!`, w);
       } else {
         const lines = items.map((it, i) => {
           const e = getRarityEmoji(it.rarity);
@@ -578,15 +593,17 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
           }
           return `[${i + 1}]${e}${it.item} ${it.coinValue}🪙 · !sell ${i + 1}`;
         });
-        void replyToUser(channel, username, `🎒 @${username} [${items.length}/${INVENTORY_CAP}]: ${lines.join(" · ")}`);
+        void replyToUser(channel, username, `🎒 @${username} [${items.length}/${INVENTORY_CAP}]: ${lines.join(" · ")}`, w);
       }
     }
 
     if (command === "!sell") {
       const ch = channel.replace(/^#/, "");
+      const { whisperModeEnabled } = await getChannelSettings(ch);
+      const w = whisperModeEnabled ? { whisper: true } : undefined;
       const items = await listInventory(ch, username);
       if (items.length === 0) {
-        void replyToUser(channel, username, `🎒 @${username}: Nothing to sell — pouch is empty!`);
+        void replyToUser(channel, username, `🎒 @${username}: Nothing to sell — pouch is empty!`, w);
         return;
       }
       const arg = (parts[1] ?? "").toLowerCase();
@@ -596,13 +613,13 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       if (arg === "all") {
         targetItems = items.filter((i) => i.kind === "item");
         if (targetItems.length === 0) {
-          void replyToUser(channel, username, `🧪 @${username}: All items are buffs — !use <slot> to activate or !sell <slot> to dump one.`);
+          void replyToUser(channel, username, `🧪 @${username}: All items are buffs — !use <slot> to activate or !sell <slot> to dump one.`, w);
           return;
         }
       } else {
         const slot = Number.parseInt(arg, 10);
         if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
-          void replyToUser(channel, username, `@${username}: !sell 1–${items.length} or !sell all`);
+          void replyToUser(channel, username, `@${username}: !sell 1–${items.length} or !sell all`, w);
           return;
         }
         targetItems = [items[slot - 1]!];
@@ -617,33 +634,35 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
         }
       }
       if (soldCount === 0) {
-        void replyToUser(channel, username, `@${username}: Sale failed — check !inventory and retry.`);
+        void replyToUser(channel, username, `@${username}: Sale failed — check !inventory and retry.`, w);
         return;
       }
       const summary = soldCount === 1 ? soldNames[0] : `${soldCount} items`;
-      void replyToUser(channel, username, `💰 @${username} sold ${summary} for ${totalCoins}🪙!`);
+      void replyToUser(channel, username, `💰 @${username} sold ${summary} for ${totalCoins}🪙!`, w);
     }
 
     if (command === "!use") {
       const ch = channel.replace(/^#/, "");
+      const { whisperModeEnabled } = await getChannelSettings(ch);
+      const w = whisperModeEnabled ? { whisper: true } : undefined;
       const items = await listInventory(ch, username);
       const slot = Number.parseInt(parts[1] ?? "", 10);
       if (!Number.isFinite(slot) || slot < 1 || slot > items.length) {
-        void replyToUser(channel, username, `@${username}: !use 1–${items.length || INVENTORY_CAP} — buffs only.`);
+        void replyToUser(channel, username, `@${username}: !use 1–${items.length || INVENTORY_CAP} — buffs only.`, w);
         return;
       }
       const target = items[slot - 1]!;
       const r = await useInventoryItem({ channel: ch, username, itemId: target.id });
       if (!r.ok) {
         if (r.reason === "not_buff") {
-          void replyToUser(channel, username, `@${username}: ${target.item} isn't a buff — !sell ${slot} for ${target.coinValue}🪙 instead.`);
+          void replyToUser(channel, username, `@${username}: ${target.item} isn't a buff — !sell ${slot} for ${target.coinValue}🪙 instead.`, w);
         } else {
-          void replyToUser(channel, username, `@${username}: Couldn't activate that item.`);
+          void replyToUser(channel, username, `@${username}: Couldn't activate that item.`, w);
         }
         return;
       }
       const charges = r.item!.chargesRemaining;
-      void replyToUser(channel, username, `✨ @${username} activated ${r.item!.item}! (${charges} charge${charges === 1 ? "" : "s"} left)`);
+      void replyToUser(channel, username, `✨ @${username} activated ${r.item!.item}! (${charges} charge${charges === 1 ? "" : "s"} left)`, w);
     }
 
     if (command === "!enter") {
@@ -822,7 +841,8 @@ async function handleMessage(channel: string, tags: tmi.ChatUserstate, message: 
       const reply = custom
         ? renderTemplate(custom, { user: `@${username}`, balance, entries, cost: REDEEM_COST_PER_ENTRY })
         : `💰 @${username}: ${balance}🪙 · ${entries > 0 ? `!redeem for ${entries} extra ${entries === 1 ? "entry" : "entries"}` : `earn more by chatting!`}`;
-      void replyToUser(channel, username, reply);
+      const { whisperModeEnabled } = await getChannelSettings(ch);
+      void replyToUser(channel, username, reply, whisperModeEnabled ? { whisper: true } : undefined);
     }
 
     if (command === "!redeem") {

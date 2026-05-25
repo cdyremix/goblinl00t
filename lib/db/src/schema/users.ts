@@ -96,6 +96,12 @@ export const usersTable = pgTable("users", {
   // (original behaviour). "uncommon" | "rare" | "epic" | "legendary" = quiet below.
   // Buffs are always announced regardless of this setting.
   lootAnnounceMinRarity: text("loot_announce_min_rarity"),
+  // When true, personal command replies (!inventory, !points/!coins/!hoard,
+  // !sell, !use) are sent via the Twitch Helix whisper API instead of public
+  // chat. Falls back to public chat if the API rejects the whisper.
+  // Requires TWITCH_OAUTH_TOKEN to have `user:manage:whispers` scope and the
+  // bot account to have a verified phone number on Twitch.
+  whisperModeEnabled: boolean("whisper_mode_enabled").notNull().default(false),
   // Stripe customer + active subscription IDs. Customer created lazily on
   // first checkout; subscription written back from webhook + reconciled
   // on every /users/me read so the UI is never stale even if a webhook

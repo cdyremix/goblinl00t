@@ -31,6 +31,12 @@ export interface ChannelSettings {
    * null / "all" = announce everything (default). Buffs always announce.
    */
   lootAnnounceMinRarity: string | null;
+  /**
+   * When true, personal command replies (!inventory, !points/!coins/!hoard,
+   * !sell, !use) are sent via the Twitch Helix whisper API. Falls back to
+   * public chat if the whisper is rejected.
+   */
+  whisperModeEnabled: boolean;
 }
 
 const DEFAULTS: ChannelSettings = {
@@ -45,6 +51,7 @@ const DEFAULTS: ChannelSettings = {
   wheelSpeed: "medium",
   lootRarityWeights: null,
   lootAnnounceMinRarity: null,
+  whisperModeEnabled: false,
 };
 
 const cache = new Map<string, ChannelSettings>();
@@ -77,6 +84,7 @@ async function loadFromDb(channel: string): Promise<ChannelSettings> {
       user.redeemAction === "loot" || user.redeemAction === "luck" ? user.redeemAction : "entries",
     lootRarityWeights: user.lootRarityWeights ?? null,
     lootAnnounceMinRarity: user.lootAnnounceMinRarity ?? null,
+    whisperModeEnabled: user.whisperModeEnabled,
   };
 }
 

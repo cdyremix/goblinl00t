@@ -41,4 +41,6 @@ export interface UpdateBotSettings {
    * @nullable
    */
   lootAnnounceMinRarity?: string | null;
+  /** When true, personal command replies are sent via Twitch Helix whisper instead of public chat. */
+  whisperModeEnabled?: boolean;
 }

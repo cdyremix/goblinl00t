@@ -1092,6 +1092,11 @@ export const GetBotSettingsResponse = zod.object({
     .describe(
       "Minimum rarity to post in chat after a successful !loot drop. null\/all = announce all drops. uncommon|rare|epic|legendary = only announce at or above that tier. Buffs always announce.",
     ),
+  whisperModeEnabled: zod
+    .boolean()
+    .describe(
+      "When true, !inventory, !points\/!coins\/!hoard, !sell, and !use replies are sent via Twitch Helix whisper instead of public chat. Falls back to public chat if the whisper is rejected.",
+    ),
 });
 
 /**
@@ -1126,6 +1131,12 @@ export const UpdateBotSettingsBody = zod.object({
     .describe(
       "Minimum rarity to post in chat after a successful !loot drop. null\/all = announce all. uncommon|rare|epic|legendary = only at or above that tier.",
     ),
+  whisperModeEnabled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, personal command replies are sent via Twitch Helix whisper instead of public chat.",
+    ),
 });
 
 export const UpdateBotSettingsResponse = zod.object({
@@ -1156,6 +1167,11 @@ export const UpdateBotSettingsResponse = zod.object({
     .nullable()
     .describe(
       "Minimum rarity to post in chat after a successful !loot drop. null\/all = announce all drops. uncommon|rare|epic|legendary = only announce at or above that tier. Buffs always announce.",
+    ),
+  whisperModeEnabled: zod
+    .boolean()
+    .describe(
+      "When true, !inventory, !points\/!coins\/!hoard, !sell, and !use replies are sent via Twitch Helix whisper instead of public chat. Falls back to public chat if the whisper is rejected.",
     ),
 });
 

@@ -41,4 +41,6 @@ export interface BotSettings {
    * @nullable
    */
   lootAnnounceMinRarity: string | null;
+  /** When true, !inventory, !points/!coins/!hoard, !sell, and !use replies are sent via Twitch Helix whisper instead of public chat. Falls back to public chat if the whisper is rejected. */
+  whisperModeEnabled: boolean;
 }

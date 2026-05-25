@@ -62,6 +62,7 @@ interface BotSettings {
   lootRarityWeights: RarityWeights | null;
   redeemAction: "entries" | "loot" | "luck";
   lootAnnounceMinRarity: string | null;
+  whisperModeEnabled: boolean;
 }
 
 const THEME_OPTIONS: { id: BotTheme; name: string; emoji: string; description: string }[] = [
@@ -668,6 +669,40 @@ export default function SettingsPage() {
       {/* COMMANDS TAB                                                 */}
       {/* ============================================================ */}
       <TabsContent value="commands" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
+
+      {/* Whisper Mode */}
+      <section className="space-y-4 max-w-2xl">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">💬</span>
+          <h2 className="text-lg font-semibold text-foreground">Whisper Mode</h2>
+          <Hint
+            text="When ON, personal command replies (!inventory, !points/!coins/!hoard, !sell, !use) are sent as Twitch whispers instead of public chat messages. Requires your bot account to have user:manage:whispers scope and a verified phone number on Twitch. Falls back to public chat if the whisper is rejected."
+            side="right"
+          />
+        </div>
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="whisper-mode" className="text-base font-semibold text-foreground">Send personal replies as whispers</Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                Keeps !inventory, balance checks, !sell, and !use responses private — only the viewer sees them, not the whole chat.
+              </p>
+              <p className="text-xs text-amber-400/80 mt-2 leading-relaxed">
+                ⚠️ Requires <code className="font-mono bg-amber-500/10 px-1 rounded">user:manage:whispers</code> scope on <code className="font-mono bg-amber-500/10 px-1 rounded">TWITCH_OAUTH_TOKEN</code> and a verified phone number on the bot account.
+              </p>
+            </div>
+            <Switch
+              id="whisper-mode"
+              checked={settings?.whisperModeEnabled ?? false}
+              disabled={mutation.isPending}
+              onCheckedChange={(v) => mutation.mutate({ whisperModeEnabled: v })}
+              data-testid="switch-whisper-mode"
+            />
+          </div>
+        </div>
+      </section>
 
       <CommandsSection activeTheme={activeTheme} />
 

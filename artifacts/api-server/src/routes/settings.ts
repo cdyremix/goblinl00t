@@ -53,6 +53,7 @@ function serializeSettings(user: typeof usersTable.$inferSelect) {
     lootRarityWeights: user.lootRarityWeights ?? null,
     redeemAction: (user.redeemAction ?? "entries") as "entries" | "loot" | "luck",
     lootAnnounceMinRarity: user.lootAnnounceMinRarity ?? null,
+    whisperModeEnabled: user.whisperModeEnabled,
   };
 }
 
@@ -88,6 +89,7 @@ router.put("/settings", async (req, res) => {
     } | null;
     redeemAction?: string;
     lootAnnounceMinRarity?: string | null;
+    whisperModeEnabled?: boolean;
   };
 
   // Resolve the caller's row early so we can tier-gate paid settings
@@ -243,6 +245,10 @@ router.put("/settings", async (req, res) => {
       return;
     }
     updates.redeemAction = body.redeemAction;
+  }
+
+  if (typeof body.whisperModeEnabled === "boolean") {
+    updates.whisperModeEnabled = body.whisperModeEnabled;
   }
 
   if ("lootAnnounceMinRarity" in body) {
