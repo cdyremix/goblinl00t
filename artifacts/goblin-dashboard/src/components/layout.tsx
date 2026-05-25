@@ -4,7 +4,7 @@ import { useUser, useClerk, useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Gift, BarChart3, User, LogOut, Settings2, Send, Sparkles, ChevronDown, BookOpen,
-  Plug, X, MessageCircle, Crown, Users2, ShieldAlert,
+  Plug, X, MessageCircle, Crown, Users2, ShieldAlert, Zap,
 } from "lucide-react";
 import { useSubscriptionTier } from "@/hooks/use-tier";
 import { UserAvatar } from "@/components/user-avatar";
@@ -75,17 +75,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   // "The Scroll" (account page) used to sit in the main nav; it now lives
   // inside the expandable user menu as "Account Settings".
-  // Community (/users) is both a dedicated sidebar entry and a tab inside
-  // Operations (`/dashboard`).
+  // Chat Users (/users) is accessible via sidebar; the duplicate tab inside
+  // the Dashboard has been removed to avoid confusion.
   const { isAdmin } = useSubscriptionTier();
 
   const allLinks = [
-    { href: "/dashboard", label: "Operations", icon: LayoutDashboard },
-    { href: "/giveaway", label: "Loot Horde", icon: Gift },
-    { href: "/stats", label: "Ledger", icon: BarChart3 },
-    { href: "/users", label: "Community", icon: Users2 },
-    { href: "/settings", label: "Forge", icon: Settings2 },
-    { href: "/trade-office", label: "Trade Office", icon: Send, cs2Only: true, newWhen: isCS2 },
+    { href: "/dashboard", label: "Dashboard", description: "Bot status & live activity", icon: LayoutDashboard },
+    { href: "/giveaway", label: "Giveaways", description: "Run giveaways & spin the wheel", icon: Gift },
+    { href: "/commands", label: "Commands", description: "Toggle & customize bot commands", icon: Zap },
+    { href: "/stats", label: "Stats", description: "Activity, coins & leaderboards", icon: BarChart3 },
+    { href: "/users", label: "Chat Users", description: "Manage viewers & inventory", icon: Users2 },
+    { href: "/settings", label: "Settings", description: "Theme, economy & integrations", icon: Settings2 },
+    { href: "/trade-office", label: "Trade Office", description: "Fulfill CS2 skin deliveries", icon: Send, cs2Only: true, newWhen: isCS2 },
     // Admin Console — only rendered for super-users (`usersTable.isAdmin`).
     // Server still enforces 403 on `/api/admin/*` so even if a normal user
     // forces the route, the page lights up empty + every action 403s.
@@ -224,8 +225,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 }`}
                 data-testid={`nav-${link.label.toLowerCase().replace(" ", "-")}`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-primary" : ""}`} />
-                <span className="font-medium text-sm flex-1">{link.label}</span>
+                <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${isActive ? "text-primary" : ""}`} />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-sm leading-none block">{link.label}</span>
+                  {"description" in link && link.description && (
+                    <span className="text-[10px] text-muted-foreground/50 leading-none mt-0.5 block truncate">{(link as { description: string }).description}</span>
+                  )}
+                </div>
                 {isNew && (
                   <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">
                     <Sparkles className="w-2.5 h-2.5" />

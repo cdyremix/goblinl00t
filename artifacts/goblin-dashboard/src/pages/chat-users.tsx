@@ -858,7 +858,7 @@ export function ChatUsers() {
       <div>
         <div className="flex items-center gap-3">
           <Users2 className="w-8 h-8 text-primary" />
-          <h1 className="font-medieval text-4xl font-bold tracking-tight text-primary">Community</h1>
+          <h1 className="font-medieval text-4xl font-bold tracking-tight text-primary">Chat Users</h1>
         </div>
         <p className="text-muted-foreground mt-2 text-lg">
           Every viewer with coins or items in your channel. Expand a row to manage their pouch.

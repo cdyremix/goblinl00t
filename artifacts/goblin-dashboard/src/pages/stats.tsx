@@ -131,7 +131,7 @@ export function Stats() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-primary">Ledger</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-primary">Stats</h1>
           <p className="text-muted-foreground mt-2 text-lg">The goblin's full accounting of loot and chaos.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

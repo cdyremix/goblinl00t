@@ -319,37 +319,25 @@ export default function SettingsPage() {
       <div>
         <h1 className="font-medieval text-3xl text-foreground flex items-center gap-3">
           <Settings2 className="w-7 h-7 text-primary" />
-          Bot Settings
+          Settings
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Customize your bot's personality, behavior, and game-specific options.
+          Configure your bot's name, theme, economy rules, commands, and integrations.
         </p>
       </div>
 
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 max-w-xs">
+        <TabsList className="grid w-full grid-cols-4 max-w-lg">
           <TabsTrigger value="general" data-testid="tab-settings-general">General</TabsTrigger>
-          <TabsTrigger value="theme" data-testid="tab-settings-theme">Theme</TabsTrigger>
+          <TabsTrigger value="economy" data-testid="tab-settings-economy">Economy</TabsTrigger>
+          <TabsTrigger value="commands" data-testid="tab-settings-commands">Commands</TabsTrigger>
+          <TabsTrigger value="integrations" data-testid="tab-settings-integrations">Integrations</TabsTrigger>
         </TabsList>
 
       {/* ============================================================ */}
-      {/* GENERAL TAB                                                  */}
+      {/* GENERAL TAB — Bot name & theme                               */}
       {/* ============================================================ */}
       <TabsContent value="general" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
-
-      {/* Discord Webhook — at the top since it's a key integration */}
-      <section className="space-y-3 max-w-2xl">
-        <FeatureLock
-          feature="discord-webhooks"
-          description="Auto-post a winner embed to your Discord server every time a giveaway ends."
-        >
-          <DiscordWebhookSection
-            value={settings?.discordWebhookUrl ?? null}
-            saving={mutation.isPending}
-            onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
-          />
-        </FeatureLock>
-      </section>
 
       {/* Bot Name */}
       <section className="space-y-2 max-w-sm">
@@ -404,6 +392,74 @@ export default function SettingsPage() {
           </p>
         )}
       </section>
+
+      {/* Bot Theme */}
+      <section className="space-y-2 max-w-sm">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
+          <Hint
+            text="Controls the bot's language and personality in chat. CS2 and Hearthstone themes unlock themed loot items, custom bot phrases, and matching giveaway messages."
+            side="right"
+          />
+        </div>
+        <Select
+          value={activeTheme}
+          onValueChange={(v) => {
+            if (v !== "goblin" && !canAllThemes) return;
+            handleThemeSelect(v as BotTheme);
+          }}
+        >
+          <SelectTrigger id="bot-theme" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {THEME_OPTIONS.map((theme) => {
+              const locked = theme.id !== "goblin" && !canAllThemes;
+              return (
+                <SelectItem
+                  key={theme.id}
+                  value={theme.id}
+                  disabled={locked}
+                  className={locked ? "opacity-60" : ""}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{theme.emoji}</span>
+                    <span>{theme.name}</span>
+                    {locked && <LockedHint feature="all-themes" className="ml-1" />}
+                  </div>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        <div className="pt-2">
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={handleSave}
+            disabled={!hasChanges || !allValid || mutation.isPending}
+          >
+            {mutation.isPending ? (
+              <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
+            ) : savedFeedback && themeChanged ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            {themeChanged ? "Apply Theme" : "Apply"}
+          </Button>
+        </div>
+      </section>
+
+      {/* Animated chat preview */}
+      <ThemeChatPreview theme={activeTheme} />
+
+      </TabsContent>
+
+      {/* ============================================================ */}
+      {/* ECONOMY TAB                                                  */}
+      {/* ============================================================ */}
+      <TabsContent value="economy" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
 
       {/* Economy & Loot */}
       <section className="space-y-4 max-w-2xl">
@@ -573,6 +629,15 @@ export default function SettingsPage() {
 
       </section>
 
+      </TabsContent>
+
+      {/* ============================================================ */}
+      {/* COMMANDS TAB                                                 */}
+      {/* ============================================================ */}
+      <TabsContent value="commands" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
+
+      <CommandsSection activeTheme={activeTheme} />
+
       {/* Bot Blacklist */}
       <section className="space-y-4 max-w-2xl">
         <div className="flex items-center gap-2">
@@ -594,72 +659,25 @@ export default function SettingsPage() {
       </TabsContent>
 
       {/* ============================================================ */}
-      {/* THEME TAB                                                    */}
+      {/* INTEGRATIONS TAB                                             */}
       {/* ============================================================ */}
-      <TabsContent value="theme" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
+      <TabsContent value="integrations" forceMount className="space-y-8 mt-0 data-[state=inactive]:hidden">
 
-      {/* Theme Selector */}
-      <section className="space-y-2 max-w-sm">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="bot-theme" className="text-lg font-semibold text-foreground">Bot Theme</Label>
-          <Hint
-            text="Controls the bot's language and personality in chat. CS2 and Hearthstone themes unlock themed loot items, custom bot phrases, and matching giveaway messages. Only commands relevant to the active theme will be available below."
-            side="right"
-          />
-        </div>
-        <Select
-          value={activeTheme}
-          onValueChange={(v) => {
-            if (v !== "goblin" && !canAllThemes) return;
-            handleThemeSelect(v as BotTheme);
-          }}
+      {/* Discord Webhook */}
+      <section className="space-y-3 max-w-2xl">
+        <FeatureLock
+          feature="discord-webhooks"
+          description="Auto-post a winner embed to your Discord server every time a giveaway ends."
         >
-          <SelectTrigger id="bot-theme" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {THEME_OPTIONS.map((theme) => {
-              const locked = theme.id !== "goblin" && !canAllThemes;
-              return (
-                <SelectItem
-                  key={theme.id}
-                  value={theme.id}
-                  disabled={locked}
-                  className={locked ? "opacity-60" : ""}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{theme.emoji}</span>
-                    <span>{theme.name}</span>
-                    {locked && <LockedHint feature="all-themes" className="ml-1" />}
-                  </div>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
-        <div className="pt-2">
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={handleSave}
-            disabled={!hasChanges || !allValid || mutation.isPending}
-          >
-            {mutation.isPending ? (
-              <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
-            ) : savedFeedback && themeChanged ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            ) : (
-              <Save className="w-3.5 h-3.5" />
-            )}
-            {themeChanged ? "Apply Theme" : "Apply"}
-          </Button>
-        </div>
+          <DiscordWebhookSection
+            value={settings?.discordWebhookUrl ?? null}
+            saving={mutation.isPending}
+            onSave={(v) => mutation.mutate({ discordWebhookUrl: v })}
+          />
+        </FeatureLock>
       </section>
 
-      {/* Animated chat preview */}
-      <ThemeChatPreview theme={activeTheme} />
-
-      {/* CS2-specific settings */}
+      {/* CS2 / Steam */}
       {isCS2 && (
         <section className="space-y-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
           <div className="flex items-center gap-2">
@@ -758,7 +776,7 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               <Terminal className="w-3.5 h-3.5 text-blue-400" />
               <span className="text-sm font-semibold text-foreground">CS2 Commands</span>
-              <Hint text="These commands are exclusive to CS2 mode. Toggle and customize them in the Chat Commands section below." side="right" />
+              <Hint text="These commands are exclusive to CS2 mode. Toggle and customize them in the Commands tab." side="right" />
             </div>
             <div className="rounded-lg border border-border bg-card/60 divide-y divide-border/60">
               {[
@@ -782,7 +800,7 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {/* Hearthstone-specific settings */}
+      {/* Hearthstone */}
       {isHearthstone && (
         <section className="space-y-5 rounded-xl border border-orange-500/20 bg-orange-500/5 p-5">
           <div className="flex items-center gap-2">
@@ -808,7 +826,7 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               <Terminal className="w-3.5 h-3.5 text-orange-400" />
               <span className="text-sm font-semibold text-foreground">Tavern Commands</span>
-              <Hint text="Commands exclusive to Hearthstone Tavern mode. Toggle and customize responses in the Chat Commands section below." side="right" />
+              <Hint text="Commands exclusive to Hearthstone Tavern mode. Toggle and customize responses in the Commands tab." side="right" />
             </div>
             <div className="rounded-lg border border-border bg-card/60 divide-y divide-border/60">
               {[
@@ -848,7 +866,7 @@ export default function SettingsPage() {
               ))}
             </div>
             <p className="text-[11px] text-muted-foreground pl-1">
-              Toggle and customize responses for these commands in the Chat Commands section below.
+              Toggle and customize responses for these commands in the Commands tab.
             </p>
           </div>
 
@@ -881,9 +899,6 @@ export default function SettingsPage() {
           </div>
         </section>
       )}
-
-      {/* Commands (collapsible, rendered after theme settings) */}
-      <CommandsSection activeTheme={activeTheme} />
 
       </TabsContent>
       </Tabs>

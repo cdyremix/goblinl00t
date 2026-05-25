@@ -12,14 +12,12 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Crown, Gem, Users, Zap, Trophy, Coins, RefreshCw, WifiOff, Wifi,
   Copy, Radio, Tv, Clock, Gift, Package, LayoutDashboard, Eye, ArrowLeft,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
-import { ChatUsers } from "@/pages/chat-users";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/react";
@@ -673,9 +671,9 @@ export function Dashboard() {
           <LayoutDashboard className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Operations Center</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground text-sm">
-            {adminAs ? `Viewing @${adminAs}'s channel` : "Your live stream command center."}
+            {adminAs ? `Viewing @${adminAs}'s channel` : "Bot status and live stream activity."}
           </p>
         </div>
       </div>
@@ -702,14 +700,7 @@ export function Dashboard() {
         <ActiveGiveawayBanner giveaway={activeGiveaway} />
       )}
 
-      {/* ── Tabs ── */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList>
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="chat-users" data-testid="tab-chat-users">Community</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-6 mt-6">
+      <div className="space-y-6 mt-2">
 
           {/* Session stats — scoped to "current stream" (last 12h fallback) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -939,12 +930,7 @@ export function Dashboard() {
               </Card>
             </div>
           </div>
-        </TabsContent>
-
-        <TabsContent value="chat-users" className="mt-6">
-          <ChatUsers />
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 }

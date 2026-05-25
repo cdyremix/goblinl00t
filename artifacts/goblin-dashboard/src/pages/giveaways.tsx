@@ -257,7 +257,7 @@ export function Giveaways() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-primary">Loot Horde</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-primary">Giveaways</h1>
           <p className="text-muted-foreground mt-2 text-lg">Run giveaways. Spin the wheel. Hand out the goods.</p>
         </div>
         <TestGiveawayButton />
