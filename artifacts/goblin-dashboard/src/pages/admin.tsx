@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@clerk/react";
+import { useAuth, useClerk } from "@clerk/react";
 import { useSignIn } from "@clerk/react/legacy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -974,7 +974,7 @@ type QuickAction =
 
 function ImpersonateButton({ userId, authedFetch }: { userId: number; authedFetch: ReturnType<typeof useAuthedFetch> }) {
   const { signIn, setActive, isLoaded } = useSignIn();
-  const [, setLocation] = useLocation();
+  const { signOut } = useClerk();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -989,10 +989,13 @@ function ImpersonateButton({ userId, authedFetch }: { userId: number; authedFetc
         setError(json.error ?? `Failed (${r.status})`);
         return;
       }
+      // Must sign out first — Clerk rejects a new sign-in while a session
+      // is already active.
+      await signOut();
       const result = await signIn.create({ strategy: "ticket", ticket: json.ticket });
       if (result.status === "complete" && result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
-        setLocation("/dashboard");
+        window.location.href = "/dashboard";
         return;
       }
       setError(`Unexpected status: ${result.status}`);
